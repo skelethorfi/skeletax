@@ -86,7 +86,7 @@ export class TcyClaimService {
     }
   }
 
-  // Fetched once per run, and checked against its hash
+  // Fetched once per run, and checked against its hash. A failed fetch is not kept, so a retry fetches again.
   private loadClaimList() {
     this.claimList ??= (async () => {
       const text: string = (await http.get(CLAIM_LIST_URL, { responseType: "text", transformResponse: (x) => x })).data;
@@ -97,7 +97,10 @@ export class TcyClaimService {
       }
 
       return JSON.parse(text);
-    })();
+    })().catch((error) => {
+      this.claimList = undefined;
+      throw error;
+    });
     return this.claimList;
   }
 }

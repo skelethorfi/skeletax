@@ -5,8 +5,14 @@ import type { RawBundle } from "../src/sources/RawBundle.ts";
 import type { TcyClaimData } from "../src/sources/tcy/TcyClaimService.ts";
 import { THORCHAIN } from "../src/domain/Protocol.ts";
 import { readCaseInput, toBundle } from "../src/fixtures/GoldenCase.ts";
+import { TcyClaimService } from "../src/sources/tcy/TcyClaimService.ts";
+import { RecordStore } from "../src/sources/store/RecordStore.ts";
+import { http } from "../src/sources/http.ts";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-// The savers claim case, with what the claiming address held at the height before it replaced
+// The savers claim case, with what the claim was for (claim list entries, savers positions, loans) replaced
 function claimWith(tcyClaim: TcyClaimData | undefined): RawBundle {
   const { tcyClaim: _, ...bundle } = toBundle(readCaseInput("test/cases/tcy/claim-savers"));
   return tcyClaim ? { ...bundle, tcyClaim } : bundle;
@@ -65,5 +71,25 @@ describe("TCY claim: what it was for (docs/specs/thorfi-collapse.md)", () => {
 
   test("a bundle without the claim's data (stored before it was fetched) is the TCY alone", () => {
     assert.deepEqual(legsAndIssues(claimWith(undefined)), { legs: ["in THOR.TCY"], issues: [] });
+  });
+});
+
+describe("TCY claim list", () => {
+  test("a failed fetch is not kept: the next call fetches again", async () => {
+    const service = new TcyClaimService(new RecordStore(mkdtempSync(join(tmpdir(), "tc-ct-tcy-claim-"))));
+    const get = http.get;
+    let calls = 0;
+    (http as any).get = async () => {
+      calls += 1;
+      throw new Error("gateway timeout");
+    };
+
+    try {
+      await assert.rejects((service as any).loadClaimList(), /gateway timeout/);
+      await assert.rejects((service as any).loadClaimList(), /gateway timeout/);
+      assert.equal(calls, 2);
+    } finally {
+      (http as any).get = get;
+    }
   });
 });
