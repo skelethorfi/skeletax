@@ -1,0 +1,42 @@
+wallet: DBP8YfBCy7yoSUop9vAHEmJqrwWRniqmQx
+timestamp: 2026-10-13T20:48:43.413Z
+type: return-lp-token
+baseCurrency: ThorSavers.DOGE.DOGE
+baseAmount: "178.19458477"
+from: DBP8YfBCy7yoSUop9vAHEmJqrwWRniqmQx
+to: thorchain
+blockchain: THORChain
+description: 1/4 - Return LP token ThorSavers.DOGE.DOGE for a TCY claim (ThorFi collapse); B62378B8AC026DD9DD171DFD3B3DFD16394B92DA116A8902A63C4F3AC075B0BC
+id: 2026-10-13T20:48:43.413Z.out.d7396472b79c
+---
+wallet: DBP8YfBCy7yoSUop9vAHEmJqrwWRniqmQx
+timestamp: 2026-10-13T20:48:53.413Z
+type: spam
+baseCurrency: TCY
+baseAmount: "70.47904076"
+from: DBP8YfBCy7yoSUop9vAHEmJqrwWRniqmQx
+to: thorchain
+description: 2/4 - Dummy transaction to get market price to then manually apply to the return LP token transaction ThorSavers.DOGE.DOGE; B62378B8AC026DD9DD171DFD3B3DFD16394B92DA116A8902A63C4F3AC075B0BC
+id: 2026-10-13T20:48:43.413Z.price-helper.255ef0c36605
+---
+wallet: thor14mlx74qql0j4lt0ethsumteyyp7nh54m72vns9
+timestamp: 2026-10-13T20:49:03.413Z
+type: remove-liquidity
+baseCurrency: TCY
+baseAmount: "70.47904076"
+from: thorchain
+to: thor14mlx74qql0j4lt0ethsumteyyp7nh54m72vns9
+blockchain: THORChain
+description: 3/4 - Claim 70.47904076 TCY for ThorSavers.DOGE.DOGE of address DBP8YfBCy7yoSUop9vAHEmJqrwWRniqmQx (ThorFi collapse); B62378B8AC026DD9DD171DFD3B3DFD16394B92DA116A8902A63C4F3AC075B0BC
+id: 2026-10-13T20:48:43.413Z.in.df7f33957514
+---
+wallet: thor14mlx74qql0j4lt0ethsumteyyp7nh54m72vns9
+timestamp: 2026-10-13T20:49:13.413Z
+type: staking-deposit
+baseCurrency: TCY
+baseAmount: "70.47904076"
+from: thor14mlx74qql0j4lt0ethsumteyyp7nh54m72vns9
+to: thorchain
+blockchain: THORChain
+description: 4/4 - Stake 70.47904076 TCY claimed (a claim stakes it); B62378B8AC026DD9DD171DFD3B3DFD16394B92DA116A8902A63C4F3AC075B0BC
+id: 2026-10-13T20:48:43.413Z.stake.53acc8c54138

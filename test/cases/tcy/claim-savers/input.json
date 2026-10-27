@@ -1,0 +1,51 @@
+{
+  "description": "tcy_claim success: [] -> [THOR.TCY]",
+  "source": "midgard",
+  "wallet": "DBP8YfBCy7yoSUop9vAHEmJqrwWRniqmQx",
+  "data": {
+    "date": "1791924523413651310",
+    "height": "28230361",
+    "in": [
+      {
+        "address": "DBP8YfBCy7yoSUop9vAHEmJqrwWRniqmQx",
+        "coins": [],
+        "txID": "B62378B8AC026DD9DD171DFD3B3DFD16394B92DA116A8902A63C4F3AC075B0BC"
+      }
+    ],
+    "metadata": {
+      "tcy": {
+        "memo": "tcy:thor14mlx74qql0j4lt0ethsumteyyp7nh54m72vns9"
+      }
+    },
+    "out": [
+      {
+        "address": "thor14mlx74qql0j4lt0ethsumteyyp7nh54m72vns9",
+        "coins": [
+          {
+            "amount": "7047904076",
+            "asset": "THOR.TCY"
+          }
+        ],
+        "txID": "B62378B8AC026DD9DD171DFD3B3DFD16394B92DA116A8902A63C4F3AC075B0BC"
+      }
+    ],
+    "pools": [],
+    "status": "success",
+    "type": "tcy_claim"
+  },
+  "tcyClaim": {
+    "claims": [
+      {
+        "asset": "DOGE.DOGE",
+        "amount": "7047904076"
+      }
+    ],
+    "savers": [
+      {
+        "asset": "DOGE.DOGE",
+        "units": "17819458477"
+      }
+    ],
+    "loans": []
+  }
+}

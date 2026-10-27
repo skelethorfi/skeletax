@@ -1,0 +1,32 @@
+id: midgard/tcy_claim.B62378B8AC026DD9DD171DFD3B3DFD16394B92DA116A8902A63C4F3AC075B0BC
+protocol: thorchain
+kind: tcy.claim
+status: success
+time: 2026-10-13T20:48:43.413Z
+legs:
+  - direction: out
+    wallet: DBP8YfBCy7yoSUop9vAHEmJqrwWRniqmQx
+    asset:
+      notation: DOGE/DOGE
+      kind: position
+      position: savers
+    role: principal
+    basis: observed
+    txid: B62378B8AC026DD9DD171DFD3B3DFD16394B92DA116A8902A63C4F3AC075B0BC
+    amount: "178.19458477"
+    decimals: 8
+  - direction: in
+    wallet: thor14mlx74qql0j4lt0ethsumteyyp7nh54m72vns9
+    asset:
+      notation: THOR.TCY
+      kind: native
+    role: principal
+    basis: observed
+    txid: B62378B8AC026DD9DD171DFD3B3DFD16394B92DA116A8902A63C4F3AC075B0BC
+    amount: "70.47904076"
+    decimals: 8
+prices: []
+details:
+  claimedFor: DBP8YfBCy7yoSUop9vAHEmJqrwWRniqmQx
+  claimFor: savers
+  asset: DOGE.DOGE

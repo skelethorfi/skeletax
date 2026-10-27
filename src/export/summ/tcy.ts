@@ -3,7 +3,8 @@ import { formatAmount } from "../../domain/Amount.ts";
 import { type SummRow, SummRowType } from "./csv/index.ts";
 import { parseMidgardAsset } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
-import { findLeg, leg, legTrace } from "./common.ts";
+import { findLeg, leg, legTrace, plusSeconds } from "./common.ts";
+import { getLpTokenName } from "./ThorchainUtils.ts";
 
 // The fee columns from the gas leg, or no fee columns at all when there is none (as these rows always had)
 function feeIfAny(activity: Activity, protocol: Protocol): Pick<SummRow, "feeCurrency" | "feeAmount"> {
@@ -13,25 +14,89 @@ function feeIfAny(activity: Activity, protocol: Protocol): Pick<SummRow, "feeCur
     : {};
 }
 
+// A claim: the TCY received, then staked, since a claim stakes it (docs/specs/thorfi-collapse.md). A savers claim
+// gives up the position for the TCY: the position returned, a price helper of the TCY for its value, and the TCY
+// received as what the position paid out.
 export function tcyClaimRows(activity: Activity, protocol: Protocol): SummRow[] {
   const tcy = leg(activity, "principal", "in");
+  const position = findLeg(activity, "principal", "out");
   const amount = formatAmount(tcy.amount);
+  const currency = parseMidgardAsset(tcy.asset.notation, protocol).currency;
   const time = activity.time;
+  const txid = tcy.txid ?? "";
+  const claimedFor = activity.details.claimedFor;
+  const staked: SummRow = {
+    wallet: tcy.wallet,
+    timestamp: plusSeconds(time, position ? 30 : 10),
+    type: SummRowType.StakingDeposit,
+    baseCurrency: currency,
+    baseAmount: amount,
+    from: tcy.wallet,
+    to: protocol.counterparty,
+    blockchain: protocol.blockchain,
+    // Its own role: the same leg as the receive, another row
+    trace: { ...legTrace(tcy), role: "stake" },
+    description: `${position ? "4/4" : "2/2"} - Stake ${amount} TCY claimed (a claim stakes it); ${txid}`,
+  };
 
+  if (!position) {
+    return [
+      {
+        wallet: tcy.wallet,
+        timestamp: time,
+        type: SummRowType.Receive,
+        baseCurrency: currency,
+        baseAmount: amount,
+        ...feeIfAny(activity, protocol),
+        from: protocol.counterparty,
+        to: tcy.wallet,
+        blockchain: protocol.blockchain,
+        trace: legTrace(tcy),
+        description: `1/2 - Claim ${amount} TCY for address ${claimedFor}; ${txid}`,
+      },
+      staked,
+    ];
+  }
+
+  const token = getLpTokenName(position.asset.notation, protocol);
   return [
     {
-      wallet: tcy.wallet,
+      wallet: position.wallet,
       timestamp: time,
-      type: SummRowType.Receive,
-      baseCurrency: parseMidgardAsset(tcy.asset.notation, protocol).currency,
-      baseAmount: amount,
+      type: SummRowType.ReturnLpToken,
+      baseCurrency: token,
+      baseAmount: formatAmount(position.amount),
       ...feeIfAny(activity, protocol),
+      from: position.wallet,
+      to: protocol.counterparty,
+      blockchain: protocol.blockchain,
+      trace: legTrace(position),
+      description: `1/4 - Return LP token ${token} for a TCY claim (ThorFi collapse); ${txid}`,
+    },
+    {
+      wallet: position.wallet,
+      timestamp: plusSeconds(time, 10),
+      type: SummRowType.Spam,
+      baseCurrency: currency,
+      baseAmount: amount,
+      from: position.wallet,
+      to: protocol.counterparty,
+      trace: { role: "price-helper" },
+      description: `2/4 - Dummy transaction to get market price to then manually apply to the return LP token transaction ${token}; ${txid}`,
+    },
+    {
+      wallet: tcy.wallet,
+      timestamp: plusSeconds(time, 20),
+      type: SummRowType.RemoveLiquidity,
+      baseCurrency: currency,
+      baseAmount: amount,
       from: protocol.counterparty,
       to: tcy.wallet,
       blockchain: protocol.blockchain,
       trace: legTrace(tcy),
-      description: `1/1 - Claim ${amount} TCY for address ${activity.details.claimedFor}; ${tcy.txid ?? ""}`,
+      description: `3/4 - Claim ${amount} TCY for ${token} of address ${claimedFor} (ThorFi collapse); ${txid}`,
     },
+    staked,
   ];
 }
 

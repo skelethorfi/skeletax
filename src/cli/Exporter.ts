@@ -8,6 +8,7 @@ import { CosmosTxService } from "../sources/thorchain/CosmosTxService.ts";
 import { EvmReceipts } from "../sources/evm/EvmReceipts.ts";
 import { MayanodeService } from "../sources/maya/MayanodeService.ts";
 import { TcyDistributionService } from "../sources/tcy/TcyDistributionService.ts";
+import { TcyClaimService } from "../sources/tcy/TcyClaimService.ts";
 import type { ITaxConfig } from "../config/ITaxConfig.ts";
 import { generateDateRanges } from "../utils/DateRange.ts";
 import path from "path";
@@ -65,6 +66,7 @@ export class Exporter {
   cosmosTxs: CosmosTxService;
   evmReceipts: EvmReceipts;
   tcyDistribution: TcyDistributionService;
+  tcyClaims: TcyClaimService;
   // What the run printed that is worth keeping, written to its folder as summary.md
   report = new RunSummary();
   // Warnings for the end of the run, set by getRows
@@ -107,6 +109,7 @@ export class Exporter {
     this.cosmosTxs = new CosmosTxService(store);
     this.evmReceipts = new EvmReceipts(store);
     this.tcyDistribution = new TcyDistributionService(store);
+    this.tcyClaims = new TcyClaimService(store);
     this.thorchain = withAssetNames(THORCHAIN, this.config.assets);
     this.otherMidgards = (this.config.protocols ?? ["thorchain"])
       .map((id) => withAssetNames(getProtocol(id), this.config.assets))
@@ -137,6 +140,7 @@ export class Exporter {
         this.stuckBefore(),
         undefined,
         { viewblock: this.viewblock, evm: this.evmReceipts },
+        this.tcyClaims,
       ),
       ...this.otherMidgards.map(
         ({ protocol, midgard, node }) =>

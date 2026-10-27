@@ -9,6 +9,7 @@ import type { EvmReceipt } from "../sources/evm/EvmReceipts.ts";
 import { runBundle } from "../pipeline/run.ts";
 import type { Treatment } from "../export/summ/index.ts";
 import type { TcyDistributionItem } from "../sources/tcy/TcyDistributionService.ts";
+import type { TcyClaimData } from "../sources/tcy/TcyClaimService.ts";
 import type { MayaDistributionPayout } from "../sources/maya/MayaDistributionService.ts";
 import { getProtocol, type ProtocolId } from "../domain/Protocol.ts";
 import type { CosmosTx } from "../sources/thorchain/CosmosTxService.ts";
@@ -46,6 +47,8 @@ export interface GoldenCaseInput {
   nativeFee?: string;
   // RUNE's USD price at the action's time (a contract action that sends bRUNE)
   runePriceUsd?: string;
+  // What a TCY claim was for (docs/specs/thorfi-collapse.md)
+  tcyClaim?: TcyClaimData;
   // The config's treatment choices the case is mapped with, e.g. {mayaLiquidityAuction: 'income'}
   treatment?: Treatment;
 }
@@ -158,6 +161,7 @@ export function toBundle(input: GoldenCaseInput): RawBundle {
     ...(input.inbounds ? { inbounds: input.inbounds } : {}),
     ...(input.nativeFee ? { nativeFee: input.nativeFee } : {}),
     ...(input.runePriceUsd ? { runePriceUsd: input.runePriceUsd } : {}),
+    ...(input.tcyClaim ? { tcyClaim: input.tcyClaim } : {}),
   };
 }
 
@@ -175,6 +179,7 @@ export function toCaseInput(bundle: RawBundle, description: string): GoldenCaseI
     ...(bundle.inbounds?.length ? { inbounds: bundle.inbounds } : {}),
     ...(bundle.nativeFee ? { nativeFee: bundle.nativeFee } : {}),
     ...(bundle.runePriceUsd ? { runePriceUsd: bundle.runePriceUsd } : {}),
+    ...(bundle.tcyClaim ? { tcyClaim: bundle.tcyClaim } : {}),
   };
 }
 

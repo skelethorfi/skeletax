@@ -7,6 +7,7 @@ import { RecordStore } from "../sources/store/RecordStore.ts";
 import { MayanodeService } from "../sources/maya/MayanodeService.ts";
 import { CosmosTxService } from "../sources/thorchain/CosmosTxService.ts";
 import { EvmReceipts } from "../sources/evm/EvmReceipts.ts";
+import { TcyClaimService } from "../sources/tcy/TcyClaimService.ts";
 import { Viewblock } from "../sources/viewblock/index.ts";
 import { MidgardService } from "../sources/thorchain/MidgardService.ts";
 import { MidgardSource } from "../sources/Source.ts";
@@ -101,6 +102,7 @@ async function fetchInput(txid: string, protocol: Protocol, index?: number): Pro
     undefined,
     protocol.nodeUrl ? new MayanodeService(store, protocol.nodeUrl) : undefined,
     { viewblock: new Viewblock(store), evm: new EvmReceipts(store) },
+    new TcyClaimService(store),
   );
   const bundle = await source.bundle(action, action.in[0]?.address ?? "");
 

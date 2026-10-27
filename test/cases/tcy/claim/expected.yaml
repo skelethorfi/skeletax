@@ -6,5 +6,16 @@ baseAmount: "9999.5555"
 from: thorchain
 to: thor1-user-wallet-11111
 blockchain: THORChain
-description: 1/1 - Claim 9999.5555 TCY for address bc1-user-wallet-11111; AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2
+description: 1/2 - Claim 9999.5555 TCY for address bc1-user-wallet-11111; AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2
 id: 2020-12-31T13:00:00.000Z.in.9c0454e4c194
+---
+wallet: thor1-user-wallet-11111
+timestamp: 2020-12-31T13:00:10.000Z
+type: staking-deposit
+baseCurrency: TCY
+baseAmount: "9999.5555"
+from: thor1-user-wallet-11111
+to: thorchain
+blockchain: THORChain
+description: 2/2 - Stake 9999.5555 TCY claimed (a claim stakes it); AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2
+id: 2020-12-31T13:00:00.000Z.stake.535e9af7b980

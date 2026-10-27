@@ -43,7 +43,7 @@ const REGISTRY: Record<string, Interpreter> = {
   [`midgard/${ActionType.RunePoolWithdraw}`]: activity(interpretRunePool),
   "midgard/bond": activity(interpretBond),
   "midgard/unbond": activity(interpretBond),
-  "midgard/tcy_claim": activity(interpretTcyClaim),
+  "midgard/tcy_claim": interpretTcyClaim,
   "midgard/tcy_stake": activity(interpretTcyStake),
   "midgard/tcy_unstake": activity(interpretTcyStake),
   [`midgard/${ActionType.Send}`]: interpretSend,

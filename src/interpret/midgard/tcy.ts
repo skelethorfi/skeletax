@@ -1,7 +1,9 @@
 import type { Action } from "@xchainjs/xchain-midgard";
 import type { Activity, Leg } from "../../domain/Activity.ts";
+import type { Issue } from "../../domain/Issue.ts";
+import type { Interpretation } from "../registry.ts";
 import { formatAmount, parseAmount } from "../../domain/Amount.ts";
-import { toAsset } from "../../domain/Asset.ts";
+import { toAsset, toPositionAsset } from "../../domain/Asset.ts";
 import { getActionDate } from "../../sources/thorchain/MidgardUtils.ts";
 import { getDistributionDate, type TcyDistributionItem } from "../../sources/tcy/TcyDistributionService.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
@@ -27,24 +29,96 @@ const leg = (
   txid,
 });
 
-// A TCY claim: TCY paid to a THORChain wallet for an address that held a claim. The native fee applies only
-// when the claim was sent from that same wallet; otherwise it was paid on another chain.
-export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Activity {
+// A TCY claim: TCY paid, staked, to a THORChain wallet for an address that held a claim. The native fee applies only
+// when the claim was sent from that same wallet; otherwise it was paid on another chain. What the claim was for
+// comes from the claiming address at the height before it (docs/specs/thorfi-collapse.md): a savers position is
+// given up for the TCY, so it is the position leg out; anything else is the TCY alone.
+export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Interpretation {
   const action = bundle.data as Action;
   const input = action.in[0];
   const output = action.out[0];
   const txid = output.txID ?? "";
+  const tcy = output.coins[0];
+  const issues: Issue[] = [];
+  const kind = claimKind(bundle, tcy.amount, issues);
+  const position: Leg[] =
+    kind.for === "savers"
+      ? [
+          {
+            direction: "out",
+            wallet: input.address,
+            asset: toPositionAsset(kind.asset.replace(".", "/")),
+            amount: parseAmount(kind.units, DECIMALS),
+            role: "principal",
+            basis: "observed",
+            txid,
+          },
+        ]
+      : [];
 
-  return activity(
-    bundle,
-    protocol,
-    "tcy.claim",
-    [
-      leg("in", output.address, output.coins[0], txid),
-      ...(input.address === output.address ? [{ ...nativeGas(output.address, protocol), txid }] : []),
+  return {
+    activities: [
+      activity(
+        bundle,
+        protocol,
+        "tcy.claim",
+        [
+          ...position,
+          leg("in", output.address, tcy, txid),
+          ...(input.address === output.address ? [{ ...nativeGas(output.address, protocol), txid }] : []),
+        ],
+        { claimedFor: input.address, ...(kind.for === "savers" ? { claimFor: "savers", asset: kind.asset } : {}) },
+      ),
     ],
-    { claimedFor: input.address },
+    issues,
+  };
+}
+
+type ClaimKind = { for: "savers"; asset: string; units: string } | { for: "other" };
+
+// The entry a claim action paid is the one with its amount; a savers record of that asset with units makes it a
+// savers claim, an open loan with that asset as collateral a loan claim, and both share the entry
+function claimKind(bundle: RawBundle, amount: string, issues: Issue[]): ClaimKind {
+  const data = bundle.tcyClaim;
+
+  if (!data) {
+    return { for: "other" };
+  }
+
+  const entry = data.claims.find((claim) => claim.amount === amount);
+
+  if (!entry) {
+    issues.push({
+      kind: "warning",
+      message: `TCY claim of ${amount}: no claim entry of that amount at the height before it`,
+    });
+    return { for: "other" };
+  }
+
+  const units = data.savers.find((saver) => saver.asset === entry.asset)?.units ?? "0";
+  const hasSavers = BigInt(units) > 0n;
+  const hasLoan = data.loans.some(
+    (loan) =>
+      loan.collateralAsset === entry.asset && BigInt(loan.collateralDeposited) > BigInt(loan.collateralWithdrawn),
   );
+
+  if (hasSavers && hasLoan) {
+    issues.push({
+      kind: "warning",
+      message: `TCY claim for ${entry.asset}: the address had a savers position and a loan in it, one claim for both; exported as a receive`,
+    });
+    return { for: "other" };
+  }
+
+  if (hasLoan) {
+    issues.push({
+      kind: "warning",
+      message: `TCY claim for ${entry.asset}: a loan's claim, exported as a receive (the loan's end is not exported yet)`,
+    });
+    return { for: "other" };
+  }
+
+  return hasSavers ? { for: "savers", asset: entry.asset, units } : { for: "other" };
 }
 
 // Staking TCY sends it from the wallet; unstaking returns it. Both pay the native fee.

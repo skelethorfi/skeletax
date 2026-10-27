@@ -4,6 +4,7 @@ import type { ViewblockInbound, ViewblockTx } from "./viewblock/index.ts";
 import type { EvmReceipt } from "./evm/EvmReceipts.ts";
 import { getDistributionDate, type TcyDistributionItem } from "./tcy/TcyDistributionService.ts";
 import type { CosmosTx } from "./thorchain/CosmosTxService.ts";
+import type { TcyClaimData } from "./tcy/TcyClaimService.ts";
 import { getActionDate } from "./thorchain/MidgardUtils.ts";
 import { type ProtocolId, THORCHAIN } from "../domain/Protocol.ts";
 import { isDonateAdd, mayaDistributionList, midgardActionKey, tcyList, VIEWBLOCK_LIST } from "./store/Sources.ts";
@@ -38,6 +39,8 @@ export interface RawBundle {
   // THORChain sends that are this action's inbounds although no txid links them: a Maya liquidity auction's
   // deposits (docs/specs/maya.md, attachAuctionDeposits)
   inbounds?: Action[];
+  // A TCY claim's entries, savers records and loans at the height before it (docs/specs/thorfi-collapse.md)
+  tcyClaim?: TcyClaimData;
 }
 
 export function getBundleDate(bundle: RawBundle): Date {

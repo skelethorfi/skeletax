@@ -47,14 +47,14 @@ tcy_claim}`, with the amount in TCY (8 decimals). Some address and asset
 
 ## Rows
 
-| Event                                       | Rows                                                                                                                                                                                                      | Status                                      |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| Freeze of a position (January 2025)         | none: nothing moved, and the position is still held                                                                                                                                                       | –                                           |
-| TCY claim for a savers position             | a disposal of the position for the TCY: `ReturnLpToken` of the position's units (`ThorSavers.<chain>.<asset>`, the L1 wallet that holds it) and the TCY received at market, at the claim tx (`savers.md`) | planned                                     |
-| TCY claim for a loan's collateral           | the end of the loan: collateral never returned, debt never repaid, TCY for the net of the two (`loans.md`)                                                                                                | planned                                     |
-| TCY claim for anything else (e.g. a synth)  | `Receive` of the TCY                                                                                                                                                                                      | exported                                    |
-| The TCY staked at the claim                 | `StakingDeposit` of the TCY, in the THORChain wallet, so a later unstake (`StakingWithdrawal`) returns TCY that was deposited                                                                             | planned (today a claim is a `Receive` only) |
-| Distributions to staked TCY, stake, unstake | `activity.md`                                                                                                                                                                                             | exported                                    |
+| Event                                       | Rows                                                                                                                                                                                                                                                                                                                                      | Status                                      |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| Freeze of a position (January 2025)         | none: nothing moved, and the position is still held                                                                                                                                                                                                                                                                                       | –                                           |
+| TCY claim for a savers position             | a disposal of the position for the TCY, at the claim tx: `ReturnLpToken` of the position's units (`ThorSavers.<chain>.<asset>`, in the wallet that holds it), the `Spam` price helper of the TCY (its value for the token, as for any withdrawal, `liquidity.md`), and `RemoveLiquidity` of the TCY in the THORChain wallet (`savers.md`) | exported                                    |
+| TCY claim for a loan's collateral           | the end of the loan: collateral never returned, debt never repaid, TCY for the net of the two (`loans.md`)                                                                                                                                                                                                                                | planned (today a `Receive`, with a warning) |
+| TCY claim for anything else (e.g. a synth)  | `Receive` of the TCY                                                                                                                                                                                                                                                                                                                      | exported                                    |
+| The TCY staked at the claim                 | `StakingDeposit` of the TCY, in the THORChain wallet, after every claim's rows, so a later unstake (`StakingWithdrawal`) returns TCY that was deposited                                                                                                                                                                                   | exported                                    |
+| Distributions to staked TCY, stake, unstake | `activity.md`                                                                                                                                                                                                                                                                                                                             | exported                                    |
 
 Why a claim is a disposal and not income: the TCY is what the protocol gave
 for a position it could no longer pay out. The position (or the collateral)
@@ -73,6 +73,9 @@ debt is never repaid, and the TCY is the net of the two. How to record that
 owed) is decided when loan claims are exported; until then a loan's claim is
 a `Receive` and its debt stays open in the export.
 
+The exporter stores this per claim (`tcy-claim`, `snapshots.md`), so an
+`--offline` run over a period with a claim needs one run online first.
+
 **Which kind of claim.** For each action, the exporter finds the entry it
 paid (THORNode's `tcy_claimer` at the height before the claim, by amount)
 and checks the claiming address at that height: a savers record of the
@@ -84,4 +87,6 @@ much was for each.
 
 ## Golden cases
 
-`tcy/claim` (a claim exported as a `Receive`).
+`tcy/claim` (a claim for something other than savers or a loan: `Receive`
+and `StakingDeposit`) and `tcy/claim-savers` (a DOGE savers position given up
+for TCY).

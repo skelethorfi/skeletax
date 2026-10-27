@@ -6,6 +6,7 @@ import type { EvmReceipt } from "../evm/EvmReceipts.ts";
 import type { TcyDistributionItem } from "../tcy/TcyDistributionService.ts";
 import { getPayoutDate, type MayaDistributionPayout } from "../maya/MayaDistributionService.ts";
 import type { CosmosTx } from "../thorchain/CosmosTxService.ts";
+import type { TcyClaimData } from "../tcy/TcyClaimService.ts";
 
 // How each source's records are keyed, filed and compared in the store (docs/specs/snapshots.md). The
 // services and the importer of old caches both use these.
@@ -157,6 +158,10 @@ export interface ListSource {
   legacyItems?: (data: any) => any[];
 }
 
+// What a TCY claim was for, at the height before it (docs/specs/thorfi-collapse.md): final once fetched, since
+// it describes a past height. It has no date of its own: it is filed by the claim's.
+export const TCY_CLAIM_RULES: RecordRules<TcyClaimData> = {};
+
 // The sources in a store: wallet lists, and records looked up one at a time (a THORNode tx status has no
 // date of its own: it is filed by the date of the action it was fetched for)
 export const SOURCES: { [source: string]: ListSource | { kind: "record"; rules: RecordRules<any> } } = {
@@ -175,4 +180,5 @@ export const SOURCES: { [source: string]: ListSource | { kind: "record"; rules: 
   "midgard-rune-price": { kind: "record", rules: RUNE_PRICE_RULES },
   "viewblock-tx": { kind: "record", rules: VIEWBLOCK_TX_RULES },
   "evm-receipt": { kind: "record", rules: EVM_RECEIPT_RULES },
+  "tcy-claim": { kind: "record", rules: TCY_CLAIM_RULES },
 };

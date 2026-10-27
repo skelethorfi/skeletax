@@ -6,6 +6,7 @@ import { CosmosTxService, getCosmosTxIds } from "./thorchain/CosmosTxService.ts"
 import { MayanodeService } from "./maya/MayanodeService.ts";
 import { TcyDistributionService } from "./tcy/TcyDistributionService.ts";
 import type { MayaDistributionService } from "./maya/MayaDistributionService.ts";
+import type { TcyClaimService } from "./tcy/TcyClaimService.ts";
 import { MAYA } from "../domain/Protocol.ts";
 import { getActionDate, needsRunePrice } from "./thorchain/MidgardUtils.ts";
 import { Viewblock, type ViewblockInbound } from "./viewblock/index.ts";
@@ -126,6 +127,7 @@ export class MidgardSource implements Source {
   private stuckBefore?: Date;
   private mayanode?: MayanodeService;
   private inboundGas?: InboundGasSources;
+  private tcyClaims?: TcyClaimService;
   constructor(
     protocol: Protocol,
     midgard: MidgardService,
@@ -135,6 +137,7 @@ export class MidgardSource implements Source {
     stuckBefore?: Date,
     mayanode?: MayanodeService,
     inboundGas?: InboundGasSources,
+    tcyClaims?: TcyClaimService,
   ) {
     this.protocol = protocol;
     this.midgard = midgard;
@@ -144,6 +147,7 @@ export class MidgardSource implements Source {
     this.stuckBefore = stuckBefore;
     this.mayanode = mayanode;
     this.inboundGas = inboundGas;
+    this.tcyClaims = tcyClaims;
   }
 
   async bundlesFor(wallet: string): Promise<RawBundle[]> {
@@ -262,6 +266,12 @@ export class MidgardSource implements Source {
         ? (await this.midgard.getRunePrice(getActionDate(action))).runePriceUSD
         : undefined;
 
+    // What a TCY claim was for, from the claiming address at the height before it (docs/specs/thorfi-collapse.md)
+    const tcyClaim =
+      isThorchain && this.tcyClaims && (action.type as string) === "tcy_claim" && action.in[0]?.address
+        ? await this.tcyClaims.getClaim(action.in[0].address, Number(action.height), getActionDate(action))
+        : undefined;
+
     return {
       source: "midgard",
       protocol: this.protocol.id,
@@ -273,6 +283,7 @@ export class MidgardSource implements Source {
       ...(evmReceipts.length ? { evmReceipts } : {}),
       ...(nativeFee ? { nativeFee } : {}),
       ...(runePriceUsd ? { runePriceUsd } : {}),
+      ...(tcyClaim ? { tcyClaim } : {}),
     };
   }
 }
