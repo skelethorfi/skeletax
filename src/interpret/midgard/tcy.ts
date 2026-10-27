@@ -31,7 +31,7 @@ const leg = (
 
 // A TCY claim: TCY paid, staked, to a THORChain wallet for an address that held a claim. The native fee applies only
 // when the claim was sent from that same wallet; otherwise it was paid on another chain. What the claim was for
-// comes from the claiming address at the height before it (docs/specs/thorfi-collapse.md): a savers position is
+// comes from the claim list and the claiming address's positions (docs/specs/thorfi-collapse.md): a savers position is
 // given up for the TCY, so it is the position leg out; anything else is the TCY alone.
 export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Interpretation {
   const action = bundle.data as Action;
@@ -76,8 +76,8 @@ export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Interp
 
 type ClaimKind = { for: "savers"; asset: string; units: string } | { for: "other" };
 
-// The entry a claim action paid is the one with its amount; a savers record of that asset with units makes it a
-// savers claim, an open loan with that asset as collateral a loan claim, and both share the entry
+// The entry a claim action paid is the one with its amount; a savers position in that asset makes it a savers
+// claim, an open loan with that asset as collateral a loan claim, and both share the entry
 function claimKind(bundle: RawBundle, amount: string, issues: Issue[]): ClaimKind {
   const data = bundle.tcyClaim;
 
@@ -90,16 +90,17 @@ function claimKind(bundle: RawBundle, amount: string, issues: Issue[]): ClaimKin
   if (!entry) {
     issues.push({
       kind: "warning",
-      message: `TCY claim of ${amount}: no claim entry of that amount at the height before it`,
+      message: `TCY claim of ${amount}: no claim-list entry of that amount for the address`,
     });
     return { for: "other" };
   }
 
-  const units = data.savers.find((saver) => saver.asset === entry.asset)?.units ?? "0";
+  const same = (a: string, b: string) => a.toUpperCase() === b.toUpperCase();
+  const units = data.savers.find((saver) => same(saver.asset, entry.asset))?.units ?? "0";
   const hasSavers = BigInt(units) > 0n;
   const hasLoan = data.loans.some(
     (loan) =>
-      loan.collateralAsset === entry.asset && BigInt(loan.collateralDeposited) > BigInt(loan.collateralWithdrawn),
+      same(loan.collateralAsset, entry.asset) && BigInt(loan.collateralDeposited) > BigInt(loan.collateralWithdrawn),
   );
 
   if (hasSavers && hasLoan) {

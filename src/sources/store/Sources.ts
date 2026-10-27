@@ -158,8 +158,8 @@ export interface ListSource {
   legacyItems?: (data: any) => any[];
 }
 
-// What a TCY claim was for, at the height before it (docs/specs/thorfi-collapse.md): final once fetched, since
-// it describes a past height. It has no date of its own: it is filed by the claim's.
+// What a TCY claim was for (docs/specs/thorfi-collapse.md): final once fetched, since the claim list is fixed and
+// no savers or loan event followed the collapse. It has no date of its own: it is filed by the claim's.
 export const TCY_CLAIM_RULES: RecordRules<TcyClaimData> = {};
 
 // The sources in a store: wallet lists, and records looked up one at a time (a THORNode tx status has no

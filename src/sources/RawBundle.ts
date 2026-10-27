@@ -39,7 +39,7 @@ export interface RawBundle {
   // THORChain sends that are this action's inbounds although no txid links them: a Maya liquidity auction's
   // deposits (docs/specs/maya.md, attachAuctionDeposits)
   inbounds?: Action[];
-  // A TCY claim's entries, savers records and loans at the height before it (docs/specs/thorfi-collapse.md)
+  // A TCY claim's claim-list entries, and the claiming address's savers positions and loans (docs/specs/thorfi-collapse.md)
   tcyClaim?: TcyClaimData;
 }
 

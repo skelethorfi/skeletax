@@ -266,7 +266,7 @@ export class MidgardSource implements Source {
         ? (await this.midgard.getRunePrice(getActionDate(action))).runePriceUSD
         : undefined;
 
-    // What a TCY claim was for, from the claiming address at the height before it (docs/specs/thorfi-collapse.md)
+    // What a TCY claim was for: the claim list and the claiming address's positions (docs/specs/thorfi-collapse.md)
     const tcyClaim =
       isThorchain && this.tcyClaims && (action.type as string) === "tcy_claim" && action.in[0]?.address
         ? await this.tcyClaims.getClaim(action.in[0].address, Number(action.height), getActionDate(action))

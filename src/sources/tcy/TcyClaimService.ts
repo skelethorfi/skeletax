@@ -1,16 +1,24 @@
+import crypto from "node:crypto";
 import { API_URLS } from "../../config/apiUrls.ts";
 import { http } from "../http.ts";
 import { RecordStore } from "../store/RecordStore.ts";
 import { TCY_CLAIM_RULES } from "../store/Sources.ts";
 
-// What a TCY claim was for (docs/specs/thorfi-collapse.md): the claiming address's claim entries at the height
-// before the claim, its savers record of each entry's asset at that height, and its loans. THORNode no longer
-// serves loans; Midgard's borrower is their state now, which is the state at the claim, since no loan was closed
-// after the collapse.
+// THORNode's claim list, as embedded since TCY was added (thornode c979858d8; unchanged since), and its SHA-256:
+// a fixed list of {asset, address, tcy_claim}. THORNode serves no past heights through the public gateway, and
+// after a claim the address has no entries, so the list is where a claim's asset comes from.
+const CLAIM_LIST_URL =
+  "https://gitlab.com/thorchain/thornode/-/raw/c979858d83106d8959c1140365231a1a6492b837/common/tcyclaimlist/tcy_claimers_mainnet.json";
+const CLAIM_LIST_SHA256 = "84ed39921085534b5c3c213fe87115ec046eff9fd238674491c572ca87ee29ff";
+
+// What a TCY claim was for (docs/specs/thorfi-collapse.md): the claiming address's entries in the claim list, its
+// savers positions and its loans. Savers and loans are Midgard's, built from their add, withdraw, open and repay
+// events: none happened after the collapse, so they are the positions at the claim (THORNode's own savers records
+// were changed by later migrations, which Midgard does not follow).
 export interface TcyClaimData {
-  // THORNode tcy_claimer at height - 1: an entry per asset; amount in TCY base units
+  // The claim list's entries of the address, one per asset (THORNode sums repeated rows); amount in TCY base units
   claims: { asset: string; amount: string }[];
-  // THORNode saver of each entry's asset at height - 1 (units 0 when none)
+  // Midgard saver: a pool per savers position, its units (the position tokens the adds gave)
   savers: { asset: string; units: string }[];
   // Midgard borrower: a pool per collateral asset (none when the address never borrowed)
   loans: { collateralAsset: string; collateralDeposited: string; collateralWithdrawn: string }[];
@@ -18,53 +26,78 @@ export interface TcyClaimData {
 
 export class TcyClaimService {
   private store: RecordStore;
+  private claimList?: Promise<{ asset: string; address: string; tcy_claim: number }[]>;
   constructor(store: RecordStore = new RecordStore("_cache")) {
     this.store = store;
   }
 
-  // address: the claiming address (the action's in); height: the claim's; date: the claim's, to file it by
-  async getClaim(address: string, height: number, date: Date): Promise<TcyClaimData> {
+  // address: the claiming address (the action's in); height and date: the claim's, to key and file it by.
+  // Undefined when replaying a run made before this source existed: such a run read nothing from it.
+  async getClaim(address: string, height: number, date: Date): Promise<TcyClaimData | undefined> {
+    if (this.store.addedSinceReplay("tcy-claim")) {
+      return undefined;
+    }
+
     return this.store.record(
       "tcy-claim",
       `${address}.${height}`,
-      () => this.fetchClaim(address, height),
+      () => this.fetchClaim(address),
       TCY_CLAIM_RULES,
       date,
     );
   }
 
-  private async fetchClaim(address: string, height: number) {
-    const at = height - 1;
-    const claimerUrl = `${API_URLS.thornode}/thorchain/tcy_claimer/${address}?height=${at}`;
-    const claimers: { asset: string; amount: string }[] = (await http.get(claimerUrl)).data.tcy_claimer ?? [];
-    const claims = claimers.map(({ asset, amount }) => ({ asset, amount }));
-    const savers = [];
+  private async fetchClaim(address: string) {
+    const amounts = new Map<string, bigint>();
 
-    for (const { asset } of claims) {
-      const saver = (await http.get(`${API_URLS.thornode}/thorchain/pool/${asset}/saver/${address}?height=${at}`)).data;
-      savers.push({ asset, units: String(saver.units ?? "0") });
+    for (const entry of await this.loadClaimList()) {
+      if (entry.address.toLowerCase() === address.toLowerCase()) {
+        const asset = entry.asset.toUpperCase();
+        amounts.set(asset, (amounts.get(asset) ?? 0n) + BigInt(entry.tcy_claim));
+      }
     }
 
+    const savers: any[] = (await this.midgard(`/v2/saver/${address}`))?.pools ?? [];
+    const loans: any[] = (await this.midgard(`/v2/borrower/${address}`))?.pools ?? [];
+
     return {
-      data: { claims, savers, loans: await this.fetchLoans(address) },
-      url: claimerUrl,
+      data: {
+        claims: [...amounts].map(([asset, amount]) => ({ asset, amount: String(amount) })),
+        savers: savers.map((pool) => ({ asset: pool.pool, units: String(pool.saverUnits) })),
+        loans: loans.map((pool) => ({
+          collateralAsset: pool.collateral_asset,
+          collateralDeposited: String(pool.collateral_deposited),
+          collateralWithdrawn: String(pool.collateral_withdrawn),
+        })),
+      },
+      url: `${API_URLS.midgard}/v2/saver/${address}`,
     };
   }
 
-  private async fetchLoans(address: string): Promise<TcyClaimData["loans"]> {
+  // Midgard answers 404 for an address with no savers position, or that never borrowed
+  private async midgard(path: string): Promise<any> {
     try {
-      const pools: any[] = (await http.get(`${API_URLS.midgard}/v2/borrower/${address}`)).data.pools ?? [];
-      return pools.map((pool) => ({
-        collateralAsset: pool.collateral_asset,
-        collateralDeposited: String(pool.collateral_deposited),
-        collateralWithdrawn: String(pool.collateral_withdrawn),
-      }));
+      return (await http.get(`${API_URLS.midgard}${path}`)).data;
     } catch (error: any) {
-      // Midgard answers 404 for an address that never borrowed
       if (error?.response?.status === 404) {
-        return [];
+        return undefined;
       }
       throw error;
     }
+  }
+
+  // Fetched once per run, and checked against its hash
+  private loadClaimList() {
+    this.claimList ??= (async () => {
+      const text: string = (await http.get(CLAIM_LIST_URL, { responseType: "text", transformResponse: (x) => x })).data;
+      const hash = crypto.createHash("sha256").update(text).digest("hex");
+
+      if (hash !== CLAIM_LIST_SHA256) {
+        throw new Error(`TCY claim list: unexpected content (sha256 ${hash})`);
+      }
+
+      return JSON.parse(text);
+    })();
+    return this.claimList;
   }
 }
