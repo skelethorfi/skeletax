@@ -162,10 +162,13 @@ given. A wallet configured in lowercase is queried in lowercase only, so it
 misses such an outbound when the memo used the checksummed spelling: configure
 EVM wallets in their checksummed (EIP-55) spelling, as wallets show them. The
 store keys a wallet's list by its address as configured, and a period file's
-name ends with its last five characters as configured, so changing a wallet's
-spelling starts a new list with no stored history and can rename its files.
-The first run after this change stores a new copy of a mixed-case wallet's
-list, and its rows change: the actions it missed are exported.
+name includes the last five characters of that address as configured. So to
+change a wallet's spelling, first move its old list
+(`lists/midgard/<address>.*.json`) out of the store: two list keys that differ
+only in case stop the next run. The wallet then starts a list with no earlier
+copies (its records are kept), and its file names can change. The first run
+after this change stores a new copy of a mixed-case wallet's list, and its
+rows change: the actions it missed are exported.
 
 The rows of one EVM wallet can therefore carry either spelling. They are
 grouped into the wallet's period files by the lowercase address, so both go
