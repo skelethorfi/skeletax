@@ -4,7 +4,7 @@ import { type Action, Configuration, DefaultApi } from "@xchainjs/xchain-midgard
 import assert from "assert";
 import { API_URLS } from "../../config/apiUrls.ts";
 import { http } from "../http.ts";
-import { addressKey } from "../../utils/Address.ts";
+import { checksumAddress, isEvmAddress } from "../../utils/Address.ts";
 
 // https://github.com/xchainjs/xchainjs-lib/tree/master/packages/xchain-midgard
 // midgard api: https://midgard.thorswap.net/v2/doc
@@ -20,12 +20,16 @@ const RUNE_PRICE_INTERVAL = 300;
 
 // Midgard matches the `address` filter exactly. EVM senders are lowercase, and Midgard lowercases other EVM
 // addresses only for events on the chains it treats as case-insensitive (ETH on THORChain; ETH and ARB on Maya);
-// otherwise (e.g. an outbound on AVAX, BSC or BASE for a swap from BTC) the address keeps the case of the memo. So a
-// mixed-case EVM wallet is queried in both spellings (Midgard splits the filter on commas and returns an action
-// matching either). Other formats are case-sensitive and are queried as given.
+// otherwise (e.g. an outbound on AVAX, BSC or BASE for a swap from BTC) the address keeps the case of the memo, which
+// is usually the lowercase or the checksum (EIP-55) spelling. So an EVM wallet is queried in those spellings and as
+// configured (Midgard splits the filter on commas and returns an action matching any). Other formats are
+// case-sensitive and are queried as given.
 export function midgardAddress(address: string): string {
-  const lower = addressKey(address);
-  return lower === address ? address : `${lower},${address}`;
+  if (!isEvmAddress(address)) {
+    return address;
+  }
+
+  return [...new Set([address.toLowerCase(), checksumAddress(address), address])].join(",");
 }
 
 export class MidgardService {
