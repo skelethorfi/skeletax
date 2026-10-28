@@ -147,19 +147,23 @@ the first action, so a run sees new activity and changes to old actions in
 one pass. A record shared by several wallets is fetched once per
 run.
 
-Midgard matches the `address` of `/v2/actions` exactly. It spells an EVM
-address lowercase on the chains it treats as case-insensitive (ETH on
-THORChain; ETH and ARB on Maya) and for every sender, but an outbound on
-another EVM chain (AVAX, BSC, BASE) keeps the case of the memo that asked for
-it. So an EVM wallet (`0x` and 40 hex digits) configured in mixed case is
-queried in both spellings, `address=<lowercase>,<as configured>` (Midgard
-returns an action that matches either). Queried as configured only, a
-checksummed wallet got back just the actions spelled that way, and missed,
-for example, its savers deposits and withdrawals on ETH. Other address
-formats (base58 BTC, DOGE and LTC addresses) are case-sensitive and are
-queried as given. The store keeps the list under the wallet's name as
-configured, so the first run after this change writes a new list for such a
-wallet, and its rows change: the actions it missed are exported.
+Midgard matches the `address` of `/v2/actions` exactly. EVM senders are
+lowercase (THORNode observes them that way), and Midgard lowercases the other
+EVM addresses on the chains it treats as case-insensitive (ETH on THORChain;
+ETH and ARB on Maya), but an outbound on another EVM chain (AVAX, BSC, BASE)
+keeps the case of the memo that asked for it. So an EVM wallet (`0x` and 40
+hex digits) configured in mixed case is queried in both spellings,
+`address=<lowercase>,<as configured>` (Midgard returns an action that matches
+either). Queried as configured only, a checksummed wallet got back just the
+actions spelled that way, and missed, for example, its savers deposits and
+withdrawals on ETH. Other address formats (base58 BTC, DOGE and LTC addresses)
+are case-sensitive and are queried as given. A wallet configured in lowercase
+is queried in lowercase only, so it misses an outbound to it on AVAX, BSC or
+BASE whose memo used the checksummed spelling: configure EVM wallets in their
+checksummed (EIP-55) spelling, as wallets show them. The store keeps the list
+under the wallet's name as configured, so the first run after this change
+writes a new list for such a wallet, and its rows change: the actions it
+missed are exported.
 
 The rows of one EVM wallet can therefore carry either spelling. They are
 grouped into the wallet's period files by the lowercase address, so both go

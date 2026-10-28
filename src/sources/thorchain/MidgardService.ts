@@ -18,9 +18,9 @@ import { addressKey } from "../../utils/Address.ts";
 // Seconds in one of Midgard's 5min history buckets
 const RUNE_PRICE_INTERVAL = 300;
 
-// Midgard matches the `address` filter exactly, and spells an EVM address lowercase only on the chains it treats
-// as case-insensitive (ETH on THORChain; ETH and ARB on Maya); on others (AVAX, BSC, BASE) an outbound keeps the
-// case of the memo that asked for it. So an EVM wallet is queried in both spellings (Midgard splits the filter on
+// Midgard matches the `address` filter exactly. EVM senders are lowercase, and Midgard lowercases other EVM
+// addresses only on the chains it treats as case-insensitive (ETH on THORChain; ETH and ARB on Maya); on others
+// (AVAX, BSC, BASE) an outbound keeps the case of the memo that asked for it. So an EVM wallet is queried in both spellings (Midgard splits the filter on
 // commas and returns an action matching either). Other formats are case-sensitive and are queried as given.
 export function midgardAddress(address: string): string {
   const lower = addressKey(address);
