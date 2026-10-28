@@ -163,14 +163,15 @@ misses such an outbound when the memo used the checksummed spelling: configure
 EVM wallets in their checksummed (EIP-55) spelling, as wallets show them. The
 store keys a wallet's list by its address as configured, and a period file's
 name includes the last five characters of that address as configured. So to
-change a wallet's spelling, first move its old lists
-(`lists/midgard/<address>.*.json`, and `lists/maya-midgard/…` if Maya is
-exported) out of the store: two list keys that differ only in case stop the
-run after the respelling, and an offline replay of an earlier run then misses
-them. The wallet then starts a list with no earlier copies (its records are
-kept), and its file names can change. The first run that queries both
-spellings stores a new copy of a mixed-case wallet's list, and its rows
-change: the actions it missed are exported.
+change a wallet's spelling, change it in every config that uses the store and
+move its old lists (`lists/midgard/<address>.*.json`, and
+`lists/maya-midgard/…` if Maya is exported) out of the store: two list keys
+that differ only in case stop the run after the respelling. (`--replay` reads
+lists from the run's manifest and is unaffected; `--offline` with the old
+spelling then has no list and stops.) The wallet then starts a list with no
+earlier copies (its records are kept), and its file names can change. The
+first run that queries both spellings stores a new copy of a mixed-case
+wallet's list, and its rows change: the actions it missed are exported.
 
 The rows of one EVM wallet can therefore carry either spelling. They are
 grouped into the wallet's period files by the lowercase address, so both go
