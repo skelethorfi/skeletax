@@ -161,11 +161,11 @@ example, its savers deposits and withdrawals on ETH. Other address formats
 given. A wallet configured in lowercase is queried in lowercase only, so it
 misses such an outbound when the memo used the checksummed spelling: configure
 EVM wallets in their checksummed (EIP-55) spelling, as wallets show them. The
-file name and the store's list follow the configured spelling, so changing a
-wallet's spelling renames its period files and starts a new list. The store
-keeps the list under the wallet's name as configured, so the first run after
-this change writes a new list for a mixed-case wallet, and its rows change:
-the actions it missed are exported.
+store keys a wallet's list by its address as configured, and a period file's
+name ends with its last five characters as configured, so changing a wallet's
+spelling starts a new list with no stored history and can rename its files.
+The first run after this change stores a new copy of a mixed-case wallet's
+list, and its rows change: the actions it missed are exported.
 
 The rows of one EVM wallet can therefore carry either spelling. They are
 grouped into the wallet's period files by the lowercase address, so both go
