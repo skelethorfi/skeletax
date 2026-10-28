@@ -1,6 +1,7 @@
 import { assignRowIds, type SummRow } from "./csv/index.ts";
 import type { IWallet } from "../../config/IWallet.ts";
 import { type DateRange, nextDay, startOfDay } from "../../utils/DateRange.ts";
+import { addressKey } from "../../utils/Address.ts";
 
 export interface CsvFile {
   name: string;
@@ -36,7 +37,7 @@ export function csvFiles(
     files.push({ name: `all-${range.from}_${range.to}.csv`, rows: rangeRows });
 
     for (const address of addresses) {
-      const walletRows = rangeRows.filter((row) => row.wallet === address);
+      const walletRows = rangeRows.filter((row) => walletKey(row) === address);
 
       if (walletRows.length === 0) {
         continue;
@@ -80,9 +81,15 @@ function getUniqueWallets(rows: SummRow[], warnings: string[]): Set<string> {
         return "MISSING-ADDRESS";
       }
 
-      return row.wallet;
+      return walletKey(row)!;
     }),
   );
+}
+
+// One wallet's rows under one key: Midgard spells an EVM address lowercase on some chains and as the memo gave it
+// on others, and both spellings would otherwise get the same file name, the second file replacing the first
+function walletKey(row: SummRow): string | undefined {
+  return row.wallet && addressKey(row.wallet);
 }
 
 function makeFilename(address: string, range: DateRange, wallets: IWallet[], warnings: string[]): string {

@@ -84,6 +84,17 @@ describe("CSV file layout", () => {
     assert.deepEqual(warnings, ["wallet not found in config: thor1-other"]);
   });
 
+  test("an EVM wallet's rows in either case go to one file (Midgard spells it per chain)", () => {
+    const evm = [{ name: "Evm", address: "0x5A0b54D5dc17e0AadC383d2db43B0a0D3E029c4c", blockchain: "ETH" }];
+    const rows = [
+      row("2025-07-02T00:00:00.000Z", "0x5a0b54d5dc17e0aadc383d2db43b0a0d3e029c4c"),
+      row("2025-07-03T00:00:00.000Z", "0x5A0b54D5dc17e0AadC383d2db43B0a0D3E029c4c"),
+    ];
+    const { files, exported } = csvFiles(rows, [july], evm);
+    assert.deepEqual(names(files).slice(2), ["2025-07-01_2025-07-31_ETH_29c4c_Evm.csv (2)"]);
+    assert.equal(exported, 2);
+  });
+
   test("a thorchain row neither from nor to thorchain is an error", () => {
     assert.throws(() => csvFiles([row("2025-07-02T00:00:00.000Z", "thorchain")], [july], wallets), /bad txs/);
   });

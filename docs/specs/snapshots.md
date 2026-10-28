@@ -147,16 +147,23 @@ the first action, so a run sees new activity and changes to old actions in
 one pass. A record shared by several wallets is fetched once per
 run.
 
-Midgard matches the `address` of `/v2/actions` exactly as it stores it, and
-it stores EVM addresses lowercase. An EVM wallet (`0x` and 40 hex digits) is
-therefore queried lowercase, whatever its case in the config; queried
-checksummed (mixed case) it returned only the few actions where another field
-carried that spelling, and missed, for example, its savers deposits and
-withdrawals. Other address formats (base58 BTC, DOGE and LTC addresses) are
-case-sensitive and are queried as given. The store keeps the list under the
-wallet's name as configured, so the first run after this change writes a new
-list for such a wallet, and its rows change: the actions it missed are
-exported.
+Midgard matches the `address` of `/v2/actions` exactly. It spells an EVM
+address lowercase on the chains it treats as case-insensitive (ETH on
+THORChain; ETH and ARB on Maya) and for every sender, but an outbound on
+another EVM chain (AVAX, BSC, BASE) keeps the case of the memo that asked for
+it. So an EVM wallet (`0x` and 40 hex digits) configured in mixed case is
+queried in both spellings, `address=<lowercase>,<as configured>` (Midgard
+returns an action that matches either). Queried as configured only, a
+checksummed wallet got back just the actions spelled that way, and missed,
+for example, its savers deposits and withdrawals on ETH. Other address
+formats (base58 BTC, DOGE and LTC addresses) are case-sensitive and are
+queried as given. The store keeps the list under the wallet's name as
+configured, so the first run after this change writes a new list for such a
+wallet, and its rows change: the actions it missed are exported.
+
+The rows of one EVM wallet can therefore carry either spelling. They are
+grouped into the wallet's period files by the lowercase address, so both go
+to one file (`src/export/summ/files.ts`).
 
 Each fetch is retried after a transient error (HTTP 5xx or 429, a connection
 reset, a timeout, a DNS failure), waiting 5 s, 20 s and then 60 s

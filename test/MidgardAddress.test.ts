@@ -7,9 +7,13 @@ import { RecordStore } from "../src/sources/store/RecordStore.ts";
 import { MidgardService, midgardAddress } from "../src/sources/thorchain/MidgardService.ts";
 
 describe("Midgard address (case)", () => {
-  test("an EVM address is queried lowercase; other formats as given", () => {
+  test("a mixed-case EVM address is queried in both spellings; other formats as given", () => {
     assert.equal(
       midgardAddress("0x5A0b54D5dc17e0AadC383d2db43B0a0D3E029c4c"),
+      "0x5a0b54d5dc17e0aadc383d2db43b0a0d3e029c4c,0x5A0b54D5dc17e0AadC383d2db43B0a0D3E029c4c",
+    );
+    assert.equal(
+      midgardAddress("0x5a0b54d5dc17e0aadc383d2db43b0a0d3e029c4c"),
       "0x5a0b54d5dc17e0aadc383d2db43b0a0d3e029c4c",
     );
     assert.equal(midgardAddress("DPHTBAzM8gUZaTDgTGJS8BbgoEx6aLRoZB"), "DPHTBAzM8gUZaTDgTGJS8BbgoEx6aLRoZB");
@@ -20,7 +24,7 @@ describe("Midgard address (case)", () => {
     assert.equal(midgardAddress("0x5A0b54"), "0x5A0b54");
   });
 
-  test("a checksummed wallet's actions are fetched with its lowercase address", async () => {
+  test("a mixed-case wallet's actions are fetched with both spellings", async () => {
     const midgard = new MidgardService(
       new RecordStore(fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-midgard-address-"))),
       "midgard",
@@ -33,6 +37,9 @@ describe("Midgard address (case)", () => {
     );
 
     await midgard.getActions("0x5A0b54D5dc17e0AadC383d2db43B0a0D3E029c4c");
-    assert.equal(getActions.mock.calls[0].arguments[0], "0x5a0b54d5dc17e0aadc383d2db43b0a0d3e029c4c");
+    assert.equal(
+      getActions.mock.calls[0].arguments[0],
+      "0x5a0b54d5dc17e0aadc383d2db43b0a0d3e029c4c,0x5A0b54D5dc17e0AadC383d2db43B0a0D3E029c4c",
+    );
   });
 });
