@@ -17,6 +17,13 @@ import { http } from "../http.ts";
 // Seconds in one of Midgard's 5min history buckets
 const RUNE_PRICE_INTERVAL = 300;
 
+// Midgard matches an address as stored, and stores EVM addresses lowercase: a checksummed (mixed-case)
+// 0x address finds only the actions where some other field happens to carry it as given.
+// Other formats (base58 BTC, DOGE, LTC legacy) are case-sensitive and are queried as given.
+export function midgardAddress(address: string): string {
+  return /^0x[0-9a-f]{40}$/i.test(address) ? address.toLowerCase() : address;
+}
+
 export class MidgardService {
   api: DefaultApi;
 
@@ -41,7 +48,10 @@ export class MidgardService {
     return this.store.list(
       this.source,
       address,
-      async () => ({ data: await this.fetchActions(address), url: `${this.basePath}/v2/actions?address=${address}` }),
+      async () => ({
+        data: await this.fetchActions(midgardAddress(address)),
+        url: `${this.basePath}/v2/actions?address=${midgardAddress(address)}`,
+      }),
       MIDGARD_LIST,
     );
   }

@@ -147,6 +147,17 @@ the first action, so a run sees new activity and changes to old actions in
 one pass. A record shared by several wallets is fetched once per
 run.
 
+Midgard matches the `address` of `/v2/actions` exactly as it stores it, and
+it stores EVM addresses lowercase. An EVM wallet (`0x` and 40 hex digits) is
+therefore queried lowercase, whatever its case in the config; queried
+checksummed (mixed case) it returned only the few actions where another field
+carried that spelling, and missed, for example, its savers deposits and
+withdrawals. Other address formats (base58 BTC, DOGE and LTC addresses) are
+case-sensitive and are queried as given. The store keeps the list under the
+wallet's name as configured, so the first run after this change writes a new
+list for such a wallet, and its rows change: the actions it missed are
+exported.
+
 Each fetch is retried after a transient error (HTTP 5xx or 429, a connection
 reset, a timeout, a DNS failure), waiting 5 s, 20 s and then 60 s
 (`src/sources/Retry.ts`). Requests to Midgard, THORNode and the TCY API go
