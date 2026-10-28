@@ -160,17 +160,18 @@ from Keccak-256, `src/utils/Keccak.ts`). Queried as configured only, a
 checksummed wallet got back just the actions spelled that way, and missed, for
 example, its savers deposits and withdrawals on ETH. Other address formats
 (base58 BTC, DOGE and LTC addresses) are case-sensitive and are queried as
-given. What is fetched no longer depends on the case in the config, but the
-store keys a wallet's list by its address as configured, and a period file's
-name includes the last five characters of that address as configured. So to
-change a wallet's spelling anyway, change it in every config that uses the
-store and move its old lists (`lists/midgard/<address>.*.json`, and
-`lists/maya-midgard/…` if Maya is exported) out of the store: two list keys
-that differ only in case stop the run after the respelling. Replay an earlier
-run with the config it used. The wallet then starts a list with no earlier
-copies (its records are kept), and its file names can change. The first run
-that queries these spellings stores a new copy of each EVM wallet's list, and
-its rows change: the actions it missed are exported.
+given. What is fetched no longer depends on whether the config uses lowercase
+or the checksum spelling, but the store keys a wallet's list by its address as
+configured, and a period file's name includes the last five characters of that
+address as configured. So to change a wallet's spelling anyway, change it in
+every config that uses the store and move its old lists
+(`lists/midgard/<address>.*.json`, and `lists/maya-midgard/…` if Maya is
+exported) out of the store: two list keys that differ only in case stop the
+run after the respelling. Replay an earlier run with the config it used. The
+wallet then starts a list with no earlier copies (its records are kept), and
+its file names can change. When the added spellings find actions a wallet
+missed, the next run stores a new copy of its list, and its rows change: the
+actions it missed are exported.
 
 The rows of one EVM wallet can therefore carry either spelling. They are
 grouped into the wallet's period files by the lowercase address, so both go
