@@ -1274,7 +1274,9 @@ function narrow(
     const others = [...new Set(named.flatMap((t) => [...(outside.get(t) ?? [])]))];
     if (named.some((t) => leftTx.has(t)) || others.length)
       plan.notes.push(
-        `scope: legs ${d.summId} are deleted as named, though their tx waits${others.length ? ` (${others.join(", ")}, outside the scope)` : ""}`,
+        named.some((t) => leftTx.has(t))
+          ? `scope: legs ${d.summId} are deleted as named, though their tx waits`
+          : `scope: legs ${d.summId} are deleted as named, though ${others.join(", ")} of their tx, outside the scope, are not uploaded by this plan`,
       );
   }
   const ids = new Set([...matched].filter((id) => !waitRows.has(id)));

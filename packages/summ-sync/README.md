@@ -66,12 +66,13 @@ Filed years go in a separate apply with `--approve-filed`.
   found in the row's CSV line (e.g. `ThorSavers.` or a wallet address);
   legs with no row match by their ID in Summ, a txid or the text in their
   description, or a txid of a row in scope; legs that also name the tx of
-  a row outside the scope that the plan uploads are left, and the scope's
-  rows and other legs with no row of that tx, or of any other tx of
-  theirs, wait with them (unless an entry is their ID in Summ). Everything else, including a decision on a row outside
-  the scope, waits for another plan, and so does a categorisation whose
-  event has an upload the plan does not carry; `plan.md` notes each, and each
-  entry that matches nothing. Use it to apply one stage at a time.
+  a row outside the scope that the full plan uploads are left, and the
+  scope's rows and other legs with no row of that tx, or of any other tx
+  of theirs, wait with them (unless an entry is their ID in Summ).
+  Everything else, including a decision on a row outside the scope, waits
+  for another plan, and so does a categorisation whose event has an upload
+  the plan does not carry; `plan.md` notes each, and each entry that
+  matches nothing. Use it to apply one stage at a time.
 - `apply` carries out a plan made from the latest snapshot: deletes (only
   with `--approve-deletes`), then edits and categorisation, each checked
   against Summ's current value first (categorisation waits while the plan

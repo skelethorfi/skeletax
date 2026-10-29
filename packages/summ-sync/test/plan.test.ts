@@ -1433,13 +1433,19 @@ test("a scoped plan deletes legs with no row that name a txid of a row in scope:
   assert.deepEqual(
     plan({ rows: [r, outside], legs: both, scope: ["2024-03-01T10:00:00.000Z.out.555555555555"] }).plan.notes,
     [
-      `scope: legs 2024-03-01T10:00:00.000Z.out.555555555555 are deleted as named, though their tx waits (${r.id}, ${outside.id}, outside the scope)`,
+      `scope: legs 2024-03-01T10:00:00.000Z.out.555555555555 are deleted as named, though ${r.id}, ${outside.id} of their tx, outside the scope, are not uploaded by this plan`,
     ],
   );
   const named = plan({ rows: [r, outside], legs: both, scope: [r.id, "2024-03-01T10:00:00.000Z.out.555555555555"] });
   assert.deepEqual(
-    named.plan.delete.map((d) => d.summId),
-    ["2024-03-01T10:00:00.000Z.out.555555555555"],
+    [named.plan.delete.map((d) => d.summId), named.plan.upload.flatMap((u) => u.ids), named.plan.notes],
+    [
+      ["2024-03-01T10:00:00.000Z.out.555555555555"],
+      [r.id],
+      [
+        `scope: legs 2024-03-01T10:00:00.000Z.out.555555555555 are deleted as named, though ${outside.id} of their tx, outside the scope, are not uploaded by this plan`,
+      ],
+    ],
   );
 
   // Two rows of one tx (both sides of an add), one in scope: the legs naming the tx are the other row's too
