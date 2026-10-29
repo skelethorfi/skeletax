@@ -34,7 +34,7 @@ The steps of a year's sync are in its README; the design is
 3. Click **Upload** and select the files.
 4. Click **Import THORChain CSV**.
 5. Once you have also categorised the related transactions, recalculate
-   before you read gains or reports (step 5 above).
+   before you read gains or reports (see the steps by hand above).
 
 Import only your THORChain wallet CSV files
 (`YYYY-MM-DD_YYYY-MM-DD_THOR_xxxxx_Sample.csv`), not the files of your other
