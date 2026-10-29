@@ -76,5 +76,8 @@ Summ cannot price everything:
   in [specs/liquidity.md](specs/liquidity.md).
 
 Swap rows carry Midgard's USD price of each side as a reference price. Other
-rows have none. The old CoinMarketCap price lookup and the `addReferencePrices`
+rows have none, unless the config sets `referencePrices = "all"`: then every
+row whose asset Midgard prices carries one, and the LP and savers token rows
+carry the value of what went in or came out, so nothing needs copying by hand
+([specs/prices.md](specs/prices.md)). The old CoinMarketCap price lookup and the `addReferencePrices`
 wallet setting were removed; a config that still sets it gets a warning.

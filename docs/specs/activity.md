@@ -37,7 +37,7 @@ The types are in `src/domain/` (`Activity.ts`, `Asset.ts`, `Amount.ts`,
 | `time`     | When the action happened (Midgard's date)                                                                                                                      |
 | `memo`     | The memo the wallet sent, when there is one                                                                                                                    |
 | `legs`     | Every amount that moved into or out of a wallet (see Legs)                                                                                                     |
-| `prices`   | USD prices the source observed at the time, with where each came from (e.g. `midgard:swap.inPriceUSD`)                                                         |
+| `prices`   | USD prices the source observed at the time, with where each came from (e.g. `midgard:swap.inPriceUSD`, `midgard:history.depths`; `prices.md`)                  |
 | `details`  | Strings a kind needs in order to be described, e.g. a bond's `node`                                                                                            |
 
 ### Legs

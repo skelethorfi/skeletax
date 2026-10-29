@@ -324,7 +324,9 @@ Type, base currency and amount, quote currency and amount (buy and sell),
 fee currency and amount, timestamp (to the second; on every leg of the row,
 since Summ splits a leg left at another time into an action of its own), blockchain, from and to
 (managed rows only), and the description (managed rows with a stable ID; an
-adopted leg keeps its old wording). Not price, value or gain.
+adopted leg keeps its old wording). Not price, value or gain: a row uploaded
+before its reference price was filled (`prices.md`) keeps the price it has in
+Summ.
 
 A row with no fee whose legs in Summ include a fee leg (old exports put an
 own-wallet transfer's fee on both sides) loses only that leg: a delete of the
