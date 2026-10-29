@@ -36,6 +36,9 @@ export interface RawBundle {
   // RUNE's USD price at the action's time, for an asset with no market price of its own that is worth one RUNE
   // (bRUNE, docs/specs/rujira.md)
   runePriceUsd?: string;
+  // USD prices at the action's 5-minute bucket, by THOR.RUNE, MAYA.CACAO or pool, when the run fills reference
+  // prices on every row (docs/specs/prices.md)
+  usdPrices?: Record<string, string>;
   // THORChain sends that are this action's inbounds although no txid links them: a Maya liquidity auction's
   // deposits (docs/specs/maya.md, attachAuctionDeposits)
   inbounds?: Action[];

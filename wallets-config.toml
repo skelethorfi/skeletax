@@ -49,6 +49,12 @@ frequency = "yearly"
 # income (docs/specs/sends.md). Setting it replaces those; incomeFrom = [] makes every transfer a receive.
 # incomeFrom = ["maya1...", "thor1..."]
 
+# Optional: which rows carry a USD reference price, which Summ uses instead of its own market price (docs/specs/prices.md).
+# "swaps" - as before: swaps (Midgard's price of each side), bRUNE sells and TCY distributions (default)
+# "all"   - also every other row whose asset Midgard prices, and LP and savers position tokens (the value of what
+#           went in or came out); fetches the prices it needs
+# referencePrices = "swaps"
+
 # List of wallets
 # add a new [[wallets]] entry for each wallet
 # add each wallet that was used in swaps/LP/etc

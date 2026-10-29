@@ -1,0 +1,48 @@
+id: midgard/contract.C74C2BD4E65A2F8EDF6630552429FD148D90DD07AE4877DFCAF54F0EF6E06D8B.wasm-rujira-staking/liquid.bond
+protocol: thorchain
+kind: rujira.liquid.bond
+status: success
+time: 2025-07-23T22:26:38.775Z
+legs:
+  - direction: out
+    wallet: thor1d9j83ll3e0jh5w8kycjcmzcm2wdy0mr3wr9mtq
+    asset:
+      notation: X/RUJI
+      kind: native
+    role: principal
+    basis: observed
+    txid: C74C2BD4E65A2F8EDF6630552429FD148D90DD07AE4877DFCAF54F0EF6E06D8B
+    amount: "2269.0107783"
+    decimals: 8
+  - direction: in
+    wallet: thor1d9j83ll3e0jh5w8kycjcmzcm2wdy0mr3wr9mtq
+    asset:
+      notation: X/SRUJI
+      kind: native
+    role: principal
+    basis: observed
+    txid: C74C2BD4E65A2F8EDF6630552429FD148D90DD07AE4877DFCAF54F0EF6E06D8B
+    amount: "2252.15635519"
+    decimals: 8
+  - direction: out
+    wallet: thor1d9j83ll3e0jh5w8kycjcmzcm2wdy0mr3wr9mtq
+    asset:
+      notation: THOR.RUNE
+      kind: native
+    role: gas
+    basis: observed
+    txid: C74C2BD4E65A2F8EDF6630552429FD148D90DD07AE4877DFCAF54F0EF6E06D8B
+    amount: "0.00003255"
+    decimals: 8
+prices:
+  - asset:
+      notation: X/RUJI
+      kind: native
+    usd: "0.9595246700774911"
+    source: midgard:history.depths
+  - asset:
+      notation: THOR.RUNE
+      kind: native
+    usd: "1.5052460259552962"
+    source: midgard:history.rune
+details: {}

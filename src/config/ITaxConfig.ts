@@ -1,5 +1,6 @@
 import type { IWallet } from "./IWallet.ts";
 import type { AssetNamesConfig, ProtocolId } from "../domain/Protocol.ts";
+import type { ReferencePrices } from "../export/summ/prices.ts";
 
 export const MAYA_LIQUIDITY_AUCTION = ["income", "pool-units"] as const;
 // Earlier name of 'pool-units', still accepted in configs
@@ -40,4 +41,7 @@ export interface ITaxConfig {
   // (docs/specs/sends.md). Unset: the known distribution wallets' MAYA (KNOWN_DISTRIBUTORS); set, it replaces
   // them, so [] makes every transfer received a receive
   incomeFrom?: string[];
+  // Which rows carry a USD reference price (docs/specs/prices.md): 'swaps' (default: swaps, bRUNE sells and TCY
+  // distributions, as before) or 'all' (every row whose asset Midgard prices, and position tokens; fetches prices)
+  referencePrices?: ReferencePrices;
 }

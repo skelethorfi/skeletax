@@ -197,6 +197,7 @@ describe("Anonymiser", () => {
       stages: { inbound_finalised: { completed: true }, outbound_signed: { scheduled_outbound_height: 12345690 } },
       timestamp: "2025-08-16T22:34:43Z",
       distribution: { date: "1700000000" },
+      usdPrices: { "BTC.BTC": "16647.47", "THOR.RUNE": "1.19" },
     });
 
     assert.equal(out.height, "10000000");
@@ -213,6 +214,7 @@ describe("Anonymiser", () => {
       "=:ETH.ETH:name1:3000000000:name2:1000000000:2000000000:name3:4000000000",
     );
     assert.equal(out.metadata.swap.inPriceUSD, "1");
+    assert.deepEqual(out.usdPrices, { "BTC.BTC": "1", "THOR.RUNE": "1" });
     assert.equal(out.timestamp, "2020-12-31T13:00:00Z");
     assert.equal(out.distribution.date, "1609419600");
     assert.equal(new Anonymiser().anonymise({ timestamp: 1714000000000 }).timestamp, 1609419600000);

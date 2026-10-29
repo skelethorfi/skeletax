@@ -26,6 +26,7 @@ import { RunSummary } from "./RunSummary.ts";
 import {
   attachAuctionDeposits,
   dedupeBundles,
+  getBundleDate,
   getBundleKey,
   getBundleSourceName,
   type RawBundle,
@@ -36,6 +37,7 @@ import { type BundleResult, collectRows, runBundle } from "../pipeline/run.ts";
 import { csvFiles } from "../export/summ/files.ts";
 import type { Action } from "@xchainjs/xchain-midgard";
 import { midgardActionKey } from "../sources/store/Sources.ts";
+import { PriceSource } from "../sources/Prices.ts";
 
 export interface ExportOptions {
   // Only read cached snapshots; fail on anything not cached
@@ -166,6 +168,38 @@ export class Exporter {
     return bundles;
   }
 
+  // With referencePrices = 'all', each bundle with the USD prices of its legs (docs/specs/prices.md); otherwise the
+  // bundles as they are, so a run fetches no price. Only a bundle that can give rows is priced: one listing of each
+  // action, dated inside the run's periods (a day's margin either side, for the time zone).
+  async withPrices(bundles: RawBundle[]): Promise<RawBundle[]> {
+    if (this.config.referencePrices !== "all") {
+      return bundles;
+    }
+
+    const prices = new PriceSource(
+      new Map([
+        [THORCHAIN.id, this.midgard],
+        ...this.otherMidgards.map(({ protocol, midgard }) => [protocol.id, midgard] as [string, MidgardService]),
+      ]),
+    );
+    const day = 24 * 60 * 60 * 1000;
+    const from = new Date(this.config.fromDate).getTime() - day;
+    const to = new Date(this.config.toDate).getTime() + 2 * day;
+    const exported = new Set(
+      dedupeBundles(bundles).bundles.filter((bundle) => {
+        const time = getBundleDate(bundle).getTime();
+        return time >= from && time < to;
+      }),
+    );
+    const priced: RawBundle[] = [];
+
+    for (const bundle of bundles) {
+      priced.push(exported.has(bundle) ? await prices.add(bundle) : bundle);
+    }
+
+    return priced;
+  }
+
   // Every row of the bundles; issues are logged, and unsupported and failed actions saved
   getRows(bundles: RawBundle[], outputPath: string): SummRow[] {
     const unique = dedupeBundles(bundles);
@@ -194,6 +228,7 @@ export class Exporter {
         assets: this.config.assets,
         mayaLiquidityAuction: this.config.mayaLiquidityAuction,
         incomeFrom: this.config.incomeFrom,
+        referencePrices: this.config.referencePrices,
       }),
     );
     results.forEach((result) => this.handleIssues(result, outputPath));

@@ -86,6 +86,30 @@ export const RUNE_PRICE_RULES: RecordRules<RunePrice> = {
   folderOf: (price) => monthFolder(new Date(Number(price.startTime) * 1000)),
 };
 
+// CACAO's USD price over one of Maya Midgard's 5-minute buckets (/v2/history/cacao), keyed by the bucket's start
+// (docs/specs/prices.md)
+export interface CacaoPrice {
+  startTime: string;
+  endTime: string;
+  cacaoPriceUSD: string;
+  final: boolean;
+}
+
+export const CACAO_PRICE_RULES: RecordRules<CacaoPrice> = RUNE_PRICE_RULES as RecordRules<any>;
+
+// A pool's USD price over a 5-minute bucket (/v2/history/depths/{pool}), keyed '<pool>.<bucket start>'
+// (docs/specs/prices.md). assetPriceUSD is '' for a pool Midgard does not know, and '0' before the pool existed:
+// both mean no price, and are kept so a replay does not ask again.
+export interface PoolPrice {
+  pool: string;
+  startTime: string;
+  endTime: string;
+  assetPriceUSD: string;
+  final: boolean;
+}
+
+export const POOL_PRICE_RULES: RecordRules<PoolPrice> = RUNE_PRICE_RULES as RecordRules<any>;
+
 // Viewblock adds each amount's value at today's price (usdNew), which changes on every fetch and would make
 // every fetch look like a change in the source data. It is dropped before a tx is stored; the value at
 // the time of the tx (usd) is kept.
@@ -178,6 +202,9 @@ export const SOURCES: { [source: string]: ListSource | { kind: "record"; rules: 
   thornode: { kind: "record", rules: THORNODE_RULES },
   "thornode-cosmos": { kind: "record", rules: COSMOS_TX_RULES },
   "midgard-rune-price": { kind: "record", rules: RUNE_PRICE_RULES },
+  "midgard-pool-price": { kind: "record", rules: POOL_PRICE_RULES },
+  "maya-midgard-pool-price": { kind: "record", rules: POOL_PRICE_RULES },
+  "maya-midgard-cacao-price": { kind: "record", rules: CACAO_PRICE_RULES },
   "viewblock-tx": { kind: "record", rules: VIEWBLOCK_TX_RULES },
   "evm-receipt": { kind: "record", rules: EVM_RECEIPT_RULES },
   "tcy-claim": { kind: "record", rules: TCY_CLAIM_RULES },

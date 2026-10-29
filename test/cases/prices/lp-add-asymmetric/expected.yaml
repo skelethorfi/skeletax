@@ -1,0 +1,37 @@
+wallet: bc1quhcwdm0ggweqvanqv2le7rlmk6jqvgfdw86sxj
+timestamp: 2021-07-02T15:11:05.360Z
+type: spam
+baseCurrency: BTC
+baseAmount: "0.01327494"
+from: thorchain
+to: bc1quhcwdm0ggweqvanqv2le7rlmk6jqvgfdw86sxj
+description: 3/3 - Dummy transaction to get market price to then manually apply to the receive LP token transaction ThorLP.BTC.BTC (asymmetric); C2464B416BB28AD81C5685037B26C56BAC1EE82623CEF33DD8D7FA1A1902383B
+id: 2021-07-02T15:10:45.360Z.price-helper.7eb9adccaba0
+---
+wallet: bc1quhcwdm0ggweqvanqv2le7rlmk6jqvgfdw86sxj
+timestamp: 2021-07-02T15:10:55.360Z
+type: receive-lp-token
+baseCurrency: ThorLP.BTC.BTC
+baseAmount: "34.49337985"
+from: thorchain
+to: bc1quhcwdm0ggweqvanqv2le7rlmk6jqvgfdw86sxj
+blockchain: THORChain
+description: 2/3 - Receive LP token from ThorLP.BTC.BTC (asymmetric); C2464B416BB28AD81C5685037B26C56BAC1EE82623CEF33DD8D7FA1A1902383B
+referencePricePerUnit: "13.4812104503288"
+referencePriceCurrency: USD
+id: 2021-07-02T15:10:45.360Z.in.4d813a7efb8c
+---
+wallet: bc1quhcwdm0ggweqvanqv2le7rlmk6jqvgfdw86sxj
+timestamp: 2021-07-02T15:10:45.360Z
+type: add-liquidity
+baseCurrency: BTC
+baseAmount: "0.01327494"
+feeCurrency: BTC
+feeAmount: "0.00042897"
+from: bc1quhcwdm0ggweqvanqv2le7rlmk6jqvgfdw86sxj
+to: thorchain
+blockchain: BTC
+description: 1/3 - Add liquidity BTC to ThorLP.BTC.BTC (asymmetric); C2464B416BB28AD81C5685037B26C56BAC1EE82623CEF33DD8D7FA1A1902383B
+referencePricePerUnit: "35029.349503725054"
+referencePriceCurrency: USD
+id: 2021-07-02T15:10:45.360Z.out.f5929161978f

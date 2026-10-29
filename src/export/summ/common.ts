@@ -55,12 +55,16 @@ export function fee(activity: Activity, protocol: Protocol): Pick<SummRow, "feeC
   return { feeCurrency: currency, feeAmount: amount };
 }
 
-// The USD price the source observed, as the reference price columns; none without one
+// The USD price the source observed, as the reference price columns; none without one. With an asset, only that
+// asset's price (an activity can hold several prices from one source, docs/specs/prices.md).
 export function referencePrice(
   activity: Activity,
   source: string,
+  asset?: string,
 ): Pick<SummRow, "referencePricePerUnit" | "referencePriceCurrency"> {
-  const usd = activity.prices.find((price) => price.source === source)?.usd;
+  const usd = activity.prices.find(
+    (price) => price.source === source && (!asset || price.asset.notation === asset),
+  )?.usd;
   return usd ? { referencePricePerUnit: usd, referencePriceCurrency: "USD" } : {};
 }
 

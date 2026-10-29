@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs-extra";
 import { load as loadToml } from "js-toml";
 import { checkTimeZone, dateIn } from "../utils/DateRange.ts";
+import { REFERENCE_PRICES } from "../export/summ/prices.ts";
 
 export class TaxConfig {
   // today: the default toDate (its date in the config's timezone)
@@ -66,6 +67,12 @@ export class TaxConfig {
     if (config.mayaLiquidityAuction !== undefined && !MAYA_LIQUIDITY_AUCTION.includes(config.mayaLiquidityAuction)) {
       throw new Error(
         `Config: mayaLiquidityAuction must be ${MAYA_LIQUIDITY_AUCTION.map((value) => `"${value}"`).join(" or ")} (got ${JSON.stringify(config.mayaLiquidityAuction)})`,
+      );
+    }
+
+    if (config.referencePrices !== undefined && !REFERENCE_PRICES.includes(config.referencePrices)) {
+      throw new Error(
+        `Config: referencePrices must be ${REFERENCE_PRICES.map((value) => `"${value}"`).join(" or ")} (got ${JSON.stringify(config.referencePrices)})`,
       );
     }
 

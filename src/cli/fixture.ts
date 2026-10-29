@@ -11,6 +11,7 @@ import { TcyClaimService } from "../sources/tcy/TcyClaimService.ts";
 import { Viewblock } from "../sources/viewblock/index.ts";
 import { MidgardService } from "../sources/thorchain/MidgardService.ts";
 import { MidgardSource } from "../sources/Source.ts";
+import { PriceSource } from "../sources/Prices.ts";
 import { http } from "../sources/http.ts";
 import { execFileSync } from "child_process";
 import { Anonymiser, findSurvivors, getTokens } from "../fixtures/Anonymise.ts";
@@ -29,7 +30,7 @@ import {
 } from "../fixtures/GoldenCase.ts";
 import { getPrivateDir, mask, PrivateData } from "../fixtures/PrivateData.ts";
 import { describeShape, getActionIds, getActionShape, sameShape } from "../fixtures/Shape.ts";
-import { getProtocol, type Protocol } from "../domain/Protocol.ts";
+import { getProtocol, type Protocol, THORCHAIN } from "../domain/Protocol.ts";
 
 // Workflow for adding a golden test case without leaking private data:
 //
@@ -104,7 +105,12 @@ async function fetchInput(txid: string, protocol: Protocol, index?: number): Pro
     { viewblock: new Viewblock(store), evm: new EvmReceipts(store) },
     new TcyClaimService(store),
   );
-  const bundle = await source.bundle(action, action.in[0]?.address ?? "");
+  // USD prices of its legs (docs/specs/prices.md), so the case maps with referencePrices = 'all' too
+  const midgards = new Map([[THORCHAIN.id, new MidgardService(store)]]);
+  if (protocol.id !== THORCHAIN.id) {
+    midgards.set(protocol.id, new MidgardService(store, `${protocol.id}-midgard`, protocol.midgardUrl));
+  }
+  const bundle = await new PriceSource(midgards).add(await source.bundle(action, action.in[0]?.address ?? ""));
 
   return toCaseInput(bundle, describeShape(getActionShape(action)));
 }

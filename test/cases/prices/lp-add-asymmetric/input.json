@@ -1,0 +1,64 @@
+{
+  "description": "addLiquidity success: [BTC.BTC] -> []; referencePrices = all",
+  "source": "midgard",
+  "wallet": "bc1quhcwdm0ggweqvanqv2le7rlmk6jqvgfdw86sxj",
+  "data": {
+    "date": "1625238645360939613",
+    "height": "1281680",
+    "in": [
+      {
+        "address": "bc1quhcwdm0ggweqvanqv2le7rlmk6jqvgfdw86sxj",
+        "coins": [
+          {
+            "amount": "1327494",
+            "asset": "BTC.BTC"
+          }
+        ],
+        "txID": "C2464B416BB28AD81C5685037B26C56BAC1EE82623CEF33DD8D7FA1A1902383B"
+      }
+    ],
+    "metadata": {
+      "addLiquidity": {
+        "affiliateAddress": "",
+        "affiliateFee": "0",
+        "liquidityUnits": "3449337985",
+        "memo": "+:BTC.BTC:thor1l7rzfcphhelk2pc06cj5t9z4kvkj06vmv0yed3"
+      }
+    },
+    "out": [],
+    "pools": [
+      "BTC.BTC"
+    ],
+    "status": "success",
+    "type": "addLiquidity"
+  },
+  "thornodeTxs": [
+    {
+      "stages": {
+        "inbound_observed": {
+          "started": false,
+          "final_count": 0,
+          "completed": false
+        }
+      }
+    }
+  ],
+  "viewblockInbounds": [
+    {
+      "hash": "C2464B416BB28AD81C5685037B26C56BAC1EE82623CEF33DD8D7FA1A1902383B",
+      "found": true,
+      "gas": [
+        {
+          "asset": "BTC.BTC",
+          "amount": "42897"
+        }
+      ]
+    }
+  ],
+  "usdPrices": {
+    "BTC.BTC": "35029.349503725054"
+  },
+  "treatment": {
+    "referencePrices": "all"
+  }
+}

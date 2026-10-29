@@ -1,0 +1,91 @@
+{
+  "description": "addLiquidity success: [THOR.RUNE, BTC.BTC] -> []; referencePrices = all",
+  "source": "midgard",
+  "wallet": "thor1svp82fwx0lh80cakfg5gglgdkrnkh4yx3atcpn",
+  "data": {
+    "date": "1738158801058326536",
+    "height": "19639548",
+    "in": [
+      {
+        "address": "thor1svp82fwx0lh80cakfg5gglgdkrnkh4yx3atcpn",
+        "coins": [
+          {
+            "amount": "1357134310",
+            "asset": "THOR.RUNE"
+          }
+        ],
+        "txID": "26F4B43CC73CEDED9067068E34790CB68935E83A4BBE044396538A7E99D784FB"
+      },
+      {
+        "address": "bc1q3t9a9cefynlf5emcmv6dm253p3en9st7nne7j3",
+        "coins": [
+          {
+            "amount": "27000",
+            "asset": "BTC.BTC"
+          }
+        ],
+        "txID": "6CF3F7B2398C6CF32A2D78F24EDC6CA21408ED4367D083110B8069D117282390"
+      }
+    ],
+    "metadata": {
+      "addLiquidity": {
+        "affiliateAddress": "",
+        "affiliateFee": "0",
+        "liquidityUnits": "904731548",
+        "memo": "TRADE+:thor17hwqt302e5f2xm4h95ma8wuggqkvfzgvsnh5z9"
+      }
+    },
+    "out": [],
+    "pools": [
+      "BTC.BTC"
+    ],
+    "status": "success",
+    "type": "addLiquidity"
+  },
+  "thornodeTxs": [
+    {
+      "tx": {
+        "id": "6CF3F7B2398C6CF32A2D78F24EDC6CA21408ED4367D083110B8069D117282390",
+        "chain": "BTC",
+        "from_address": "bc1q3t9a9cefynlf5emcmv6dm253p3en9st7nne7j3",
+        "to_address": "bc1q4l5uemg5lqwv8rdyh66n96a2v8m96zxf0kk2ce",
+        "coins": [
+          {
+            "asset": "BTC.BTC",
+            "amount": "27000"
+          }
+        ],
+        "gas": [
+          {
+            "asset": "BTC.BTC",
+            "amount": "1180"
+          }
+        ],
+        "memo": "+:BTC.BTC:thor1svp82fwx0lh80cakfg5gglgdkrnkh4yx3atcpn:dx:0"
+      },
+      "stages": {
+        "inbound_observed": {
+          "final_count": 117,
+          "completed": true
+        },
+        "inbound_confirmation_counted": {
+          "remaining_confirmation_seconds": 0,
+          "completed": true
+        },
+        "inbound_finalised": {
+          "completed": true
+        },
+        "swap_status": {
+          "pending": false
+        }
+      }
+    }
+  ],
+  "usdPrices": {
+    "BTC.BTC": "101748.54441317968",
+    "THOR.RUNE": "2.0228079481305956"
+  },
+  "treatment": {
+    "referencePrices": "all"
+  }
+}

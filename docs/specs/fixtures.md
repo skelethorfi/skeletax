@@ -17,15 +17,17 @@ test/cases/<group>/<name>/
 
 `input.json`:
 
-| Field         | Meaning                                                                           |
-| ------------- | --------------------------------------------------------------------------------- |
-| `description` | What the case covers                                                              |
-| `source`      | `midgard`, `viewblock` or `tcy`                                                   |
-| `wallet`      | The wallet being exported (used by the viewblock and tcy mappers)                 |
-| `data`        | The Midgard action, Viewblock tx or TCY distribution item, as returned by the API |
-| `protocol`    | Optional, `maya` for a Maya case (default `thorchain`)                            |
-| `thornodeTxs` | Optional related THORNode `tx/status` responses (swaps and switches)              |
-| `cosmosTxs`   | Optional Cosmos txs of a contract action                                          |
+| Field         | Meaning                                                                                                                     |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `description` | What the case covers                                                                                                        |
+| `source`      | `midgard`, `viewblock` or `tcy`                                                                                             |
+| `wallet`      | The wallet being exported (used by the viewblock and tcy mappers)                                                           |
+| `data`        | The Midgard action, Viewblock tx or TCY distribution item, as returned by the API                                           |
+| `protocol`    | Optional, `maya` for a Maya case (default `thorchain`)                                                                      |
+| `thornodeTxs` | Optional related THORNode `tx/status` responses (swaps and switches)                                                        |
+| `cosmosTxs`   | Optional Cosmos txs of a contract action                                                                                    |
+| `usdPrices`   | Optional USD prices at the action's time, by `THOR.RUNE`, `MAYA.CACAO` or pool (`prices.md`); the fixture tool fetches them |
+| `treatment`   | Optional config choices the case is mapped with, e.g. `{"referencePrices": "all"}`                                          |
 
 `test/GoldenCases.test.ts` runs every case through `runBundle`, the same path the
 exporter uses, and compares the result with `expected.yaml`. It also compares the activities

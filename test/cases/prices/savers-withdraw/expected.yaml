@@ -1,0 +1,39 @@
+wallet: bc1qmrwdgkzdtzugfa5xqtjrxzgj5chzqrgf2c9wku
+timestamp: 2023-01-06T13:21:54.216Z
+type: remove-liquidity
+baseCurrency: BTC
+baseAmount: "0.02969783"
+feeCurrency: ""
+feeAmount: ""
+from: thorchain
+to: bc1qmrwdgkzdtzugfa5xqtjrxzgj5chzqrgf2c9wku
+blockchain: BTC
+description: 3/3 - Remove liquidity BTC from ThorSavers.BTC.BTC (savers); 6B6CE48A0D6F32494BF6015330FC601572338E149C65218CD08018E0CD70AE3B; paid out in 653ABA0084B87DC6B6D396DBAFE8AA6C4C1B5CF3FEA8E8F98E64DE07418BDC8B
+referencePricePerUnit: "16722.227791206933"
+referencePriceCurrency: USD
+id: 2023-01-06T13:21:34.216Z.in.51a828d0b0ae
+---
+wallet: bc1qmrwdgkzdtzugfa5xqtjrxzgj5chzqrgf2c9wku
+timestamp: 2023-01-06T13:21:44.216Z
+type: spam
+baseCurrency: BTC
+baseAmount: "0.02969783"
+from: bc1qmrwdgkzdtzugfa5xqtjrxzgj5chzqrgf2c9wku
+to: thorchain
+description: 2/3 - Dummy transaction to get market price to then manually apply to the return LP token transaction ThorSavers.BTC.BTC (savers); 6B6CE48A0D6F32494BF6015330FC601572338E149C65218CD08018E0CD70AE3B
+id: 2023-01-06T13:21:34.216Z.price-helper.a00ae931f5bf
+---
+wallet: bc1qmrwdgkzdtzugfa5xqtjrxzgj5chzqrgf2c9wku
+timestamp: 2023-01-06T13:21:34.216Z
+type: return-lp-token
+baseCurrency: ThorSavers.BTC.BTC
+baseAmount: "0.02979099"
+feeCurrency: BTC
+feeAmount: "0.00002268"
+from: bc1qmrwdgkzdtzugfa5xqtjrxzgj5chzqrgf2c9wku
+to: thorchain
+blockchain: THORChain
+description: 1/3 - Return LP token to ThorSavers.BTC.BTC (savers); 6B6CE48A0D6F32494BF6015330FC601572338E149C65218CD08018E0CD70AE3B
+referencePricePerUnit: "16669.9353786007"
+referencePriceCurrency: USD
+id: 2023-01-06T13:21:34.216Z.out.94bfb73e5796

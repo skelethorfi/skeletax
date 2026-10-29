@@ -17,4 +17,5 @@
 - [Run summary](./run-summary.md)
 - [Periods and CSV files](./periods.md)
 - [Activity](./activity.md)
+- [Reference prices](./prices.md)
 - [Summ sync](./summ-sync.md)

@@ -1,0 +1,88 @@
+{
+  "description": "swap/swap success: [BTC.BTC] -> [BTC/BTC]; referencePrices = all",
+  "source": "midgard",
+  "wallet": "bc1q2d2ealhcljw7gxldexph8nk8zatrt0l6sfhgqa",
+  "data": {
+    "date": "1646857150670545591",
+    "height": "4612301",
+    "in": [
+      {
+        "address": "bc1q2d2ealhcljw7gxldexph8nk8zatrt0l6sfhgqa",
+        "coins": [
+          {
+            "amount": "101849100",
+            "asset": "BTC.BTC"
+          }
+        ],
+        "txID": "86164D22C316B687F713B4CBFB5B661C2EF9350B7E7C200BD3A985629E573BF1"
+      }
+    ],
+    "metadata": {
+      "swap": {
+        "affiliateAddress": "",
+        "affiliateFee": "0",
+        "inPriceUSD": "42461.242317159755",
+        "isStreamingSwap": false,
+        "liquidityFee": "2212739200",
+        "memo": "=:BTC/BTC:thor16ker8lgzjjn5qaxat6u62npre7lkmwdaynampm:100167111",
+        "networkFees": [
+          {
+            "amount": "227",
+            "asset": "BTC/BTC"
+          }
+        ],
+        "outPriceUSD": "42461.242317159755",
+        "swapSlip": "24",
+        "swapTarget": "100167111",
+        "txType": "swap"
+      }
+    },
+    "out": [
+      {
+        "address": "thor16ker8lgzjjn5qaxat6u62npre7lkmwdaynampm",
+        "coins": [
+          {
+            "amount": "101681035",
+            "asset": "BTC/BTC"
+          }
+        ],
+        "height": "4612301",
+        "txID": ""
+      }
+    ],
+    "pools": [
+      "BTC.BTC"
+    ],
+    "status": "success",
+    "type": "swap"
+  },
+  "thornodeTxs": [
+    {
+      "stages": {
+        "inbound_observed": {
+          "started": false,
+          "final_count": 0,
+          "completed": false
+        }
+      }
+    }
+  ],
+  "viewblockInbounds": [
+    {
+      "hash": "86164D22C316B687F713B4CBFB5B661C2EF9350B7E7C200BD3A985629E573BF1",
+      "found": true,
+      "gas": [
+        {
+          "asset": "BTC.BTC",
+          "amount": "5824"
+        }
+      ]
+    }
+  ],
+  "usdPrices": {
+    "BTC.BTC": "42461.242317159835"
+  },
+  "treatment": {
+    "referencePrices": "all"
+  }
+}

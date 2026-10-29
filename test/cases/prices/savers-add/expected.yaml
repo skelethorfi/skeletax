@@ -1,0 +1,37 @@
+wallet: bc1qz0w77jfx0c86jjweljk98c4mafctgazhjnaf7n
+timestamp: 2022-11-14T16:50:42.461Z
+type: spam
+baseCurrency: BTC
+baseAmount: "1.40644"
+from: thorchain
+to: bc1qz0w77jfx0c86jjweljk98c4mafctgazhjnaf7n
+description: 3/3 - Dummy transaction to get market price to then manually apply to the receive LP token transaction ThorSavers.BTC.BTC (savers); D4C3AA19D45F04C000FDF50F93CD70B8282A9B59D94E1D0E9B19A700A5D30DD1
+id: 2022-11-14T16:50:22.461Z.price-helper.ff887e8bbaed
+---
+wallet: bc1qz0w77jfx0c86jjweljk98c4mafctgazhjnaf7n
+timestamp: 2022-11-14T16:50:32.461Z
+type: receive-lp-token
+baseCurrency: ThorSavers.BTC.BTC
+baseAmount: "1.3997464"
+from: thorchain
+to: bc1qz0w77jfx0c86jjweljk98c4mafctgazhjnaf7n
+blockchain: THORChain
+description: 2/3 - Receive LP token from ThorSavers.BTC.BTC (savers); D4C3AA19D45F04C000FDF50F93CD70B8282A9B59D94E1D0E9B19A700A5D30DD1
+referencePricePerUnit: "16555.7400272005"
+referencePriceCurrency: USD
+id: 2022-11-14T16:50:22.461Z.in.06b94edc51df
+---
+wallet: bc1qz0w77jfx0c86jjweljk98c4mafctgazhjnaf7n
+timestamp: 2022-11-14T16:50:22.461Z
+type: add-liquidity
+baseCurrency: BTC
+baseAmount: "1.40644"
+feeCurrency: BTC
+feeAmount: "0.00007"
+from: bc1qz0w77jfx0c86jjweljk98c4mafctgazhjnaf7n
+to: thorchain
+blockchain: BTC
+description: 1/3 - Add liquidity BTC to ThorSavers.BTC.BTC (savers); D4C3AA19D45F04C000FDF50F93CD70B8282A9B59D94E1D0E9B19A700A5D30DD1
+referencePricePerUnit: "16476.947116414336"
+referencePriceCurrency: USD
+id: 2022-11-14T16:50:22.461Z.out.2620de3ed703

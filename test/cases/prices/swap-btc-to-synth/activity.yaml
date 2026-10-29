@@ -1,0 +1,58 @@
+id: midgard/swap.86164D22C316B687F713B4CBFB5B661C2EF9350B7E7C200BD3A985629E573BF1
+protocol: thorchain
+kind: swap
+status: success
+time: 2022-03-09T20:19:10.670Z
+memo: =:BTC/BTC:thor16ker8lgzjjn5qaxat6u62npre7lkmwdaynampm:100167111
+legs:
+  - direction: out
+    wallet: bc1q2d2ealhcljw7gxldexph8nk8zatrt0l6sfhgqa
+    asset:
+      notation: BTC.BTC
+      kind: native
+    role: principal
+    basis: observed
+    txid: 86164D22C316B687F713B4CBFB5B661C2EF9350B7E7C200BD3A985629E573BF1
+    amount: "1.018491"
+    decimals: 8
+  - direction: in
+    wallet: thor16ker8lgzjjn5qaxat6u62npre7lkmwdaynampm
+    asset:
+      notation: BTC/BTC
+      kind: synth
+    role: principal
+    basis: observed
+    amount: "1.01681035"
+    decimals: 8
+  - direction: out
+    wallet: bc1q2d2ealhcljw7gxldexph8nk8zatrt0l6sfhgqa
+    asset:
+      notation: BTC.BTC
+      kind: native
+    role: gas
+    basis: observed
+    txid: 86164D22C316B687F713B4CBFB5B661C2EF9350B7E7C200BD3A985629E573BF1
+    amount: "0.00005824"
+    decimals: 8
+prices:
+  - asset:
+      notation: BTC.BTC
+      kind: native
+    usd: "42461.242317159755"
+    source: midgard:swap.inPriceUSD
+  - asset:
+      notation: BTC/BTC
+      kind: synth
+    usd: "42461.242317159755"
+    source: midgard:swap.outPriceUSD
+  - asset:
+      notation: BTC.BTC
+      kind: native
+    usd: "42461.242317159835"
+    source: midgard:history.depths
+  - asset:
+      notation: BTC/BTC
+      kind: synth
+    usd: "42461.242317159835"
+    source: midgard:history.depths
+details: {}
