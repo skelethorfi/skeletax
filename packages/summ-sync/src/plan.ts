@@ -1239,17 +1239,37 @@ function narrow(
   };
   const left: { summId: string; legs: Leg[]; txids: string[] }[] = [];
   plan.delete = plan.delete.filter((d) => d.id !== null || legsIn(d.summId, d.legIds, true));
-  // The rows of the scope naming a tx whose legs are left, and other legs of that tx, wait with them
+  // The rows of the scope naming a tx whose legs are left, and other legs with no row naming it, wait with them, and
+  // so does every other tx of theirs, until no more join
   const leftTx = new Set(left.flatMap((l) => l.txids));
-  const waiting = rows.filter((r) => matched.has(r.id) && r.txids.some((t) => leftTx.has(t))).map((r) => r.id);
-  const ids = new Set([...matched].filter((id) => !waiting.includes(id)));
-  plan.delete = plan.delete.filter((d) => {
-    if (d.id !== null) return ids.has(d.id);
-    const waits = !entries.includes(d.summId) && txidsOf(legsOf(d.legIds)).some((t) => leftTx.has(t));
-    if (waits) waiting.push(d.summId);
-    return !waits;
-  });
+  const waitRows = new Set<string>();
+  const waitLegs = new Map<string, { summId: string; legs: Leg[] }>();
+  for (let grew = true; grew;) {
+    grew = false;
+    const join = (named: string[]) => {
+      for (const t of named.filter(real)) leftTx.add(t);
+      grew = true;
+    };
+    for (const r of rows.filter((r) => matched.has(r.id) && !waitRows.has(r.id)))
+      if (r.txids.some((t) => leftTx.has(t))) {
+        waitRows.add(r.id);
+        join(r.txids);
+      }
+    for (const d of plan.delete.filter(
+      (d) => d.id === null && !waitLegs.has(d.summId) && !entries.includes(d.summId),
+    )) {
+      const legs = legsOf(d.legIds);
+      const named = txidsOf(legs);
+      if (named.some((t) => leftTx.has(t))) {
+        waitLegs.set(d.summId, { summId: d.summId, legs });
+        join(named);
+      }
+    }
+  }
+  const waiting = [...waitRows, ...waitLegs.keys()];
   if (waiting.length) plan.notes.push(`scope: ${waiting.join(", ")} wait with the legs of their tx left above`);
+  const ids = new Set([...matched].filter((id) => !waitRows.has(id)));
+  plan.delete = plan.delete.filter((d) => (d.id !== null ? ids.has(d.id) : !waitLegs.has(d.summId)));
   plan.adopted = plan.adopted.filter((a) => ids.has(a.id));
   plan.superseded = plan.superseded.filter((s) => ids.has(s.run));
   plan.edit = plan.edit.filter((e) => ids.has(e.id));
@@ -1280,6 +1300,7 @@ function narrow(
       .filter((d) => d.id === null)
       .map((d) => ({ summId: d.summId as string, legs: legsOf(d.legIds ?? []) })),
     ...left,
+    ...waitLegs.values(),
   ];
   for (const e of entries)
     if (!rows.some((r) => scopeMatch([e], r)) && !legEntries.some((l) => scopeMatch([e], null, l.summId, l.legs)))

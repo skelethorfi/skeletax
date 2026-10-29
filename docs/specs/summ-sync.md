@@ -452,8 +452,10 @@ description, and also when their description names a txid of a row in
 scope (the same tx: stale legs that would otherwise sit beside its upload).
 Unless an entry is their ID in Summ, legs that also name the tx of a row
 outside the scope that the plan uploads are not deleted, and the rows of
-the scope and other legs with no row naming that tx wait with them (none of
-their deletes, edits, uploads or categorisations), each noted: deleting the
+the scope and other legs with no row naming that tx wait with them, as do
+the rows and legs naming any other tx of theirs (nothing of theirs is
+carried: no delete, edit, upload, categorisation, adoption, report or
+override), each noted: deleting the
 legs would drop that row's side from Summ until its own plan uploads it,
 and uploading beside them could hold a side twice, so a scoped apply leaves
 the tx as it is until the scope takes the other row too. A row outside the

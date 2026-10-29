@@ -67,7 +67,8 @@ Filed years go in a separate apply with `--approve-filed`.
   legs with no row match by their ID in Summ, a txid or the text in their
   description, or a txid of a row in scope; legs that also name the tx of
   a row outside the scope that the plan uploads are left, and the scope's
-  rows of that tx wait with them (unless an entry is their ID in Summ). Everything else, including a decision on a row outside
+  rows and other legs with no row of that tx wait with them (unless an
+  entry is their ID in Summ). Everything else, including a decision on a row outside
   the scope, waits for another plan, and so does a categorisation whose
   event has an upload the plan does not carry; `plan.md` notes each, and each
   entry that matches nothing. Use it to apply one stage at a time.

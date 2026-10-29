@@ -1211,6 +1211,7 @@ test("a hold may name a txid: every row naming it is held, and legs naming it wi
 
 test("a scope file: one entry per line, comments and blank lines left out", () => {
   assert.throws(() => parseScope("0".repeat(64)), /placeholder txid/);
+  assert.deepEqual(parseScope("a\na # again\n"), ["a"]);
   assert.deepEqual(parseScope("Pool#3 # a comment\n#all of it\n"), ["Pool#3"]);
   assert.deepEqual(parseScope(`# savers stage\nExSavers.\n\n${TX1}  # the claim\n  row-1\n`), [
     "ExSavers.",
@@ -1350,6 +1351,20 @@ test("a scoped plan deletes legs with no row that name a txid of a row in scope:
     held.plan.delete.map((d) => d.summId),
     ["2024-03-01T10:00:00.000Z.out.222222222222", "2024-03-01T10:00:00.000Z.out.555555555555"],
   );
+  // An entry naming legs by their ID in Summ takes them though their tx waits
+  const named2 = plan({
+    rows: [r, outside],
+    legs: [...legs, ...both],
+    scope: [r.id, "2024-03-01T10:00:00.000Z.out.222222222222"],
+  });
+  assert.deepEqual(
+    [named2.plan.delete.map((d) => d.summId), named2.plan.upload],
+    [["2024-03-01T10:00:00.000Z.out.222222222222"], []],
+  );
+  // Every tx of a waiting row waits: its stale legs of another tx are not deleted either
+  const r2 = { ...r, txids: [TX1, TX2], description: `${TX1} ${TX2}` };
+  const chained = plan({ rows: [r2, outside], legs: [...both, ...gone("6", `Sent; ${TX2}`)], scope: [r.id] }).plan;
+  assert.deepEqual([chained.delete, chained.upload], [[], []]);
   // A remake (delete and upload of a row in scope) waits whole
   const remade = plan({
     rows: [r, outside],
@@ -1365,13 +1380,17 @@ test("a scoped plan deletes legs with no row that name a txid of a row in scope:
       [r.id, outside.id],
     ],
   );
-  // Text matching only the left legs is not "nothing"
-  assert.deepEqual(
-    plan({ rows: [r, outside], legs: both, scope: ["Swapped"] }).plan.notes.filter((n) =>
-      n.includes("matches nothing"),
-    ),
-    [],
-  );
+  // Text matching only legs that are left or wait is not "nothing"
+  for (const [scope, extra] of [
+    [["Swapped"], []],
+    [[r.id, "Zork"], gone("7", `Zork; ${TX1}`)],
+  ] as const)
+    assert.deepEqual(
+      plan({ rows: [r, outside], legs: [...both, ...extra], scope: [...scope] }).plan.notes.filter((n) =>
+        n.includes("matches nothing"),
+      ),
+      [],
+    );
   // Only the legs' own ID in Summ takes them whatever they name
   const named = plan({ rows: [r, outside], legs: both, scope: [r.id, "2024-03-01T10:00:00.000Z.out.555555555555"] });
   assert.deepEqual(
