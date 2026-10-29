@@ -137,8 +137,9 @@ optional:
   as `{"id": "<row ID>", "reason": "<why>"}`, or every row naming a txid as
   `{"txid": "<txid>", "reason": "<why>"}`. Plan plans nothing for them
   (no delete, edit, upload or categorise) and lists them, with what it left
-  out, under Held. A held ID with no row in the run's periods, or a held
-  txid no row names, is noted.
+  out, under Held; legs with no row under a held ID, or naming a held
+  txid, are not deleted. A held ID with no row in the run's periods, or a
+  held txid no row names, is noted.
 
 ## Tests
 

@@ -1269,9 +1269,14 @@ function narrow(
   const waiting = [...waitRows, ...waitLegs.keys()];
   if (waiting.length) plan.notes.push(`scope: ${waiting.join(", ")} wait with the legs of their tx left above`);
   // Legs an entry names by their ID in Summ are deleted all the same: said, as their tx's rows may not be uploaded
-  for (const d of plan.delete.filter((d) => d.id === null && entries.includes(d.summId)))
-    if (txidsOf(legsOf(d.legIds)).some((t) => leftTx.has(t)))
-      plan.notes.push(`scope: legs ${d.summId} are deleted as named, though rows of their tx wait`);
+  for (const d of plan.delete.filter((d) => d.id === null && entries.includes(d.summId))) {
+    const named = txidsOf(legsOf(d.legIds)).filter(real);
+    const others = [...new Set(named.flatMap((t) => [...(outside.get(t) ?? [])]))];
+    if (named.some((t) => leftTx.has(t)) || others.length)
+      plan.notes.push(
+        `scope: legs ${d.summId} are deleted as named, though their tx waits${others.length ? ` (${others.join(", ")}, outside the scope)` : ""}`,
+      );
+  }
   const ids = new Set([...matched].filter((id) => !waitRows.has(id)));
   plan.delete = plan.delete.filter((d) => (d.id !== null ? ids.has(d.id) : !waitLegs.has(d.summId)));
   plan.adopted = plan.adopted.filter((a) => ids.has(a.id));

@@ -459,8 +459,8 @@ row, held entry, report or override), each noted: deleting the
 legs would drop that row's side from Summ until its own plan uploads it,
 and uploading beside them could hold a side twice, so a scoped apply leaves
 the tx as it is until the scope takes the other row too. Legs an entry
-names by their ID in Summ are deleted all the same, with a note when rows
-of their tx wait. A row outside the
+names by their ID in Summ are deleted all the same, with a note when their
+tx waits or names a row outside the scope that the plan uploads. A row outside the
 scope that Summ already holds, or that Summ imports itself, loses nothing,
 so it does not stop the delete. Held entries with no row are listed when
 the scope matches their legs, without this check (nothing is deleted). The plan is made

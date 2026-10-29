@@ -1287,6 +1287,32 @@ test("a scoped plan (plan --only) plans only for the rows its entries match: by 
   assert.doesNotMatch(renderPlan(full, "snap", "run"), /- Scope/);
 });
 
+test("a scoped plan lists held entries and adopts legs of the rows in scope only", () => {
+  const a = row({ id: "2024-03-01T10:00:00.000Z.out.111111111111", txids: [], description: "a" });
+  const b = row({ id: "2024-03-01T10:00:00.000Z.out.222222222222", txids: [], description: "b", baseAmount: "2" });
+  const old = (r: Row, n: string) => legsOf(r, { id: `old.csv:${n}`, description: "" }, `old${n}`);
+  const hold = [
+    { id: a.id, reason: "pending" },
+    { id: b.id, reason: "pending" },
+  ];
+  const held = plan({ rows: [a, b], config: { ...CONFIG, hold }, scope: [a.id] }).plan;
+  assert.deepEqual(
+    held.held.map((h) => h.id),
+    [a.id],
+  );
+  assert.equal(plan({ rows: [a, b], config: { ...CONFIG, hold } }).plan.held.length, 2);
+  const legs = [...old(a, "1"), ...old(b, "2")];
+  assert.deepEqual(
+    plan({ rows: [a, b], legs }).plan.adopted.map((x) => x.id),
+    [a.id, b.id],
+  );
+  const adopted = plan({ rows: [a, b], legs, scope: [a.id] }).plan;
+  assert.deepEqual(
+    adopted.adopted.map((x) => x.id),
+    [a.id],
+  );
+});
+
 test("a scoped plan keeps a categorise back while its event has an upload outside the scope", () => {
   const swap = row({ id: "2024-03-01T10:00:00.000Z.in.111111111111", type: "receive" });
   const bridged = btcRow({ type: "bridge-trade-out" });
@@ -1362,7 +1388,7 @@ test("a scoped plan deletes legs with no row that name a txid of a row in scope:
     [
       ["2024-03-01T10:00:00.000Z.out.222222222222"],
       [],
-      "scope: legs 2024-03-01T10:00:00.000Z.out.222222222222 are deleted as named, though rows of their tx wait",
+      "scope: legs 2024-03-01T10:00:00.000Z.out.222222222222 are deleted as named, though their tx waits",
     ],
   );
   // Every tx of a waiting row waits: its stale legs of another tx are not deleted either
@@ -1403,7 +1429,13 @@ test("a scoped plan deletes legs with no row that name a txid of a row in scope:
       ),
       [],
     );
-  // Only the legs' own ID in Summ takes them whatever they name
+  // Only the legs' own ID in Summ takes them whatever they name, noted when a row of their tx is not uploaded
+  assert.deepEqual(
+    plan({ rows: [r, outside], legs: both, scope: ["2024-03-01T10:00:00.000Z.out.555555555555"] }).plan.notes,
+    [
+      `scope: legs 2024-03-01T10:00:00.000Z.out.555555555555 are deleted as named, though their tx waits (${r.id}, ${outside.id}, outside the scope)`,
+    ],
+  );
   const named = plan({ rows: [r, outside], legs: both, scope: [r.id, "2024-03-01T10:00:00.000Z.out.555555555555"] });
   assert.deepEqual(
     named.plan.delete.map((d) => d.summId),
