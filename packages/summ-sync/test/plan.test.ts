@@ -1326,23 +1326,52 @@ test("a scoped plan deletes legs with no row that name a txid of a row in scope:
     [["2024-03-01T10:00:00.000Z.out.222222222222"], [r.id], []],
   );
 
-  // Legs that also name the tx of a row outside the scope are left, matched by a txid of the scope or by an entry, and
-  // the scope's uploads of that tx wait with them: the tx stays as it is, no side dropped or doubled
+  // Legs that also name the tx of a row outside the scope that the full plan uploads are left, matched by a txid of
+  // the scope, by text or by a txid entry; the scope's rows and other legs of that tx wait with them: the tx stays as
+  // it is, no side dropped or doubled
   const both = gone("5", `Swapped; ${TX1} ${TX3}`);
-  for (const scope of [[r.id], [TX1]]) {
+  for (const scope of [[r.id], [r.id, "Swapped"], [TX1]]) {
     const left = plan({ rows: [r, outside], legs: [...legs, ...both], scope }).plan;
     assert.deepEqual(
-      [left.delete.map((d) => d.summId), left.upload, left.notes],
+      [left.delete, left.upload, left.notes],
       [
-        ["2024-03-01T10:00:00.000Z.out.222222222222"],
+        [],
         [],
         [
           `scope: legs 2024-03-01T10:00:00.000Z.out.555555555555 are not deleted: they also name the tx of ${outside.id}, outside the scope (add it to the scope)`,
-          `scope: upload of ${r.id} waits with the legs of its tx left above`,
+          `scope: ${r.id}, 2024-03-01T10:00:00.000Z.out.222222222222 wait with the legs of their tx left above`,
         ],
       ],
     );
   }
+  // A row outside the scope that Summ already holds loses nothing: the legs go
+  const held = plan({ rows: [r, outside], legs: [...legs, ...both, ...legsOf(outside, {}, "a9")], scope: [r.id] });
+  assert.deepEqual(
+    held.plan.delete.map((d) => d.summId),
+    ["2024-03-01T10:00:00.000Z.out.222222222222", "2024-03-01T10:00:00.000Z.out.555555555555"],
+  );
+  // A remake (delete and upload of a row in scope) waits whole
+  const remade = plan({
+    rows: [r, outside],
+    legs: [...legsOf({ ...r, description: "old" }, {}, "a8"), ...both],
+    scope: [r.id],
+  }).plan;
+  assert.deepEqual([remade.delete, remade.upload], [[], []]);
+  const remake = plan({ rows: [r, outside], legs: [...legsOf({ ...r, description: "old" }, {}, "a8"), ...both] }).plan;
+  assert.deepEqual(
+    [remake.delete.map((d) => d.id), remake.upload.flatMap((u) => u.ids)],
+    [
+      [null, r.id],
+      [r.id, outside.id],
+    ],
+  );
+  // Text matching only the left legs is not "nothing"
+  assert.deepEqual(
+    plan({ rows: [r, outside], legs: both, scope: ["Swapped"] }).plan.notes.filter((n) =>
+      n.includes("matches nothing"),
+    ),
+    [],
+  );
   // Only the legs' own ID in Summ takes them whatever they name
   const named = plan({ rows: [r, outside], legs: both, scope: [r.id, "2024-03-01T10:00:00.000Z.out.555555555555"] });
   assert.deepEqual(

@@ -450,12 +450,16 @@ any other entry matches a row whose CSV line holds the text (e.g.
 their ID in Summ, a txid in their description, or the text in their
 description, and also when their description names a txid of a row in
 scope (the same tx: stale legs that would otherwise sit beside its upload).
-But for a match by their ID, legs that also name the tx of a row outside
-the scope are not deleted, and the scope's uploads of that tx wait with
-them, each noted: deleting the legs would drop that row's side from Summ
-until its own plan uploads it, and uploading beside them could hold a side
-twice, so a scoped apply leaves the tx as it is until the scope takes the
-other row too. The plan is made
+Unless an entry is their ID in Summ, legs that also name the tx of a row
+outside the scope that the plan uploads are not deleted, and the rows of
+the scope and other legs with no row naming that tx wait with them (none of
+their deletes, edits, uploads or categorisations), each noted: deleting the
+legs would drop that row's side from Summ until its own plan uploads it,
+and uploading beside them could hold a side twice, so a scoped apply leaves
+the tx as it is until the scope takes the other row too. A row outside the
+scope that Summ already holds, or that Summ imports itself, loses nothing,
+so it does not stop the delete. Held entries with no row are listed when
+the scope matches their legs, without this check (nothing is deleted). The plan is made
 from the whole run, as without `--only`, then keeps only what concerns the
 rows in scope: their deletes, edits, uploads, categorisations, adoptions,
 superseded extra rows, held entries, reports (a report with no row when it

@@ -1188,10 +1188,14 @@ export function scopeMatch(entries: string[], row: Row | null, summId = "", legs
 
 /** One scope entry per line of a scope file; blank lines are left out, and a comment: `#` at the start or after a space. */
 export function parseScope(text: string): string[] {
-  const entries = text
-    .split(/\r?\n/)
-    .map((l) => l.replace(/(^|\s)#.*$/, "").trim())
-    .filter((l) => l !== "");
+  const entries = [
+    ...new Set(
+      text
+        .split(/\r?\n/)
+        .map((l) => l.replace(/(^|\s)#.*$/, "").trim())
+        .filter((l) => l !== ""),
+    ),
+  ];
   const zero = entries.find((e) => /^(0x)?0{64}$/.test(e));
   if (zero) throw new Error(`scope: ${zero} is a placeholder txid, which links no rows`);
   return entries;
@@ -1201,8 +1205,9 @@ export function parseScope(text: string): string[] {
  * A scoped plan (plan --only): only what concerns the rows the scope matches, and legs with no row that it matches or
  * that name a txid of a row in scope (the same tx). Everything else is left for another plan, so a decision on a row
  * outside the scope (an override set to no that depends on other changes of the full plan) is not carried early. Legs
- * that also name the tx of a row outside the scope are not deleted, and the uploads of their tx wait with them: a
- * scoped apply leaves such a tx as it is rather than dropping or doubling a side of it.
+ * that also name the tx of a row outside the scope that the full plan uploads are not deleted, and the rows of the
+ * scope naming that tx wait with them: a scoped apply leaves such a tx as it is rather than dropping or doubling a
+ * side of it.
  */
 function narrow(
   plan: Plan,
@@ -1211,14 +1216,14 @@ function narrow(
   legsOf: (legIds: string[]) => Leg[],
   eventOf: Map<string, Row[]>,
 ): void {
-  const ids = new Set(rows.filter((r) => scopeMatch(entries, r)).map((r) => r.id));
+  const matched = new Set(rows.filter((r) => scopeMatch(entries, r)).map((r) => r.id));
   const real = (t: string) => !/^0+$/.test(t);
-  const txids = new Set(rows.filter((r) => ids.has(r.id)).flatMap((r) => r.txids.filter(real)));
+  const txids = new Set(rows.filter((r) => matched.has(r.id)).flatMap((r) => r.txids.filter(real)));
+  const uploads = new Set(plan.upload.flatMap((u) => u.ids));
   const outside = new Map<string, Set<string>>();
-  for (const r of rows.filter((r) => !ids.has(r.id)))
+  for (const r of rows.filter((r) => !matched.has(r.id) && uploads.has(r.id)))
     for (const t of r.txids.filter(real)) outside.set(t, (outside.get(t) ?? new Set()).add(r.id));
-  // The txids of the scope whose legs are left: their uploads wait too
-  const left = new Set<string>();
+  /** Legs with no row in scope; with `deleting`, those that also name the tx of a row outside it are left. */
   const legsIn = (summId: string, legIds: string[], deleting: boolean) => {
     if (entries.includes(summId)) return true;
     const legs = legsOf(legIds);
@@ -1226,24 +1231,29 @@ function narrow(
     if (!scopeMatch(entries, null, "", legs) && !named.some((t) => txids.has(t))) return false;
     const others = [...new Set(named.flatMap((t) => [...(outside.get(t) ?? [])]))];
     if (!deleting || !others.length) return true;
-    for (const t of named.filter((t) => txids.has(t))) left.add(t);
+    left.push({ summId, legs, txids: named.filter((t) => txids.has(t)) });
     plan.notes.push(
       `scope: legs ${summId} are not deleted: they also name the tx of ${others.join(", ")}, outside the scope (add it to the scope)`,
     );
     return false;
   };
-  const uploads = new Set(plan.upload.flatMap((u) => u.ids));
+  const left: { summId: string; legs: Leg[]; txids: string[] }[] = [];
+  plan.delete = plan.delete.filter((d) => d.id !== null || legsIn(d.summId, d.legIds, true));
+  // The rows of the scope naming a tx whose legs are left, and other legs of that tx, wait with them
+  const leftTx = new Set(left.flatMap((l) => l.txids));
+  const waiting = rows.filter((r) => matched.has(r.id) && r.txids.some((t) => leftTx.has(t))).map((r) => r.id);
+  const ids = new Set([...matched].filter((id) => !waiting.includes(id)));
+  plan.delete = plan.delete.filter((d) => {
+    if (d.id !== null) return ids.has(d.id);
+    const waits = !entries.includes(d.summId) && txidsOf(legsOf(d.legIds)).some((t) => leftTx.has(t));
+    if (waits) waiting.push(d.summId);
+    return !waits;
+  });
+  if (waiting.length) plan.notes.push(`scope: ${waiting.join(", ")} wait with the legs of their tx left above`);
   plan.adopted = plan.adopted.filter((a) => ids.has(a.id));
   plan.superseded = plan.superseded.filter((s) => ids.has(s.run));
-  plan.delete = plan.delete.filter((d) => (d.id !== null ? ids.has(d.id) : legsIn(d.summId, d.legIds, true)));
   plan.edit = plan.edit.filter((e) => ids.has(e.id));
-  const rowById = new Map(rows.map((r) => [r.id, r]));
-  for (const u of plan.upload)
-    u.ids = u.ids.filter((id) => {
-      const waits = ids.has(id) && (rowById.get(id) as Row).txids.some((t) => left.has(t));
-      if (waits) plan.notes.push(`scope: upload of ${id} waits with the legs of its tx left above`);
-      return ids.has(id) && !waits;
-    });
+  for (const u of plan.upload) u.ids = u.ids.filter((id) => ids.has(id));
   plan.upload = plan.upload.filter((u) => u.ids.length);
   // Apply categorises once Summ holds the uploads it pairs with: a categorise whose event has an upload this plan
   // does not carry waits for the plan that uploads it
@@ -1265,9 +1275,12 @@ function narrow(
     h.id !== null ? ids.has(h.id) : legsIn(h.summId as string, h.kind === "hold" ? (h.legIds ?? []) : [], false),
   );
   plan.overridden = plan.overridden.filter((o) => ids.has(o.override.id));
-  const legEntries = [...plan.delete, ...plan.held]
-    .filter((d) => d.id === null)
-    .map((d) => ({ summId: d.summId as string, legs: legsOf(d.legIds ?? []) }));
+  const legEntries = [
+    ...[...plan.delete, ...plan.held]
+      .filter((d) => d.id === null)
+      .map((d) => ({ summId: d.summId as string, legs: legsOf(d.legIds ?? []) })),
+    ...left,
+  ];
   for (const e of entries)
     if (!rows.some((r) => scopeMatch([e], r)) && !legEntries.some((l) => scopeMatch([e], null, l.summId, l.legs)))
       plan.notes.push(`scope: ${e} matches nothing in the run or Summ's legs with no row`);
