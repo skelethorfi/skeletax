@@ -39,7 +39,7 @@ function priceOf(activity: Activity, item: Leg): string | undefined {
 // a withdrawal, the TCY of a claim), each at its price, over the units. None when any of them has no price, and
 // for a Maya liquidity-auction position, whose cost depends on the treatment and on deposits at other times.
 function positionPrice(activity: Activity, position: Leg): string | undefined {
-  if (activity.kind === "lp.auction.position") {
+  if (activity.kind === "lp.auction.position" || activity.status !== "success") {
     return undefined;
   }
 

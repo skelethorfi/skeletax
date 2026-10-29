@@ -11,6 +11,13 @@ import { toAsset, toPositionAsset } from "../src/domain/Asset.ts";
 import { readCaseExpected, readCaseInput, runCase, toBundle } from "../src/fixtures/GoldenCase.ts";
 import { formatPrice } from "../src/export/summ/prices.ts";
 import { TaxConfig } from "../src/config/TaxConfig.ts";
+import { Exporter } from "../src/cli/Exporter.ts";
+
+// Answers every history request with one bucket: the one asked for
+const historyGet = (fields: (url: string) => object) => async (url: string) => {
+  const [startTime, endTime] = [/from=(\d+)/.exec(url)![1], /to=(\d+)/.exec(url)![1]];
+  return { data: { intervals: [{ startTime, endTime, ...fields(url) }] } } as any;
+};
 
 const tempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-prices-"));
 
@@ -28,6 +35,7 @@ describe("reference prices (docs/specs/prices.md)", () => {
     assert.equal(priceKey(toAsset("THOR.TCY")), "THOR.TCY");
     assert.equal(priceKey(toAsset("MAYA.CACAO")), "MAYA.CACAO");
     assert.equal(priceKey(toAsset("x/ruji")), "THOR.RUJI");
+    assert.equal(priceKey(toAsset("x/staking-x/ruji")), undefined);
     assert.equal(priceKey(toPositionAsset("BTC.BTC")), undefined);
     assert.equal(priceKey(toPositionAsset("BTC/BTC")), undefined);
   });
@@ -109,12 +117,67 @@ describe("reference prices (docs/specs/prices.md)", () => {
     const cases = {
       "prices/lp-add-symmetric": "liquidity/add-btc-rune-symmetric",
       "prices/savers-withdraw": "liquidity/withdraw-btc-savers",
+      // The bRUNE sell price is RUNE's only for bRUNE: a RUJI sell does not take the RUNE price the bundle carries
+      "prices/rujira-liquid-bond-ruji": "rujira/staking-liquid-bond-ruji",
     };
 
     for (const [priced, plain] of Object.entries(cases)) {
       const { treatment: _, ...input } = readCaseInput(`test/cases/${priced}`);
       assert.deepEqual(runCase(input), readCaseExpected(`test/cases/${plain}`));
     }
+  });
+
+  test("an open bucket is fetched again on the next run; CACAO comes from Maya's own history", async () => {
+    const now = Math.floor(Date.now() / 1000 / 300) * 300;
+    const get = mock.method(
+      http,
+      "get",
+      historyGet((url) => (url.includes("/cacao") ? { cacaoPriceUSD: "0.1" } : { assetPriceUSD: "5" })),
+    );
+    const dir = tempDir();
+    const run = (source: string) => new MidgardService(new RecordStore(dir), source, "https://midgard");
+    const open = new Date(now * 1000);
+
+    assert.equal((await run("midgard").getPoolPrice("BTC.BTC", open)).final, false);
+    await run("midgard").getPoolPrice("BTC.BTC", open);
+    assert.equal((await run("maya-midgard").getCacaoPrice(new Date(1690000300000))).cacaoPriceUSD, "0.1");
+    assert.deepEqual(
+      get.mock.calls.map((call) => call.arguments[0]),
+      [
+        `https://midgard/v2/history/depths/BTC.BTC?interval=5min&from=${now}&to=${now + 300}`,
+        `https://midgard/v2/history/depths/BTC.BTC?interval=5min&from=${now}&to=${now + 300}`,
+        "https://midgard/v2/history/cacao?interval=5min&from=1690000200&to=1690000500",
+      ],
+    );
+    get.mock.restore();
+  });
+
+  test("a run prices only bundles that can give rows: inside its periods, one listing per action", async () => {
+    const dir = tempDir();
+    const config = path.join(dir, "config.toml");
+    fs.writeFileSync(
+      config,
+      'fromDate = "2024-07-01"\ntoDate = "2025-06-30"\nfrequency = "yearly"\nreferencePrices = "all"\nwallets = []\n',
+    );
+    const get = mock.method(
+      http,
+      "get",
+      historyGet((url) => (url.includes("/history/rune") ? { runePriceUSD: "2" } : { assetPriceUSD: "100000" })),
+    );
+    const inside = toBundle(readCaseInput("test/cases/liquidity/add-btc-rune-symmetric"));
+    const before = toBundle(readCaseInput("test/cases/liquidity/add-btc-savers"));
+    const again = { ...inside, wallet: "bc1-another-listing" };
+    const bundles = await new Exporter(config, { today: new Date("2026-10-30T00:00:00Z") }).withPrices([
+      inside,
+      before,
+      again,
+    ]);
+
+    assert.deepEqual(bundles[0].usdPrices, { "BTC.BTC": "100000", "THOR.RUNE": "2" });
+    assert.equal(bundles[1].usdPrices, undefined);
+    assert.equal(bundles[2].usdPrices, undefined);
+    assert.equal(get.mock.calls.length, 2);
+    get.mock.restore();
   });
 
   test("a derived price is a plain decimal", () => {

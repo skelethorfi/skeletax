@@ -95,10 +95,7 @@ export interface CacaoPrice {
   final: boolean;
 }
 
-export const CACAO_PRICE_RULES: RecordRules<CacaoPrice> = {
-  isPending: (price) => !price.final,
-  folderOf: (price) => monthFolder(new Date(Number(price.startTime) * 1000)),
-};
+export const CACAO_PRICE_RULES: RecordRules<CacaoPrice> = RUNE_PRICE_RULES as RecordRules<any>;
 
 // A pool's USD price over a 5-minute bucket (/v2/history/depths/{pool}), keyed '<pool>.<bucket start>'
 // (docs/specs/prices.md). assetPriceUSD is '' for a pool Midgard does not know, and '0' before the pool existed:
@@ -111,10 +108,7 @@ export interface PoolPrice {
   final: boolean;
 }
 
-export const POOL_PRICE_RULES: RecordRules<PoolPrice> = {
-  isPending: (price) => !price.final,
-  folderOf: (price) => monthFolder(new Date(Number(price.startTime) * 1000)),
-};
+export const POOL_PRICE_RULES: RecordRules<PoolPrice> = RUNE_PRICE_RULES as RecordRules<any>;
 
 // Viewblock adds each amount's value at today's price (usdNew), which changes on every fetch and would make
 // every fetch look like a change in the source data. It is dropped before a tx is stored; the value at

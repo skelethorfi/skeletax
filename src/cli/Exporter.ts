@@ -26,6 +26,7 @@ import { RunSummary } from "./RunSummary.ts";
 import {
   attachAuctionDeposits,
   dedupeBundles,
+  getBundleDate,
   getBundleKey,
   getBundleSourceName,
   type RawBundle,
@@ -168,7 +169,8 @@ export class Exporter {
   }
 
   // With referencePrices = 'all', each bundle with the USD prices of its legs (docs/specs/prices.md); otherwise the
-  // bundles as they are, so a run fetches no price
+  // bundles as they are, so a run fetches no price. Only a bundle that can give rows is priced: one listing of each
+  // action, dated inside the run's periods (a day's margin either side, for the time zone).
   async withPrices(bundles: RawBundle[]): Promise<RawBundle[]> {
     if (this.config.referencePrices !== "all") {
       return bundles;
@@ -180,10 +182,19 @@ export class Exporter {
         ...this.otherMidgards.map(({ protocol, midgard }) => [protocol.id, midgard] as [string, MidgardService]),
       ]),
     );
+    const day = 24 * 60 * 60 * 1000;
+    const from = new Date(this.config.fromDate).getTime() - day;
+    const to = new Date(this.config.toDate).getTime() + 2 * day;
+    const exported = new Set(
+      dedupeBundles(bundles).bundles.filter((bundle) => {
+        const time = getBundleDate(bundle).getTime();
+        return time >= from && time < to;
+      }),
+    );
     const priced: RawBundle[] = [];
 
     for (const bundle of bundles) {
-      priced.push(await prices.add(bundle));
+      priced.push(exported.has(bundle) ? await prices.add(bundle) : bundle);
     }
 
     return priced;

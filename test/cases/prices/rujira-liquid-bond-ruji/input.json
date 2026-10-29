@@ -1,0 +1,337 @@
+{
+  "description": "contract/wasm-rujira-staking/liquid.bond success: [] -> [] funds [x/ruji]; referencePrices = all",
+  "source": "midgard",
+  "wallet": "thor1d9j83ll3e0jh5w8kycjcmzcm2wdy0mr3wr9mtq",
+  "data": {
+    "date": "1753309598775956522",
+    "height": "22086530",
+    "in": [
+      {
+        "address": "thor1d9j83ll3e0jh5w8kycjcmzcm2wdy0mr3wr9mtq",
+        "coins": [],
+        "txID": "C74C2BD4E65A2F8EDF6630552429FD148D90DD07AE4877DFCAF54F0EF6E06D8B"
+      }
+    ],
+    "metadata": {
+      "contract": {
+        "attributes": {
+          "amount": "226901077830",
+          "owner": "thor1d9j83ll3e0jh5w8kycjcmzcm2wdy0mr3wr9mtq",
+          "shares": "225215635519"
+        },
+        "contractType": "wasm-rujira-staking/liquid.bond",
+        "funds": "226901077830x/ruji",
+        "msg": {
+          "liquid": {
+            "bond": {}
+          }
+        }
+      }
+    },
+    "out": [
+      {
+        "address": "thor13g83nn5ef4qzqeafp0508dnvkvm0zqr3sj7eefcn5umu65gqluusrml5cr",
+        "coins": [],
+        "txID": "C74C2BD4E65A2F8EDF6630552429FD148D90DD07AE4877DFCAF54F0EF6E06D8B"
+      }
+    ],
+    "pools": [],
+    "status": "success",
+    "type": "contract"
+  },
+  "cosmosTxs": [
+    {
+      "txhash": "C74C2BD4E65A2F8EDF6630552429FD148D90DD07AE4877DFCAF54F0EF6E06D8B",
+      "height": "22086530",
+      "timestamp": "2025-07-23T22:26:38Z",
+      "code": 0,
+      "fee": [
+        {
+          "denom": "rune",
+          "amount": "3255"
+        }
+      ],
+      "events": [
+        {
+          "type": "coin_spent",
+          "attributes": [
+            {
+              "key": "spender",
+              "value": "thor1d9j83ll3e0jh5w8kycjcmzcm2wdy0mr3wr9mtq"
+            },
+            {
+              "key": "amount",
+              "value": "3255rune"
+            }
+          ]
+        },
+        {
+          "type": "coin_received",
+          "attributes": [
+            {
+              "key": "receiver",
+              "value": "thor17xpfvakm2amg962yls6f84z3kell8c5lk76m7z"
+            },
+            {
+              "key": "amount",
+              "value": "3255rune"
+            }
+          ]
+        },
+        {
+          "type": "transfer",
+          "attributes": [
+            {
+              "key": "recipient",
+              "value": "thor17xpfvakm2amg962yls6f84z3kell8c5lk76m7z"
+            },
+            {
+              "key": "sender",
+              "value": "thor1d9j83ll3e0jh5w8kycjcmzcm2wdy0mr3wr9mtq"
+            },
+            {
+              "key": "amount",
+              "value": "3255rune"
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "sender",
+              "value": "thor1d9j83ll3e0jh5w8kycjcmzcm2wdy0mr3wr9mtq"
+            }
+          ]
+        },
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "action",
+              "value": "/cosmwasm.wasm.v1.MsgExecuteContract"
+            },
+            {
+              "key": "sender",
+              "value": "thor1d9j83ll3e0jh5w8kycjcmzcm2wdy0mr3wr9mtq"
+            },
+            {
+              "key": "module",
+              "value": "wasm"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_spent",
+          "attributes": [
+            {
+              "key": "spender",
+              "value": "thor1d9j83ll3e0jh5w8kycjcmzcm2wdy0mr3wr9mtq"
+            },
+            {
+              "key": "amount",
+              "value": "226901077830x/ruji"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_received",
+          "attributes": [
+            {
+              "key": "receiver",
+              "value": "thor13g83nn5ef4qzqeafp0508dnvkvm0zqr3sj7eefcn5umu65gqluusrml5cr"
+            },
+            {
+              "key": "amount",
+              "value": "226901077830x/ruji"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "transfer",
+          "attributes": [
+            {
+              "key": "recipient",
+              "value": "thor13g83nn5ef4qzqeafp0508dnvkvm0zqr3sj7eefcn5umu65gqluusrml5cr"
+            },
+            {
+              "key": "sender",
+              "value": "thor1d9j83ll3e0jh5w8kycjcmzcm2wdy0mr3wr9mtq"
+            },
+            {
+              "key": "amount",
+              "value": "226901077830x/ruji"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "execute",
+          "attributes": [
+            {
+              "key": "_contract_address",
+              "value": "thor13g83nn5ef4qzqeafp0508dnvkvm0zqr3sj7eefcn5umu65gqluusrml5cr"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "wasm-rujira-staking/liquid.bond",
+          "attributes": [
+            {
+              "key": "_contract_address",
+              "value": "thor13g83nn5ef4qzqeafp0508dnvkvm0zqr3sj7eefcn5umu65gqluusrml5cr"
+            },
+            {
+              "key": "owner",
+              "value": "thor1d9j83ll3e0jh5w8kycjcmzcm2wdy0mr3wr9mtq"
+            },
+            {
+              "key": "amount",
+              "value": "226901077830"
+            },
+            {
+              "key": "shares",
+              "value": "225215635519"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_received",
+          "attributes": [
+            {
+              "key": "receiver",
+              "value": "thor18afpdapfxxlvxcf95a3rd6p0fsw37mnf5tmtf6"
+            },
+            {
+              "key": "amount",
+              "value": "225215635519x/staking-x/ruji"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coinbase",
+          "attributes": [
+            {
+              "key": "minter",
+              "value": "thor18afpdapfxxlvxcf95a3rd6p0fsw37mnf5tmtf6"
+            },
+            {
+              "key": "amount",
+              "value": "225215635519x/staking-x/ruji"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_spent",
+          "attributes": [
+            {
+              "key": "spender",
+              "value": "thor18afpdapfxxlvxcf95a3rd6p0fsw37mnf5tmtf6"
+            },
+            {
+              "key": "amount",
+              "value": "225215635519x/staking-x/ruji"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_received",
+          "attributes": [
+            {
+              "key": "receiver",
+              "value": "thor1d9j83ll3e0jh5w8kycjcmzcm2wdy0mr3wr9mtq"
+            },
+            {
+              "key": "amount",
+              "value": "225215635519x/staking-x/ruji"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "transfer",
+          "attributes": [
+            {
+              "key": "recipient",
+              "value": "thor1d9j83ll3e0jh5w8kycjcmzcm2wdy0mr3wr9mtq"
+            },
+            {
+              "key": "sender",
+              "value": "thor18afpdapfxxlvxcf95a3rd6p0fsw37mnf5tmtf6"
+            },
+            {
+              "key": "amount",
+              "value": "225215635519x/staking-x/ruji"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "mint",
+          "attributes": [
+            {
+              "key": "mint_to_address",
+              "value": "thor13g83nn5ef4qzqeafp0508dnvkvm0zqr3sj7eefcn5umu65gqluusrml5cr"
+            },
+            {
+              "key": "amount",
+              "value": "225215635519x/staking-x/ruji"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "usdPrices": {
+    "THOR.RUJI": "0.9595246700774911",
+    "THOR.RUNE": "1.5052460259552962"
+  },
+  "treatment": {
+    "referencePrices": "all"
+  }
+}

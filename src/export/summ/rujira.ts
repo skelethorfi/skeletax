@@ -87,7 +87,7 @@ export function rujiraTradeRows(activity: Activity, protocol: Protocol): SummRow
         quoteAmount: output.amount,
         ...feeIfPaid(activity, protocol),
         // e.g. bRUNE, which Summ has no price for
-        ...referencePrice(activity, "midgard:history.rune"),
+        ...referencePrice(activity, "midgard:history.rune", sent.asset.notation),
         from: sent.wallet,
         to: sent.wallet,
         blockchain,

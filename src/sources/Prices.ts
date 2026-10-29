@@ -20,8 +20,9 @@ export function priceKey(asset: Asset): string | undefined {
 
   const notation = asset.notation.toUpperCase();
 
+  // A denom with a path of its own (e.g. x/staking-x/ruji) is no pool
   if (notation.startsWith("X/")) {
-    return `THOR.${notation.slice(2)}`;
+    return notation.slice(2).includes("/") ? undefined : `THOR.${notation.slice(2)}`;
   }
 
   if (asset.kind === "synth" || asset.kind === "trade" || asset.kind === "secured") {

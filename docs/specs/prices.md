@@ -33,20 +33,22 @@ Every price is USD at the 5-minute Midgard bucket holding the activity's time:
 the value Midgard records for the end of that bucket, so at most five minutes
 after the action.
 
-| Asset                                                                                  | Price                                                                                                                                                                                                                                           | Basis                                                                                                                                  |
-| -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| A swap's sent and received asset                                                       | Midgard's `inPriceUSD` / `outPriceUSD` of the swap (unchanged)                                                                                                                                                                                  | observed at the swap                                                                                                                   |
-| RUNE (`THOR.RUNE`), on THORChain and Maya                                              | THORChain Midgard `/v2/history/rune`, `runePriceUSD`                                                                                                                                                                                            | observed                                                                                                                               |
-| CACAO (`MAYA.CACAO`)                                                                   | Maya Midgard `/v2/history/cacao`, `cacaoPriceUSD`                                                                                                                                                                                               | observed                                                                                                                               |
-| A pool asset: an L1 coin or token (`BTC.BTC`, `ETH.USDC-0X…`), `THOR.TCY`, `MAYA.MAYA` | the protocol's own Midgard `/v2/history/depths/{pool}`, `assetPriceUSD`: the pool's price from its depths at the end of the bucket, in USD by the deepest USD pools. Maya's `assetPriceUSD` is already in USD (the decimals check in `maya.md`) | observed                                                                                                                               |
-| Synth (`BTC/BTC`), trade asset (`BTC~BTC`), secured asset (`BTC-BTC`)                  | the pool price of the L1 asset (`BTC.BTC`)                                                                                                                                                                                                      | assumed: each is a claim on the pool's asset (a synth is priced by its pool; trade and secured assets redeem 1:1), so it has its price |
-| A Rujira denom `x/<name>`                                                              | the pool `THOR.<NAME>` when Midgard has one (`x/ruji` → `THOR.RUJI`)                                                                                                                                                                            | observed                                                                                                                               |
-| bRUNE (`x/brune`)                                                                      | none of its own. A bRUNE sell already carries RUNE's price (`rujira.md`)                                                                                                                                                                        | assumed 1 RUNE, as before                                                                                                              |
-| Any other asset (no pool, e.g. sRUJI, yBRUNE)                                          | none: blank                                                                                                                                                                                                                                     | —                                                                                                                                      |
-| A position token (`ThorLP.*`, `ThorSavers.*`, `MayaLP.*`, RUNEPool, merge shares)      | derived per unit, below                                                                                                                                                                                                                         | derived from observed prices                                                                                                           |
+| Asset                                                                                    | Price                                                                                                                                                                                                                                           | Basis                                                                                                                                  |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| A swap's sent and received asset                                                         | Midgard's `inPriceUSD` / `outPriceUSD` of the swap (unchanged)                                                                                                                                                                                  | observed at the swap                                                                                                                   |
+| RUNE (`THOR.RUNE`), on THORChain and Maya                                                | THORChain Midgard `/v2/history/rune`, `runePriceUSD`                                                                                                                                                                                            | observed                                                                                                                               |
+| CACAO (`MAYA.CACAO`)                                                                     | Maya Midgard `/v2/history/cacao`, `cacaoPriceUSD`                                                                                                                                                                                               | observed                                                                                                                               |
+| A pool asset: an L1 coin or token (`BTC.BTC`, `ETH.USDC-0X…`), `THOR.TCY`, `MAYA.MAYA`   | the protocol's own Midgard `/v2/history/depths/{pool}`, `assetPriceUSD`: the pool's price from its depths at the end of the bucket, in USD by the deepest USD pools. Maya's `assetPriceUSD` is already in USD (the decimals check in `maya.md`) | observed                                                                                                                               |
+| Synth (`BTC/BTC`), trade asset (`BTC~BTC`), secured asset (`BTC-BTC`)                    | the pool price of the L1 asset (`BTC.BTC`)                                                                                                                                                                                                      | assumed: each is a claim on the pool's asset (a synth is priced by its pool; trade and secured assets redeem 1:1), so it has its price |
+| A Rujira denom `x/<name>`                                                                | the pool `THOR.<NAME>` when Midgard has one (`x/ruji` → `THOR.RUJI`); a denom with a path of its own (`x/staking-x/ruji`) is no pool                                                                                                            | observed                                                                                                                               |
+| bRUNE (`x/brune`)                                                                        | none of its own (Midgard has no `THOR.BRUNE` pool). A bRUNE sell already carries RUNE's price (`rujira.md`), matched to the bRUNE leg only                                                                                                      | assumed 1 RUNE, as before                                                                                                              |
+| Any other asset with no pool (e.g. sRUJI, yBRUNE, BEP2 RUNE `BNB.RUNE-B1A`, `GAIA.KUJI`) | none: blank. Midgard is still asked once per bucket, and its `Unknown pool` answer is stored                                                                                                                                                    | —                                                                                                                                      |
+| A position token (`ThorLP.*`, `ThorSavers.*`, `MayaLP.*`, RUNEPool, merge shares)        | derived per unit, below                                                                                                                                                                                                                         | derived from observed prices                                                                                                           |
 
-A pool that did not exist yet at that time gives `assetPriceUSD` `0`, and a
-pool Midgard does not know gives `400 Unknown pool`; both mean no price.
+A pool that did not exist yet at that time gives `assetPriceUSD` `0`, a bucket
+before Midgard's history starts gives `NaN`, and a pool Midgard does not know
+gives `400 Unknown pool`; each means no price. Any other error (a 5xx, a
+timeout) stops the run as for any source, and nothing is stored.
 
 ### Position tokens
 
@@ -63,14 +65,18 @@ at that time:
 - RUNEPool and Rujira merge positions follow the same rule (RUNE, or the coin
   merged).
 
-If any of those assets has no price, the token row has none. The price
+If any of those assets has no price, or the action is not `success`, the
+token row has none. The price
 helper approximates a symmetric add as twice the first asset; the derived
 price values each side at its own price.
 
-A Maya liquidity-auction position (`maya.md`) has no reference price: its
-cost depends on `mayaLiquidityAuction`, and its deposits are separate
-actions at other times. Its deposit rows (`lp.auction.deposit`) have none
-either, since their time is not the bucket of the auction's action.
+A Maya liquidity-auction position token (`maya.md`) has no reference price:
+its cost depends on `mayaLiquidityAuction`, and its deposits are separate
+actions at other times. The deposit rows (`lp.auction.deposit`) have none
+either, since their time is not the bucket of the auction's action. The
+auction's own rows at its end (the income of what the auction supplied, and
+its add-liquidity rows) are priced like any other row: CACAO income at
+CACAO's price.
 
 ### Rows without a price
 
@@ -81,12 +87,18 @@ either, since their time is not the bucket of the auction's action.
 - Rows whose asset has no price (above) stay blank.
 - A row that already has a price keeps it (a swap's own price is used over
   the pool's).
+- The default (`"swaps"`) never takes a price from `usdPrices`, even when a
+  bundle carries them (a golden case fetched by the fixture tool does).
 
 ## Fetching and the store
 
 With `referencePrices = "all"`, a run interprets each bundle before export,
 collects the assets of its legs, and fetches each asset's price once per
-bucket. The bundle carries them as `usdPrices` (key: `THOR.RUNE`,
+bucket. Only bundles that can give rows are priced: one listing of each
+action (the first wallet's, as `dedupeBundles` keeps), dated inside the run's
+`fromDate`–`toDate` with a day's margin either side for the time zone.
+Requests are throttled to one a second, so a first run over several years
+takes a while; later runs read the store. The bundle carries them as `usdPrices` (key: `THOR.RUNE`,
 `MAYA.CACAO`, or the pool, e.g. `BTC.BTC`; value: the USD price); only keys
 that have a price are kept. The interpreter's activity gets them as `prices`
 (`activity.md`), with their source: `midgard:history.rune`,
@@ -132,9 +144,12 @@ prices with Summ's own (below).
 ## Tests
 
 - `test/cases/prices/`: a symmetric and an asymmetric LP add, a savers add
-  and withdrawal, and a swap, from public transactions, mapped with
+  and withdrawal, a swap, and a Rujira liquid bond (a RUJI sell: RUJI's
+  price, not RUNE's), from public transactions, mapped with
   `referencePrices = "all"`.
-- `test/Prices.test.ts`: which pool or index an asset is priced from, the
+- `test/Prices.test.ts`: which pool or index an asset is priced from; the
   stored records (open bucket fetched again, unknown pool stored as no
-  price, offline miss), the derived position price, and that the default
-  fills nothing new.
+  price, offline read and miss, CACAO from Maya's history); a bundle's prices
+  without the zero ones; an unpriced position and the unpriced helper; that
+  a run prices only bundles inside its periods, once per action; and that the
+  default fills nothing new, even for a bundle that carries prices.
