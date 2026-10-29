@@ -5,6 +5,7 @@ import { exportSumm, type Treatment } from "../export/summ/index.ts";
 import { interpret } from "../interpret/registry.ts";
 import type { Protocol } from "../domain/Protocol.ts";
 import { getBundleDate, type RawBundle } from "../sources/RawBundle.ts";
+import { withBundlePrices } from "../sources/Prices.ts";
 
 // One bundle, interpreted and exported. Pure: the shell logs the issues and writes the files.
 export interface BundleResult {
@@ -16,7 +17,9 @@ export interface BundleResult {
 }
 
 export function runBundle(bundle: RawBundle, protocol: Protocol, treatment: Treatment = {}): BundleResult {
-  const { activities, issues } = interpret(bundle, protocol);
+  const interpretation = interpret(bundle, protocol);
+  const activities = withBundlePrices(interpretation.activities, bundle);
+  const issues = interpretation.issues;
   return { bundle, time: getBundleDate(bundle), activities, rows: exportSumm(activities, treatment), issues };
 }
 

@@ -13,7 +13,8 @@ const RANK_STEP = 1_000_000_000n;
 // write it out, and a fixed value carries nothing about the original transaction.
 export const FIXED_TIME = new Date("2020-12-31T13:00:00Z");
 export const FIXED_HEIGHT = "10000000";
-// Nothing computes with a USD price: it is only copied into the reference price column
+// A USD price is only copied into the reference price column, or multiplied with amounts for a position's value
+// (docs/specs/prices.md): a fixed price keeps both working and says nothing about the time
 export const FIXED_PRICE_USD = "1";
 
 // Wallet addresses: EVM (not a token contract inside an asset name such as ETH.USDC-0X…), bech32 (THORChain,
@@ -118,6 +119,11 @@ export class Anonymiser {
 
     if (isReceipt(value)) {
       return this.anonymiseReceipt(value);
+    }
+
+    // A bundle's prices by asset (docs/specs/prices.md): each a USD price
+    if (key === "usdPrices" && value !== null && typeof value === "object") {
+      return Object.fromEntries(Object.keys(value).map((asset) => [asset, FIXED_PRICE_USD]));
     }
 
     if (value !== null && typeof value === "object") {

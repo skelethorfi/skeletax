@@ -1,5 +1,13 @@
 import { RecordStore } from "../store/RecordStore.ts";
-import { MIDGARD_LIST, RUNE_PRICE_RULES, type RunePrice } from "../store/Sources.ts";
+import {
+  CACAO_PRICE_RULES,
+  type CacaoPrice,
+  MIDGARD_LIST,
+  POOL_PRICE_RULES,
+  type PoolPrice,
+  RUNE_PRICE_RULES,
+  type RunePrice,
+} from "../store/Sources.ts";
 import { type Action, Configuration, DefaultApi } from "@xchainjs/xchain-midgard";
 import assert from "assert";
 import { API_URLS } from "../../config/apiUrls.ts";
@@ -30,6 +38,34 @@ export function midgardAddress(address: string): string {
   }
 
   return [...new Set([address.toLowerCase(), checksumAddress(address), address])].join(",");
+}
+
+// The start (Unix seconds) of the 5-minute history bucket holding `date`
+export function bucketStart(date: Date): number {
+  return Math.floor(date.getTime() / 1000 / RUNE_PRICE_INTERVAL) * RUNE_PRICE_INTERVAL;
+}
+
+function findBucket(intervals: any[], start: number, what: string): any {
+  const bucket = intervals.find((item) => Number(item.startTime) === start);
+
+  if (!bucket) {
+    throw new Error(`[Midgard] no ${what} price for the bucket starting ${start}`);
+  }
+
+  return bucket;
+}
+
+// The bucket had ended when it was fetched; an open one has a partial price
+function isFinal(bucket: { endTime: string }): boolean {
+  return Number(bucket.endTime) * 1000 <= Date.now();
+}
+
+// Midgard answers '400 Bad Request: Unknown pool: <pool>' for a pool it has never had
+function isUnknownPool(error: any): boolean {
+  const body = error?.response?.data;
+  return (
+    error?.response?.status === 400 && /unknown pool/i.test(typeof body === "string" ? body : JSON.stringify(body))
+  );
 }
 
 export class MidgardService {
@@ -66,27 +102,90 @@ export class MidgardService {
 
   // RUNE's USD price in the 5-minute bucket holding `date`, as a `<source>-rune-price` record
   async getRunePrice(date: Date): Promise<RunePrice> {
-    const start = Math.floor(date.getTime() / 1000 / RUNE_PRICE_INTERVAL) * RUNE_PRICE_INTERVAL;
+    const start = bucketStart(date);
     const url = `${this.basePath}/v2/history/rune?interval=5min&from=${start}&to=${start + RUNE_PRICE_INTERVAL}`;
 
     return this.store.record<RunePrice>(
       `${this.source}-rune-price`,
       String(start),
       async () => {
-        const intervals: Omit<RunePrice, "final">[] = (await http.get(url)).data.intervals;
-        const bucket = intervals.find((item) => Number(item.startTime) === start);
-
-        if (!bucket) {
-          throw new Error(`[Midgard] no RUNE price for the bucket starting ${start}`);
-        }
-
-        const final = Number(bucket.endTime) * 1000 <= Date.now();
+        const bucket = findBucket((await http.get(url)).data.intervals, start, "RUNE");
         return {
-          data: { startTime: bucket.startTime, endTime: bucket.endTime, runePriceUSD: bucket.runePriceUSD, final },
+          data: {
+            startTime: bucket.startTime,
+            endTime: bucket.endTime,
+            runePriceUSD: bucket.runePriceUSD,
+            final: isFinal(bucket),
+          },
           url,
         };
       },
       RUNE_PRICE_RULES,
+      date,
+    );
+  }
+
+  // CACAO's USD price in the 5-minute bucket holding `date` (Maya Midgard), as a `<source>-cacao-price` record
+  async getCacaoPrice(date: Date): Promise<CacaoPrice> {
+    const start = bucketStart(date);
+    const url = `${this.basePath}/v2/history/cacao?interval=5min&from=${start}&to=${start + RUNE_PRICE_INTERVAL}`;
+
+    return this.store.record<CacaoPrice>(
+      `${this.source}-cacao-price`,
+      String(start),
+      async () => {
+        const bucket = findBucket((await http.get(url)).data.intervals, start, "CACAO");
+        return {
+          data: {
+            startTime: bucket.startTime,
+            endTime: bucket.endTime,
+            cacaoPriceUSD: bucket.cacaoPriceUSD,
+            final: isFinal(bucket),
+          },
+          url,
+        };
+      },
+      CACAO_PRICE_RULES,
+      date,
+    );
+  }
+
+  // A pool's USD price (assetPriceUSD) in the 5-minute bucket holding `date`, as a `<source>-pool-price` record keyed
+  // '<pool>.<bucket start>' (docs/specs/prices.md). A pool Midgard does not know is stored with no price.
+  async getPoolPrice(pool: string, date: Date): Promise<PoolPrice> {
+    const start = bucketStart(date);
+    const url = `${this.basePath}/v2/history/depths/${pool}?interval=5min&from=${start}&to=${start + RUNE_PRICE_INTERVAL}`;
+
+    return this.store.record<PoolPrice>(
+      `${this.source}-pool-price`,
+      `${pool}.${start}`,
+      async () => {
+        const end = String(start + RUNE_PRICE_INTERVAL);
+        let intervals;
+
+        try {
+          intervals = (await http.get(url)).data.intervals;
+        } catch (error: any) {
+          if (isUnknownPool(error)) {
+            return { data: { pool, startTime: String(start), endTime: end, assetPriceUSD: "", final: true }, url };
+          }
+
+          throw error;
+        }
+
+        const bucket = findBucket(intervals, start, pool);
+        return {
+          data: {
+            pool,
+            startTime: bucket.startTime,
+            endTime: bucket.endTime,
+            assetPriceUSD: bucket.assetPriceUSD,
+            final: isFinal(bucket),
+          },
+          url,
+        };
+      },
+      POOL_PRICE_RULES,
       date,
     );
   }

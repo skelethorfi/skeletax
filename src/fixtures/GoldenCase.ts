@@ -47,6 +47,8 @@ export interface GoldenCaseInput {
   nativeFee?: string;
   // RUNE's USD price at the action's time (a contract action that sends bRUNE)
   runePriceUsd?: string;
+  // USD prices at the action's time, by THOR.RUNE, MAYA.CACAO or pool (docs/specs/prices.md)
+  usdPrices?: Record<string, string>;
   // What a TCY claim was for (docs/specs/thorfi-collapse.md)
   tcyClaim?: TcyClaimData;
   // The config's treatment choices the case is mapped with, e.g. {mayaLiquidityAuction: 'income'}
@@ -161,6 +163,7 @@ export function toBundle(input: GoldenCaseInput): RawBundle {
     ...(input.inbounds ? { inbounds: input.inbounds } : {}),
     ...(input.nativeFee ? { nativeFee: input.nativeFee } : {}),
     ...(input.runePriceUsd ? { runePriceUsd: input.runePriceUsd } : {}),
+    ...(input.usdPrices ? { usdPrices: input.usdPrices } : {}),
     ...(input.tcyClaim ? { tcyClaim: input.tcyClaim } : {}),
   };
 }
@@ -179,6 +182,7 @@ export function toCaseInput(bundle: RawBundle, description: string): GoldenCaseI
     ...(bundle.inbounds?.length ? { inbounds: bundle.inbounds } : {}),
     ...(bundle.nativeFee ? { nativeFee: bundle.nativeFee } : {}),
     ...(bundle.runePriceUsd ? { runePriceUsd: bundle.runePriceUsd } : {}),
+    ...(bundle.usdPrices ? { usdPrices: bundle.usdPrices } : {}),
     ...(bundle.tcyClaim ? { tcyClaim: bundle.tcyClaim } : {}),
   };
 }

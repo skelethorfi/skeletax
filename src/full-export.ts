@@ -69,7 +69,10 @@ async function main() {
   }
 
   // Every wallet's rows are collected before saving, otherwise one wallet's TC swaps could overwrite another
-  exporter.saveToCsv(exporter.getRows(await exporter.collectBundles(), outputPath), path.join(outputPath, "csv"));
+  exporter.saveToCsv(
+    exporter.getRows(await exporter.withPrices(await exporter.collectBundles()), outputPath),
+    path.join(outputPath, "csv"),
+  );
 
   // Which snapshot of each source this run used, for --replay
   exporter.snapshots.write(outputPath).forEach((line) => report.info(line));

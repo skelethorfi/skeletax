@@ -36,6 +36,7 @@ import { type BundleResult, collectRows, runBundle } from "../pipeline/run.ts";
 import { csvFiles } from "../export/summ/files.ts";
 import type { Action } from "@xchainjs/xchain-midgard";
 import { midgardActionKey } from "../sources/store/Sources.ts";
+import { PriceSource } from "../sources/Prices.ts";
 
 export interface ExportOptions {
   // Only read cached snapshots; fail on anything not cached
@@ -166,6 +167,28 @@ export class Exporter {
     return bundles;
   }
 
+  // With referencePrices = 'all', each bundle with the USD prices of its legs (docs/specs/prices.md); otherwise the
+  // bundles as they are, so a run fetches no price
+  async withPrices(bundles: RawBundle[]): Promise<RawBundle[]> {
+    if (this.config.referencePrices !== "all") {
+      return bundles;
+    }
+
+    const prices = new PriceSource(
+      new Map([
+        [THORCHAIN.id, this.midgard],
+        ...this.otherMidgards.map(({ protocol, midgard }) => [protocol.id, midgard] as [string, MidgardService]),
+      ]),
+    );
+    const priced: RawBundle[] = [];
+
+    for (const bundle of bundles) {
+      priced.push(await prices.add(bundle));
+    }
+
+    return priced;
+  }
+
   // Every row of the bundles; issues are logged, and unsupported and failed actions saved
   getRows(bundles: RawBundle[], outputPath: string): SummRow[] {
     const unique = dedupeBundles(bundles);
@@ -194,6 +217,7 @@ export class Exporter {
         assets: this.config.assets,
         mayaLiquidityAuction: this.config.mayaLiquidityAuction,
         incomeFrom: this.config.incomeFrom,
+        referencePrices: this.config.referencePrices,
       }),
     );
     results.forEach((result) => this.handleIssues(result, outputPath));

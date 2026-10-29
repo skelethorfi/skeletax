@@ -11,6 +11,7 @@ import { rujiraStakeRows, rujiraTradeRows } from "./rujira.ts";
 import { failedDepositRows, sendRows } from "./send.ts";
 import { mayaDistributionRows } from "./maya.ts";
 import type { MayaLiquidityAuction } from "../../config/ITaxConfig.ts";
+import { type ReferencePrices, withReferencePrice } from "./prices.ts";
 import { type AssetNamesConfig, getProtocol, type Protocol, withAssetNames } from "../../domain/Protocol.ts";
 
 // The tax choices the Summ rows depend on, from the config. Today: how assets are named
@@ -20,13 +21,15 @@ export interface Treatment {
   mayaLiquidityAuction?: MayaLiquidityAuction;
   // Senders whose transfers to the wallet are income (ITaxConfig.incomeFrom); unset: the known distributors
   incomeFrom?: string[];
+  // Which rows carry a reference price (docs/specs/prices.md). Default: 'swaps'
+  referencePrices?: ReferencePrices;
 }
 
 // Activities as rows of Summ's advanced CSV, the same rows the old mappers wrote
 export function exportSumm(activities: Activity[], treatment: Treatment = {}): SummRow[] {
   return activities.flatMap((activity) =>
     toRows(activity, withAssetNames(getProtocol(activity.protocol), treatment.assets), treatment).map((row) =>
-      withId(row, activity),
+      withId(treatment.referencePrices === "all" ? withReferencePrice(row, activity) : row, activity),
     ),
   );
 }
