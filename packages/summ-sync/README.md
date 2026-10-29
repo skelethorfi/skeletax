@@ -65,10 +65,11 @@ Filed years go in a separate apply with `--approve-filed`.
   a comment): a row ID, a txid (any 64 hex digits), or any other text
   found in the row's CSV line (e.g. `ThorSavers.` or a wallet address);
   legs with no row match by their ID in Summ, a txid or the text in their
-  description, or a txid of a row in scope (unless they also name the tx
-  of a row outside it). Everything else, including a decision on a row outside
+  description, or a txid of a row in scope; legs that also name the tx of
+  a row outside the scope are left, with the scope's uploads of that tx
+  (unless an entry is their ID in Summ). Everything else, including a decision on a row outside
   the scope, waits for another plan, and so does a categorisation whose
-  event has an upload outside the scope; `plan.md` notes each, and each
+  event has an upload the plan does not carry; `plan.md` notes each, and each
   entry that matches nothing. Use it to apply one stage at a time.
 - `apply` carries out a plan made from the latest snapshot: deletes (only
   with `--approve-deletes`), then edits and categorisation, each checked

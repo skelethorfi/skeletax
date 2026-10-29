@@ -1293,7 +1293,7 @@ test("a scoped plan keeps a categorise back while its event has an upload outsid
   const { plan: p } = plan({ ...input, scope: [bridged.id] });
   assert.deepEqual([p.categorise, p.upload], [[], []]);
   assert.deepEqual(p.notes, [
-    `scope: categorise of ${bridged.id} waits for the upload of ${swap.id}, outside the scope`,
+    `scope: categorise of ${bridged.id} waits for the upload of ${swap.id}, not in this plan`,
   ]);
   const both = plan({ ...input, scope: [bridged.id, swap.id] }).plan;
   assert.deepEqual(
@@ -1319,17 +1319,41 @@ test("a scoped plan deletes legs with no row that name a txid of a row in scope:
     ...gone("3", `Sent; ${TX2}`),
     // a placeholder txid links nothing
     ...gone("4", `Sent; ${ZERO}`),
-    // also the tx of a row outside the scope: left for the plan that uploads that row
-    ...gone("5", `Swapped; ${TX1} ${TX3}`),
   ];
   const { plan: p } = plan({ rows: [r, outside], legs, scope: [r.id] });
   assert.deepEqual(
-    [p.delete.map((d) => d.summId), p.upload.flatMap((u) => u.ids)],
-    [["2024-03-01T10:00:00.000Z.out.222222222222"], [r.id]],
+    [p.delete.map((d) => d.summId), p.upload.flatMap((u) => u.ids), p.notes],
+    [["2024-03-01T10:00:00.000Z.out.222222222222"], [r.id], []],
   );
-  assert.deepEqual(p.notes, [
-    `scope: legs 2024-03-01T10:00:00.000Z.out.555555555555 also name the tx of ${outside.id}, outside the scope`,
-  ]);
+
+  // Legs that also name the tx of a row outside the scope are left, matched by a txid of the scope or by an entry, and
+  // the scope's uploads of that tx wait with them: the tx stays as it is, no side dropped or doubled
+  const both = gone("5", `Swapped; ${TX1} ${TX3}`);
+  for (const scope of [[r.id], [TX1]]) {
+    const left = plan({ rows: [r, outside], legs: [...legs, ...both], scope }).plan;
+    assert.deepEqual(
+      [left.delete.map((d) => d.summId), left.upload, left.notes],
+      [
+        ["2024-03-01T10:00:00.000Z.out.222222222222"],
+        [],
+        [
+          `scope: legs 2024-03-01T10:00:00.000Z.out.555555555555 are not deleted: they also name the tx of ${outside.id}, outside the scope (add it to the scope)`,
+          `scope: upload of ${r.id} waits with the legs of its tx left above`,
+        ],
+      ],
+    );
+  }
+  // Only the legs' own ID in Summ takes them whatever they name
+  const named = plan({ rows: [r, outside], legs: both, scope: [r.id, "2024-03-01T10:00:00.000Z.out.555555555555"] });
+  assert.deepEqual(
+    named.plan.delete.map((d) => d.summId),
+    ["2024-03-01T10:00:00.000Z.out.555555555555"],
+  );
+
+  // Two rows of one tx (both sides of an add), one in scope: the legs naming the tx are the other row's too
+  const side = row({ id: "2024-03-01T10:00:00.000Z.in.888888888888", type: "receive", txids: [TX1], description: TX1 });
+  const shared = plan({ rows: [r, side], legs: gone("2", `Sent; ${TX1}`), scope: [r.id] }).plan;
+  assert.deepEqual([shared.delete, shared.upload], [[], []]);
 });
 
 test("an event whose Summ actions hold a manual entry gets nothing planned: the user's pairing is held, every row sharing its txids too", () => {

@@ -448,11 +448,14 @@ a txid and matches the rows naming it (a placeholder of zeros is refused);
 any other entry matches a row whose CSV line holds the text (e.g.
 `ThorSavers.` or a wallet address). Legs with no row in the run match by
 their ID in Summ, a txid in their description, or the text in their
-description; and also when their description names a txid of a row in
-scope and none of a row outside it (the same tx: stale legs that would
-otherwise sit beside its upload; legs that also name the tx of a row
-outside the scope are noted and left, as deleting them would leave that
-row's side out of Summ until its own plan uploads it). The plan is made
+description, and also when their description names a txid of a row in
+scope (the same tx: stale legs that would otherwise sit beside its upload).
+But for a match by their ID, legs that also name the tx of a row outside
+the scope are not deleted, and the scope's uploads of that tx wait with
+them, each noted: deleting the legs would drop that row's side from Summ
+until its own plan uploads it, and uploading beside them could hold a side
+twice, so a scoped apply leaves the tx as it is until the scope takes the
+other row too. The plan is made
 from the whole run, as without `--only`, then keeps only what concerns the
 rows in scope: their deletes, edits, uploads, categorisations, adoptions,
 superseded extra rows, held entries, reports (a report with no row when it
@@ -461,8 +464,8 @@ with no row in scope. So a decision on a row outside the scope, such as
 `retainUserEdit: "no"` on a value that is set back only together with the
 full run's deletes and uploads, waits for a plan that covers that row, and
 an apply of the scoped plan cannot carry it early. A categorisation in
-scope whose event (rows linked by a shared txid) has an upload outside the
-scope waits too, and is noted, so that Summ can pair its leg with the
+scope whose event (rows linked by a shared txid) has an upload this plan
+does not carry waits too, and is noted, so that Summ can pair its leg with the
 uploaded row (Apply below). It waits only for its event's uploads, not for
 every upload of the run as apply does, or a scoped categorisation would wait
 for the whole run; a categorised row linked to its upload by no txid (a
