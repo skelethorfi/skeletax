@@ -6,10 +6,10 @@
 //
 // It writes nothing else: apply adds what the plan adopted and captured to adopted.csv and overrides.json.
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { extraDirsOf, loadConfig } from "./config.ts";
-import { type Change, makePlan, type EditEntry, type Plan } from "./plan.ts";
+import { type Change, makePlan, type EditEntry, parseScope, type Plan } from "./plan.ts";
 import { readRun, type Row, type RunFile } from "./run.ts";
 import { latestSnapshot, readSnapshot } from "./snapshot.ts";
 import { readAdopted, readApplyLog, readOverrides } from "./state.ts";
@@ -61,6 +61,12 @@ export function renderPlan(plan: Plan, snapshot: string, run: string): string {
     `- Run: ${run}`,
     `- Periods: ${plan.periods.map((p) => `${p.from} to ${p.to}`).join(", ")} (${plan.timezone})`,
     `- Managed chains: ${plan.managedChains.join(", ")}; sources: ${plan.managedSources.join(", ") || "–"}; filed before: ${show(plan.filedBefore)}`,
+    ...(plan.scope
+      ? [
+          `- Scope (plan --only): only the rows these entries match, and nothing else of the run: ${plan.scope.map((e) => `\`${e}\``).join(", ")}`,
+          "- Counts of the run's rows, legs and matches cover the whole run; adoptions and the sections cover the scope",
+        ]
+      : []),
     "",
     "## Counts",
     "",
@@ -131,8 +137,11 @@ export function uploadFiles(plan: Plan, files: RunFile[], rows: Row[]): { name: 
   });
 }
 
-export function writePlan(stateDir: string, runDir: string): string {
+/** `only`: a scope file (plan --only), one entry per line (parseScope). */
+export function writePlan(stateDir: string, runDir: string, only?: string): string {
   const config = loadConfig(stateDir);
+  const scope = only === undefined ? undefined : parseScope(readFileSync(only, "utf8"));
+  if (scope && scope.length === 0) throw new Error(`${only}: no scope entries`);
   const snapshotDir = latestSnapshot(stateDir);
   const snapshot = readSnapshot(snapshotDir);
   const { files, rows } = readRun(runDir, extraDirsOf(stateDir, config));
@@ -148,13 +157,18 @@ export function writePlan(stateDir: string, runDir: string): string {
     overrides: readOverrides(stateDir),
     applyLog: readApplyLog(stateDir),
     now,
+    scope,
   });
 
   const dir = join(stateDir, "plans", now.slice(0, 19).replace(/:/g, "-"));
   mkdirSync(join(dir, "upload"), { recursive: true });
   writeFileSync(
     join(dir, "plan.json"),
-    JSON.stringify({ snapshot: snapshot.name, run: resolve(runDir), ...plan }, null, 2) + "\n",
+    JSON.stringify(
+      { snapshot: snapshot.name, run: resolve(runDir), ...(only ? { scopeFile: resolve(only) } : {}), ...plan },
+      null,
+      2,
+    ) + "\n",
   );
   writeFileSync(join(dir, "plan.md"), renderPlan(plan, snapshot.name, resolve(runDir)) + "\n");
   for (const file of uploadFiles(plan, files, planned)) writeFileSync(join(dir, "upload", file.name), file.text);
