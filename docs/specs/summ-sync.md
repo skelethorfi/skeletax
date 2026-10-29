@@ -377,7 +377,8 @@ legs share their actions (a delete by action would remove those too).
 with the entries left out:
 
 - a row whose ID is in `hold` in `summ-sync.json`, or that names a txid
-  there, with a reason: a decision outside the sync is pending (a held ID
+  there (not a placeholder of zeros), with a reason: a decision outside
+  the sync is pending (a held ID
   with no row in the run's periods, or a held txid no row names, is noted;
   legs with no row in the run under a held ID, or naming a held txid in
   their description, are not deleted);
@@ -440,24 +441,30 @@ exists is reported and left for the user to delete.
 
 **Scoped plans.** `plan --only <file>` plans one stage of the work, e.g.
 the savers rows, apart from the rest of the run. The file has one entry per
-line (text after `#` and blank lines are left out); an entry matches a row
+line; blank lines are left out, and so is a comment: a `#` at the start of
+a line or after a space, to the end of the line. An entry matches a row
 with that ID, a row naming that txid (any case, with or without `0x`), or
 else a row whose CSV line holds the text (e.g. `ThorSavers.` or a wallet
 address). Legs with no row in the run match by their ID in Summ, a txid in
-their description, or the text in their description. The plan is made
-from the whole run, as without `--only`, then keeps only what concerns the
-rows in scope: their deletes, edits, uploads, categorisations, adoptions,
-superseded extra rows, held entries, reports (a report with no row when it
-names one in scope) and overrides; and the deletes and held entries of legs
-with no row that the scope matches. So a decision on a row outside the
-scope, such as `retainUserEdit: "no"` on a value that is set back only
-together with the full run's deletes and uploads, waits for a plan that
-covers that row, and an apply of the scoped plan cannot carry it early.
-`plan.json` records the entries (`scope`) and the file (`scopeFile`);
-`plan.md` lists the entries, counts the rows in scope (`scopedRows`) and
-notes each entry that matches no row. A scope widens nothing: the plan
-matches every row as usual, so a row out of scope is never uploaded or
-deleted for want of its neighbours.
+their description, or the text in their description, and also when their
+description names a txid of a row in scope (the same tx: stale legs that
+would otherwise sit beside its upload). The plan is made from the whole
+run, as without `--only`, then keeps only what concerns the rows in scope:
+their deletes, edits, uploads, categorisations, adoptions, superseded extra
+rows, held entries, reports (a report with no row when it names one in
+scope) and overrides; and the deletes and held entries of legs with no row
+in scope. So a decision on a row outside the scope, such as
+`retainUserEdit: "no"` on a value that is set back only together with the
+full run's deletes and uploads, waits for a plan that covers that row, and
+an apply of the scoped plan cannot carry it early. A categorisation in
+scope whose event has an upload outside the scope waits too, and is noted:
+apply categorises only once Summ holds the uploads it pairs with (Apply
+below). `plan.json` records the entries (`scope`) and the file
+(`scopeFile`); `plan.md` lists the entries, counts the rows in scope
+(`scopedRows`) and notes each entry that matches nothing. The other counts
+of rows, legs and matches still cover the whole run: the plan matches every
+row as usual, so a row out of scope is never uploaded or deleted for want
+of its neighbours.
 
 ## Apply
 

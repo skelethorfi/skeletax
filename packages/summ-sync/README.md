@@ -61,11 +61,13 @@ Filed years go in a separate apply with `--approve-filed`.
   win over the run while `retainUserEdit` is `undecided` (listed on every
   plan) or `yes`; set it to `no` to have the plan set the run's value back.
   With `--only <scope file>`, the plan covers only the rows the file's
-  entries match, one per line (`#` starts a comment): a row ID, a txid, or
-  any other text found in the row's CSV line (e.g. `ThorSavers.` or a
-  wallet address); legs with no row match by their ID in Summ or a txid or
-  the text in their description. Everything else, including a decision on
-  a row outside the scope, waits for another plan; `plan.md` notes each
+  entries match, one per line (a `#` at the start or after a space starts
+  a comment): a row ID, a txid, or any other text found in the row's CSV
+  line (e.g. `ThorSavers.` or a wallet address); legs with no row match by
+  their ID in Summ, a txid or the text in their description, or a txid of
+  a row in scope. Everything else, including a decision on a row outside
+  the scope, waits for another plan, and so does a categorisation whose
+  event has an upload outside the scope; `plan.md` notes each, and each
   entry that matches nothing. Use it to apply one stage at a time.
 - `apply` carries out a plan made from the latest snapshot: deletes (only
   with `--approve-deletes`), then edits and categorisation, each checked

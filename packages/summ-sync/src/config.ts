@@ -46,7 +46,7 @@ export function parseConfig(text: string): Config {
     !config.hold.every(
       (h) =>
         (typeof h?.id === "string") !== (typeof h?.txid === "string") &&
-        (h.txid === undefined || /^(0x)?[0-9a-fA-F]{64}$/.test(h.txid)) &&
+        (h.txid === undefined || (/^(0x)?[0-9a-fA-F]{64}$/.test(h.txid) && !/^(0x)?0+$/.test(h.txid))) &&
         typeof h.reason === "string" &&
         h.reason.trim() !== "",
     )

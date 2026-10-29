@@ -35,6 +35,7 @@ test("a config with wrong types is refused", () => {
   assert.throws(() => parseConfig('{"hold": [{"id": "x", "reason": " "}]}'), /each with a reason/);
   assert.throws(() => parseConfig(`{"hold": [{"id": "x", "txid": "${"a".repeat(64)}", "reason": "r"}]}`), /hold must/);
   assert.throws(() => parseConfig('{"hold": [{"txid": "abc", "reason": "r"}]}'), /hold must/);
+  assert.throws(() => parseConfig(`{"hold": [{"txid": "${"0".repeat(64)}", "reason": "r"}]}`), /hold must/);
 });
 
 test("a hold names a row ID or a txid", () => {

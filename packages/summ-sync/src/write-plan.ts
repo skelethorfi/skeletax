@@ -64,6 +64,7 @@ export function renderPlan(plan: Plan, snapshot: string, run: string): string {
     ...(plan.scope
       ? [
           `- Scope (plan --only): only the rows these entries match, and nothing else of the run: ${plan.scope.map((e) => `\`${e}\``).join(", ")}`,
+          "- Counts of the run's rows, legs and matches cover the whole run; adoptions and the sections cover the scope",
         ]
       : []),
     "",

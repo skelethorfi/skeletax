@@ -35,8 +35,11 @@ try {
     const at = rest.indexOf("--only");
     const only = at >= 0 ? rest[at + 1] : undefined;
     if (at >= 0 && (only === undefined || only.startsWith("--"))) throw new Error("--only needs a scope file");
-    const runDir = rest.find((a, i) => !a.startsWith("--") && (at < 0 || i !== at + 1));
-    if (!runDir) throw new Error(USAGE);
+    const args = rest.filter((_, i) => at < 0 || (i !== at && i !== at + 1));
+    const unknown = args.find((a) => a.startsWith("--"));
+    if (unknown) throw new Error(`plan: unknown option ${unknown}\n${USAGE}`);
+    const [runDir, ...extra] = args;
+    if (!runDir || extra.length) throw new Error(USAGE);
     writePlan(stateDir, runDir, only);
   } else if (command === "apply") {
     if (!rest[0]) throw new Error(USAGE);
