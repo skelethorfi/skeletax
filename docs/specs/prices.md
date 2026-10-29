@@ -151,7 +151,9 @@ prices with Summ's own (below).
   and withdrawal, a swap, and a Rujira liquid bond (a RUJI sell: RUJI's
   price, not RUNE's), from public transactions, mapped with
   `referencePrices = "all"`.
-- `test/Prices.test.ts`: which pool or index an asset is priced from; the
+- `test/Prices.test.ts`: which pool or index an asset is priced from (a
+  denom with a path, `x/…/…`, `ibc/…`, is none); no token price for an action
+  that is not `success`; the
   stored records (open bucket fetched again, unknown pool stored as no
   price, offline read and miss, CACAO from Maya's history); a bundle's prices
   without the zero ones; an unpriced position and the unpriced helper; that

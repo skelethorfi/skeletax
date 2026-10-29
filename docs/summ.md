@@ -79,7 +79,8 @@ Swap rows carry Midgard's USD price of each side as a reference price. Other
 rows have none, unless the config sets `referencePrices = "all"`: then every
 row whose asset Midgard prices carries one, and the LP and savers token rows
 carry the value of what went in or came out, so they need no copying by hand.
-A token row left blank (a Maya liquidity-auction position, or one holding an
-asset Midgard has no price for) still needs the price helper's value
+A token row left blank (a Maya liquidity-auction position, one holding an
+asset Midgard has no price for, an action that is not final, or a row of
+`all.csv` outside the run's periods) still needs the price helper's value
 ([specs/prices.md](specs/prices.md)). The old CoinMarketCap price lookup and the `addReferencePrices`
 wallet setting were removed; a config that still sets it gets a warning.
