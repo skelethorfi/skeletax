@@ -26,7 +26,10 @@ plan before you apply it.
 6. `pull`, `plan`, `apply` again: it categorises Summ's own legs, now that
    Summ can pair them with the uploaded rows, and ignores the receives Summ
    made up to pair a send as a transfer.
-7. `pull` and `plan`: what is left is under Report, for you to resolve.
+7. Recalculate in Summ. Summ may pause its automatic calculation after
+   uploads and edits (the computation status reads "requires refresh"), and
+   until it runs, gains, cost bases and reports show the old figures.
+8. `pull` and `plan`: what is left is under Report, for you to resolve.
 
 Filed years go in a separate apply with `--approve-filed`.
 

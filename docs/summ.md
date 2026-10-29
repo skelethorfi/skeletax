@@ -15,6 +15,9 @@ prices the rows and computes the gains; the CSVs give the transactions.
 4. Categorise the related transactions of your other chains (BTC, ETH, ...) by
    hand ([Categorising transactions](#categorising-transactions)), and add the
    [missing market prices](#missing-market-prices).
+5. Recalculate in Summ before you read gains or reports. Summ may pause its
+   automatic calculation after uploads and edits, and until it runs, the
+   figures are the old ones.
 
 **2. With summ-sync (experimental).** Syncing with Summ is new: review every
 plan, and expect changes. [`packages/summ-sync`](../packages/summ-sync/README.md)
@@ -30,6 +33,7 @@ The steps of a year's sync are in its README; the design is
 2. Click **Add integrations**, search for **THORChain** and click it.
 3. Click **Upload** and select the files.
 4. Click **Import THORChain CSV**.
+5. When the import is done, recalculate before you read gains or reports.
 
 Import only your THORChain wallet CSV files
 (`YYYY-MM-DD_YYYY-MM-DD_THOR_xxxxx_Sample.csv`), not the files of your other

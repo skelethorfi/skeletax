@@ -545,6 +545,13 @@ and writes nothing.
 Then `pull` and `plan` again: the plan should be empty, apart from what the
 upload adds once done.
 
+Summ may pause its automatic calculation after uploads and edits (the
+computation status reads "requires refresh"); until the user recalculates,
+gains, cost bases and reports show the figures from before the change. The
+sync compares categories and amounts, not computed figures, so its plans are
+unaffected, but any tax figure is read only after a recalculation (which is
+safe: it changes no transaction).
+
 ## Not done here
 
 - Creating rows through the MCP (see above). Revisit if Summ's MCP accepts
