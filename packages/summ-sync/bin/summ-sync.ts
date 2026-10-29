@@ -11,7 +11,9 @@ import { writePlan } from "../src/write-plan.ts";
 const USAGE = `Usage:
   summ-sync login <state dir> [--write]   authorise in the browser (read, or read and write)
   summ-sync pull  <state dir> [<run dir>] [--full]  snapshot Summ into <state dir>/snapshots/
-  summ-sync plan  <state dir> <run dir>   compare a run with the latest snapshot (calls nothing)
+  summ-sync plan  <state dir> <run dir> [--only <scope file>]
+                                          compare a run with the latest snapshot (calls nothing); with
+                                          --only, only the rows the file's entries match
   summ-sync apply <state dir> <plan dir> [--dry-run] [--approve-deletes] [--approve-filed]
                                           carry out a plan (needs login --write)
   summ-sync prune <state dir> [--older-than <days>]
@@ -30,8 +32,12 @@ try {
       { full: rest.includes("--full") },
     );
   else if (command === "plan") {
-    if (!rest[0]) throw new Error(USAGE);
-    writePlan(stateDir, rest[0]);
+    const at = rest.indexOf("--only");
+    const only = at >= 0 ? rest[at + 1] : undefined;
+    if (at >= 0 && (only === undefined || only.startsWith("--"))) throw new Error("--only needs a scope file");
+    const runDir = rest.find((a, i) => !a.startsWith("--") && (at < 0 || i !== at + 1));
+    if (!runDir) throw new Error(USAGE);
+    writePlan(stateDir, runDir, only);
   } else if (command === "apply") {
     if (!rest[0]) throw new Error(USAGE);
     const dryRun = rest.includes("--dry-run");

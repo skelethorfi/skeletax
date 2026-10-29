@@ -33,4 +33,14 @@ test("a config with wrong types is refused", () => {
   assert.throws(() => parseConfig('{"keepExtra": "x.csv:1"}'), /keepExtra must be a list/);
   assert.throws(() => parseConfig('{"hold": ["x"]}'), /hold must be a list/);
   assert.throws(() => parseConfig('{"hold": [{"id": "x", "reason": " "}]}'), /each with a reason/);
+  assert.throws(() => parseConfig(`{"hold": [{"id": "x", "txid": "${"a".repeat(64)}", "reason": "r"}]}`), /hold must/);
+  assert.throws(() => parseConfig('{"hold": [{"txid": "abc", "reason": "r"}]}'), /hold must/);
+});
+
+test("a hold names a row ID or a txid", () => {
+  const hold = [
+    { id: "x", reason: "pending" },
+    { txid: "A".repeat(64), reason: "pending" },
+  ];
+  assert.deepEqual(parseConfig(JSON.stringify({ hold })).hold, hold);
 });

@@ -34,7 +34,7 @@ Filed years go in a separate apply with `--approve-filed`.
 
     node packages/summ-sync/bin/summ-sync.ts login <state dir> [--write]
     node packages/summ-sync/bin/summ-sync.ts pull  <state dir> [<run dir>] [--full]
-    node packages/summ-sync/bin/summ-sync.ts plan  <state dir> <run dir>
+    node packages/summ-sync/bin/summ-sync.ts plan  <state dir> <run dir> [--only <scope file>]
     node packages/summ-sync/bin/summ-sync.ts apply <state dir> <plan dir> [--dry-run] [--approve-deletes] [--approve-filed]
     node packages/summ-sync/bin/summ-sync.ts prune <state dir> [--older-than <days>]
     node packages/summ-sync/bin/summ-sync.ts tools <state dir>
@@ -60,6 +60,13 @@ Filed years go in a separate apply with `--approve-filed`.
   `apply` adds them to `adopted.csv` and `overrides.json`, where overrides
   win over the run while `retainUserEdit` is `undecided` (listed on every
   plan) or `yes`; set it to `no` to have the plan set the run's value back.
+  With `--only <scope file>`, the plan covers only the rows the file's
+  entries match, one per line (`#` starts a comment): a row ID, a txid, or
+  any other text found in the row's CSV line (e.g. `ThorSavers.` or a
+  wallet address); legs with no row match by their ID in Summ or a txid or
+  the text in their description. Everything else, including a decision on
+  a row outside the scope, waits for another plan; `plan.md` notes each
+  entry that matches nothing. Use it to apply one stage at a time.
 - `apply` carries out a plan made from the latest snapshot: deletes (only
   with `--approve-deletes`), then edits and categorisation, each checked
   against Summ's current value first (categorisation waits while the plan
@@ -122,9 +129,11 @@ optional:
 - `keepExtra`: IDs of extra rows that are right beside the run rows they
   overlap: not reported, and uploaded as usual.
 - `hold`: rows to leave alone while a decision outside the sync is pending,
-  as `{"id": "<row ID>", "reason": "<why>"}`. Plan plans nothing for them
+  as `{"id": "<row ID>", "reason": "<why>"}`, or every row naming a txid as
+  `{"txid": "<txid>", "reason": "<why>"}`. Plan plans nothing for them
   (no delete, edit, upload or categorise) and lists them, with what it left
-  out, under Held. A held ID with no row in the run's periods is noted.
+  out, under Held. A held ID with no row in the run's periods, or a held
+  txid no row names, is noted.
 
 ## Tests
 

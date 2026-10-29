@@ -20,10 +20,8 @@ export interface Config {
   hold: Hold[];
 }
 
-export interface Hold {
-  id: string;
-  reason: string;
-}
+/** A held row by its ID, or every row naming a txid. */
+export type Hold = ({ id: string; txid?: undefined } | { txid: string; id?: undefined }) & { reason: string };
 
 export const DEFAULTS: Config = {
   managedChains: ["THOR", "MAYA"],
@@ -45,9 +43,17 @@ export function parseConfig(text: string): Config {
   }
   if (
     !Array.isArray(config.hold) ||
-    !config.hold.every((h) => typeof h?.id === "string" && typeof h?.reason === "string" && h.reason.trim() !== "")
+    !config.hold.every(
+      (h) =>
+        (typeof h?.id === "string") !== (typeof h?.txid === "string") &&
+        (h.txid === undefined || /^(0x)?[0-9a-fA-F]{64}$/.test(h.txid)) &&
+        typeof h.reason === "string" &&
+        h.reason.trim() !== "",
+    )
   ) {
-    throw new Error('summ-sync.json: hold must be a list of {"id": "<row ID>", "reason": "<why>"}, each with a reason');
+    throw new Error(
+      'summ-sync.json: hold must be a list of {"id": "<row ID>", "reason": "<why>"} or {"txid": "<txid>", "reason": "<why>"}, each with a reason',
+    );
   }
   if (config.filedBefore !== null && !/^\d{4}-\d{2}-\d{2}$/.test(config.filedBefore)) {
     throw new Error("summ-sync.json: filedBefore must be a date (YYYY-MM-DD) or null");

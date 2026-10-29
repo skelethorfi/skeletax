@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULTS, type Config } from "../src/config.ts";
-import { ADOPT_WINDOW, makePlan, type PlanInput } from "../src/plan.ts";
+import { ADOPT_WINDOW, makePlan, parseScope, type PlanInput } from "../src/plan.ts";
 import type { Row, RunFile } from "../src/run.ts";
 import type { Leg } from "../src/snapshot.ts";
 import type { Override } from "../src/state.ts";
@@ -1178,6 +1178,113 @@ test("a row held in summ-sync.json gets nothing planned and is listed under held
     renderPlan(p, "snap", "run"),
     /## Held .*\(3\)[\s\S]*\| hold \| 2024-03-01T10:00:00.000Z.out.333333333333 \| pending a decision \| nothing to do \|/,
   );
+});
+
+test("a hold may name a txid: every row naming it is held, and legs naming it with no row are not deleted", () => {
+  const send = row({ id: "2024-03-01T10:00:00.000Z.out.111111111111", type: "send" });
+  const back = row({
+    id: "2024-03-01T10:05:00.000Z.in.222222222222",
+    type: "receive",
+    timestamp: "2024-03-01T10:05:00.000Z",
+  });
+  const other = row({ id: "2024-03-01T10:00:00.000Z.out.333333333333", txids: [TX2], description: `Sent; ${TX2}` });
+  const hold = [{ txid: TX1.toUpperCase(), reason: "pending a decision" }];
+  const { plan: p } = plan({ rows: [send, back, other], config: { ...CONFIG, hold } });
+  assert.deepEqual(
+    p.upload.map((u) => u.ids),
+    [[other.id]],
+  );
+  assert.deepEqual(
+    p.held.map((h) => [h.kind, h.id, h.reason, h.held.map((x) => x.split(" ")[0])]),
+    [
+      ["hold", send.id, "pending a decision", ["upload"]],
+      ["hold", back.id, "pending a decision", ["upload"]],
+    ],
+  );
+  const gone = plan({ rows: [], legs: legsOf(send), config: { ...CONFIG, hold } }).plan;
+  assert.deepEqual(
+    [gone.delete, gone.held.map((h) => [h.kind, h.id, h.summId, h.held])],
+    [[], [["hold", null, send.id, ["delete (no row in the run)"]]]],
+  );
+  assert.deepEqual(gone.notes, [`hold: no row with txid ${TX1} in the run`]);
+});
+
+test("a scope file: one entry per line, comments and blank lines left out", () => {
+  assert.deepEqual(parseScope(`# savers stage\nExSavers.\n\n${TX1}  # the claim\n  row-1\n`), [
+    "ExSavers.",
+    TX1,
+    "row-1",
+  ]);
+});
+
+test("a scoped plan (plan --only) plans only for the rows its entries match: by ID, txid or text in the line", () => {
+  // Rows have no txid unless one is given, so a txid entry matches only the rows naming it
+  const own = (over: Partial<Row>, line: string) => ({ ...row({ txids: [], description: "x", ...over }), line });
+  const saver = own({ id: "2024-03-01T10:00:00.000Z.in.111111111111", type: "receive" }, "receive,ExSavers.BTC");
+  const missing = own({ id: "2024-03-01T10:00:00.000Z.in.222222222222", type: "receive" }, "receive,RUNE");
+  const decided = own({ id: "2024-03-01T10:00:00.000Z.out.333333333333" }, "send,RUNE");
+  const decidedOut = own({ id: "2024-03-01T10:00:00.000Z.out.444444444444" }, "send,RUNE");
+  const drifted = own({ id: "2024-03-01T10:00:00.000Z.out.555555555555" }, "send,RUNE");
+  const bridged = btcRow({ type: "bridge-trade-out" });
+  const legs = [
+    ...legsOf(decided, { trade: "outgoingGift" }, "a3"),
+    ...legsOf(decidedOut, { trade: "outgoingGift" }, "a4"),
+    ...legsOf(drifted, { trade: "outgoingGift" }, "a5"),
+    ownLeg(),
+    ...legsOf(row({ id: "2024-03-02T10:00:00.000Z.out.666666666666" }), {}, "a6"),
+    ...legsOf(row({ id: "2024-03-02T10:00:00.000Z.out.777777777777", txids: [], description: "y" }), {}, "a7"),
+  ];
+  const history = new Map([["a5", ["2 Jan 2024 · user · Category: Send → Outgoing Gift"]]]);
+  // Both decided against (no): the full plan sets both back; a scoped one only the row in scope
+  const overrides: Override[] = [decided, decidedOut].map((r) => ({
+    id: r.id,
+    leg: "base",
+    field: "trade",
+    run: "withdrawal",
+    summ: "outgoingGift",
+    seenAt: "",
+    reason: "",
+    retainUserEdit: "no",
+  }));
+  const input = { rows: [saver, missing, decided, decidedOut, drifted, bridged], legs, history, overrides };
+  const full = plan(input).plan;
+  assert.deepEqual(
+    [
+      full.upload.flatMap((u) => u.ids),
+      full.edit.map((e) => e.id),
+      full.categorise.length,
+      full.delete.length,
+      full.overridden.length,
+    ],
+    [[saver.id, missing.id], [decided.id, decidedOut.id], 1, 2, 1],
+  );
+
+  // TX1 matches the categorised row and the legs of a gone row naming it; a gone row also matches by its ID
+  const scope = ["ExSavers.", decided.id, TX1.toUpperCase(), "2024-03-02T10:00:00.000Z.out.777777777777", "Nothing"];
+  const { plan: p } = plan({ ...input, scope });
+  assert.deepEqual(
+    [
+      p.upload.flatMap((u) => u.ids),
+      p.edit.map((e) => e.id),
+      p.categorise.map((e) => e.id),
+      p.delete.map((d) => d.summId),
+      p.overridden,
+    ],
+    [
+      [saver.id],
+      [decided.id],
+      [bridged.id],
+      ["2024-03-02T10:00:00.000Z.out.666666666666", "2024-03-02T10:00:00.000Z.out.777777777777"],
+      [],
+    ],
+  );
+  assert.deepEqual(p.notes, [
+    "scope: 2024-03-02T10:00:00.000Z.out.777777777777 matches no row in the run",
+    "scope: Nothing matches no row in the run",
+  ]);
+  assert.equal(p.counts.scopedRows, 3);
+  assert.match(renderPlan(p, "snap", "run"), /- Scope \(plan --only\): .*`ExSavers\.`/);
+  assert.doesNotMatch(renderPlan(full, "snap", "run"), /- Scope/);
 });
 
 test("an event whose Summ actions hold a manual entry gets nothing planned: the user's pairing is held, every row sharing its txids too", () => {

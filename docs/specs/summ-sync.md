@@ -93,7 +93,7 @@ nothing from it; the only link is the files below. It speaks MCP over
 
     summ-sync login <state dir> [--write]  # browser OAuth; token in the state dir
     summ-sync pull  <state dir> [<run dir>] [--full]  # writes a snapshot
-    summ-sync plan  <state dir> <run dir>    # reads files only; calls nothing
+    summ-sync plan  <state dir> <run dir> [--only <scope file>]  # reads files only; calls nothing
     summ-sync apply <state dir> <plan dir> [--dry-run] [--approve-deletes] [--approve-filed]
     summ-sync prune <state dir> [--older-than <days>]  # removes old committed snapshots and actions
 
@@ -376,9 +376,11 @@ legs share their actions (a delete by action would remove those too).
 **Held.** Nothing is planned for two kinds of row, which are listed instead
 with the entries left out:
 
-- a row whose ID is in `hold` in `summ-sync.json`, with a reason: a
-  decision outside the sync is pending (a held ID with no row in the run's
-  periods is noted, and its legs in Summ are not deleted);
+- a row whose ID is in `hold` in `summ-sync.json`, or that names a txid
+  there, with a reason: a decision outside the sync is pending (a held ID
+  with no row in the run's periods, or a held txid no row names, is noted;
+  legs with no row in the run under a held ID, or naming a held txid in
+  their description, are not deleted);
 - every row of an event, the rows linked by a shared txid, when a Summ
   action holding a leg of one of them, or one of its planned deletes, also
   holds a manual entry (import type `manual`), or a manual entry names one
@@ -435,6 +437,27 @@ was captured: the source data or the mapper moved under it, and the override
 still wins until the user decides (an `undecided` one is then listed twice,
 as undecided and as run changed). An override whose row or leg no longer
 exists is reported and left for the user to delete.
+
+**Scoped plans.** `plan --only <file>` plans one stage of the work, e.g.
+the savers rows, apart from the rest of the run. The file has one entry per
+line (text after `#` and blank lines are left out); an entry matches a row
+with that ID, a row naming that txid (any case, with or without `0x`), or
+else a row whose CSV line holds the text (e.g. `ThorSavers.` or a wallet
+address). Legs with no row in the run match by their ID in Summ, a txid in
+their description, or the text in their description. The plan is made
+from the whole run, as without `--only`, then keeps only what concerns the
+rows in scope: their deletes, edits, uploads, categorisations, adoptions,
+superseded extra rows, held entries, reports (a report with no row when it
+names one in scope) and overrides; and the deletes and held entries of legs
+with no row that the scope matches. So a decision on a row outside the
+scope, such as `retainUserEdit: "no"` on a value that is set back only
+together with the full run's deletes and uploads, waits for a plan that
+covers that row, and an apply of the scoped plan cannot carry it early.
+`plan.json` records the entries (`scope`) and the file (`scopeFile`);
+`plan.md` lists the entries, counts the rows in scope (`scopedRows`) and
+notes each entry that matches no row. A scope widens nothing: the plan
+matches every row as usual, so a row out of scope is never uploaded or
+deleted for want of its neighbours.
 
 ## Apply
 

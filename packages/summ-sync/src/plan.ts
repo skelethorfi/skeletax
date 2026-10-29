@@ -19,6 +19,8 @@ export interface PlanInput {
   overrides: Override[];
   applyLog: AppliedEdit[];
   now: string;
+  /** plan --only: the scope's entries (scopeMatch); the plan covers only the rows they match. */
+  scope?: string[];
 }
 
 export interface Change {
@@ -90,7 +92,7 @@ export interface HeldEntry {
   /** The row, or null for legs with no row in the run (then summId names them). */
   id: string | null;
   summId?: string;
-  /** For manual-pairing: the manual legs. */
+  /** For manual-pairing: the manual legs; for a hold with no row: the held legs. */
   legIds?: string[];
   reason: string;
   /** What the plan would have done, left out. */
@@ -111,6 +113,8 @@ export interface Plan {
   filedBefore: string | null;
   timezone: string;
   periods: { from: string; to: string }[];
+  /** plan --only: the scope's entries; absent for the whole run. */
+  scope?: string[];
   counts: Record<string, number>;
   adopted: { legId: string; id: string }[];
   /** Extra rows left out because a run row is the same event: Summ's legs of the extra row adopt to the run row. */
@@ -307,6 +311,7 @@ export function makePlan(input: PlanInput): PlanResult {
     filedBefore: config.filedBefore,
     timezone: config.timezone,
     periods,
+    ...(input.scope ? { scope: input.scope } : {}),
     counts: {},
     adopted: [],
     superseded: [],
@@ -941,6 +946,14 @@ export function makePlan(input: PlanInput): PlanResult {
   const holdOf = new Map<string, HeldEntry>();
   const runRows = new Map(rows.map((r) => [r.id, r]));
   for (const h of config.hold) {
+    if (h.txid !== undefined) {
+      const txid = normaliseTxid(h.txid);
+      const named = rows.filter((r) => r.txids.includes(txid));
+      for (const row of named.filter((r) => !holdOf.has(r.id)))
+        holdOf.set(row.id, { kind: "hold", filed: isFiled(row.timestamp), id: row.id, reason: h.reason, held: [] });
+      if (!named.length) plan.notes.push(`hold: no row with txid ${txid} in the run`);
+      continue;
+    }
     const row = runRows.get(h.id);
     if (row) holdOf.set(h.id, { kind: "hold", filed: isFiled(row.timestamp), id: h.id, reason: h.reason, held: [] });
     else if (!STABLE_ID.test(h.id) || inScope(h.id.slice(0, 24))) plan.notes.push(`hold: no row ${h.id} in the run`);
@@ -1002,18 +1015,25 @@ export function makePlan(input: PlanInput): PlanResult {
       ...e.changes.map((c) => `${c.leg} ${c.field} ${c.summ} -> ${c.desired}`),
       ...(e.ignore ?? []).map((l) => `ignore made-up leg ${l}`),
     ].join("; ");
-  const holds = new Map(config.hold.map((h) => [h.id, h]));
+  const legById = new Map(input.legs.map((l) => [l.legId, l]));
+  const legsOf = (legIds: string[]) => legIds.map((id) => legById.get(id) as Leg);
+  const holdOfLegs = (d: DeleteEntry): Hold | undefined =>
+    config.hold.find((h) =>
+      h.txid === undefined ? h.id === d.summId : txidsOf(legsOf(d.legIds)).includes(normaliseTxid(h.txid)),
+    );
   plan.delete = plan.delete.filter((d) => {
     const h = d.id !== null ? holdOf.get(d.id) : undefined;
+    const gone = d.id === null ? holdOfLegs(d) : undefined;
     if (h) h.held.push(`delete (${d.reason})`);
-    else if (d.id === null && holds.has(d.summId)) {
+    else if (gone) {
       // A held row that left the run: its legs stay until the hold is lifted
       plan.held.push({
         kind: "hold",
         filed: d.filed,
         id: null,
         summId: d.summId,
-        reason: (holds.get(d.summId) as Hold).reason,
+        legIds: d.legIds,
+        reason: gone.reason,
         held: [`delete (${d.reason})`],
       });
       return false;
@@ -1125,6 +1145,8 @@ export function makePlan(input: PlanInput): PlanResult {
   const runIds = new Set(rows.map((r) => r.id));
   for (const override of overrides) if (!runIds.has(override.id)) plan.overridden.push({ kind: "gone", override });
 
+  if (input.scope) narrow(plan, input.scope, rows, legsOf);
+
   if (unmappedChains.size)
     plan.notes.push(`Blockchain not compared (no Summ id in src/summ-types.ts): ${[...unmappedChains].join(", ")}`);
   plan.counts = {
@@ -1143,6 +1165,58 @@ export function makePlan(input: PlanInput): PlanResult {
     reports: plan.report.length,
     held: plan.held.length,
     overridden: plan.overridden.length,
+    ...(input.scope ? { scopedRows: rows.filter((r) => scopeMatch(input.scope as string[], r)).length } : {}),
   };
   return { plan, adopted, overrides, rows };
+}
+
+const TXID = /^(0x)?[0-9a-fA-F]{64}$/;
+
+/**
+ * Whether a scope entry (plan --only) matches a row: one with that ID, one naming that txid, or else one whose CSV
+ * line holds the text (e.g. `ThorSavers.` or a wallet address). Legs with no row match by their ID in Summ, a
+ * txid their description names, or the text in it.
+ */
+export function scopeMatch(entries: string[], row: Row | null, summId = "", legs: Leg[] = []): boolean {
+  return entries.some((e) =>
+    row
+      ? row.id === e || (TXID.test(e) ? row.txids.includes(normaliseTxid(e)) : row.line.includes(e))
+      : summId === e ||
+        (TXID.test(e) ? txidsOf(legs).includes(normaliseTxid(e)) : legs.some((l) => l.description.includes(e))),
+  );
+}
+
+/** One scope entry per line of a scope file; blank lines and text after `#` are left out. */
+export function parseScope(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((l) => l.replace(/(^|\s)#.*$/, "").trim())
+    .filter((l) => l !== "");
+}
+
+/**
+ * A scoped plan (plan --only): only what concerns the rows the scope matches, and legs with no row that it matches.
+ * Everything else is left for another plan, so a decision on a row outside the scope (an override set to no that
+ * depends on other changes of the full plan) is not carried early.
+ */
+function narrow(plan: Plan, entries: string[], rows: Row[], legsOf: (legIds: string[]) => Leg[]): void {
+  const ids = new Set(rows.filter((r) => scopeMatch(entries, r)).map((r) => r.id));
+  const legsIn = (summId: string, legIds: string[]) => scopeMatch(entries, null, summId, legsOf(legIds));
+  plan.adopted = plan.adopted.filter((a) => ids.has(a.id));
+  plan.superseded = plan.superseded.filter((s) => ids.has(s.run));
+  plan.delete = plan.delete.filter((d) => (d.id !== null ? ids.has(d.id) : legsIn(d.summId, d.legIds)));
+  plan.edit = plan.edit.filter((e) => ids.has(e.id));
+  plan.categorise = plan.categorise.filter((e) => ids.has(e.id));
+  for (const u of plan.upload) u.ids = u.ids.filter((id) => ids.has(id));
+  plan.upload = plan.upload.filter((u) => u.ids.length);
+  // A report without a row (an old ID fitting several rows) is kept when it names a row of the scope
+  plan.report = plan.report.filter((r) =>
+    r.id !== undefined ? ids.has(r.id) : [...ids].some((id) => r.detail.includes(id)),
+  );
+  plan.held = plan.held.filter((h) =>
+    h.id !== null ? ids.has(h.id) : legsIn(h.summId as string, h.kind === "hold" ? (h.legIds ?? []) : []),
+  );
+  plan.overridden = plan.overridden.filter((o) => ids.has(o.override.id));
+  const unmatched = entries.filter((e) => !rows.some((r) => scopeMatch([e], r)));
+  for (const e of unmatched) plan.notes.push(`scope: ${e} matches no row in the run`);
 }
