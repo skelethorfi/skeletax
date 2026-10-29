@@ -68,7 +68,8 @@ non-taxable without changing the rows.
 
 The price-helper row has the asset amount, so it values the position at what
 was sent: the position's cost base. With `referencePrices = "all"` the
-position token rows carry that value as a reference price (`prices.md`).
+position token rows carry the value of what went in or came out as a reference
+price (`prices.md`).
 
 Before October 2026 the token was `ThorLP.BTC/BTC`, a deposit sent from an L1
 wallet was exported as `BTC.BTC` (then the synth's name) and, briefly, with a

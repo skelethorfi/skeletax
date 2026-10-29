@@ -97,6 +97,10 @@ collects the assets of its legs, and fetches each asset's price once per
 bucket. Only bundles that can give rows are priced: one listing of each
 action (the first wallet's, as `dedupeBundles` keeps), dated inside the run's
 `fromDate`–`toDate` with a day's margin either side for the time zone.
+So in a run's `all.csv`, which holds every row whatever its date
+(`periods.md`), a row outside the periods has no price under `"all"`, and
+two runs over different periods can differ in those rows (`run-diff.md`
+reports it). The period files, the ones uploaded, are not affected.
 Requests are throttled to one a second, so a first run over several years
 takes a while; later runs read the store. The bundle carries them as `usdPrices` (key: `THOR.RUNE`,
 `MAYA.CACAO`, or the pool, e.g. `BTC.BTC`; value: the USD price); only keys

@@ -30,7 +30,8 @@ export function priceKey(asset: Asset): string | undefined {
     return `${chain}.${symbol}`.toUpperCase();
   }
 
-  return notation;
+  // Midgard names pools CHAIN.SYMBOL: any other notation with a path (an ibc/ or factory/ denom) is no pool
+  return notation.includes("/") ? undefined : notation;
 }
 
 // Where a price key's price comes from, as an activity's price source

@@ -36,6 +36,7 @@ describe("reference prices (docs/specs/prices.md)", () => {
     assert.equal(priceKey(toAsset("MAYA.CACAO")), "MAYA.CACAO");
     assert.equal(priceKey(toAsset("x/ruji")), "THOR.RUJI");
     assert.equal(priceKey(toAsset("x/staking-x/ruji")), undefined);
+    assert.equal(priceKey({ notation: "ibc/ABCDEF", kind: "native" }), undefined);
     assert.equal(priceKey(toPositionAsset("BTC.BTC")), undefined);
     assert.equal(priceKey(toPositionAsset("BTC/BTC")), undefined);
   });
@@ -111,6 +112,16 @@ describe("reference prices (docs/specs/prices.md)", () => {
       "add-liquidity BTC": input.usdPrices!["BTC.BTC"],
       "add-liquidity RUNE": undefined,
     });
+  });
+
+  test("a position token of an action that is not 'success' has no price", () => {
+    const input = readCaseInput("test/cases/prices/savers-withdraw");
+    const rows = runCase({ ...input, data: { ...(input.data as any), status: "pending" } }) as any[];
+    const token = rows.find((row) => row.type === "return-lp-token");
+    const payout = rows.find((row) => row.type === "remove-liquidity");
+
+    assert.equal(token.referencePricePerUnit, undefined);
+    assert.equal(payout.referencePricePerUnit, input.usdPrices!["BTC.BTC"]);
   });
 
   test("the default ('swaps') fills nothing new, even when the bundle carries prices", () => {
