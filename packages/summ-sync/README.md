@@ -27,7 +27,7 @@ plan before you apply it.
    Summ can pair them with the uploaded rows, and ignores the receives Summ
    made up to pair a send as a transfer.
 7. Recalculate in Summ. Summ may pause its automatic calculation after
-   uploads and edits (the computation status reads "requires refresh"), and
+   uploads and edits (its calculation then needs a refresh), and
    until it runs, gains, cost bases and reports show the old figures.
 8. `pull` and `plan`: what is left is under Report, for you to resolve.
 
@@ -90,7 +90,8 @@ Filed years go in a separate apply with `--approve-filed`.
   and the MCP cannot recreate an uploaded row, so to bring a row back,
   upload its CSV line again (from the run that wrote it); the saved file
   shows what Summ held. It needs `login --write`. Afterwards, upload the
-  files, then pull and plan again.
+  files, then pull and plan again; recalculate in Summ before reading any
+  figures.
 - `prune` removes the snapshots older than `--older-than` days (default
   30; never the latest) and the stored actions no remaining snapshot lists
   (except those apply saved before a delete), once they are committed (keep the state dir in git; git keeps the removed files). If
