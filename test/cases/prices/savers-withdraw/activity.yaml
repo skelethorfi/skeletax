@@ -1,0 +1,46 @@
+id: midgard/withdraw.6B6CE48A0D6F32494BF6015330FC601572338E149C65218CD08018E0CD70AE3B
+protocol: thorchain
+kind: savers.withdraw
+status: success
+time: 2023-01-06T13:21:34.216Z
+memo: -:BTC/BTC:10000
+legs:
+  - direction: in
+    wallet: bc1qmrwdgkzdtzugfa5xqtjrxzgj5chzqrgf2c9wku
+    asset:
+      notation: BTC.BTC
+      kind: native
+    role: principal
+    basis: observed
+    txid: 653ABA0084B87DC6B6D396DBAFE8AA6C4C1B5CF3FEA8E8F98E64DE07418BDC8B
+    amount: "0.02969783"
+    decimals: 8
+  - direction: out
+    wallet: bc1qmrwdgkzdtzugfa5xqtjrxzgj5chzqrgf2c9wku
+    asset:
+      notation: BTC/BTC
+      kind: position
+      position: savers
+    role: principal
+    basis: observed
+    txid: 6B6CE48A0D6F32494BF6015330FC601572338E149C65218CD08018E0CD70AE3B
+    amount: "0.02979099"
+    decimals: 8
+  - direction: out
+    wallet: bc1qmrwdgkzdtzugfa5xqtjrxzgj5chzqrgf2c9wku
+    asset:
+      notation: BTC.BTC
+      kind: native
+    role: gas
+    basis: observed
+    txid: 6B6CE48A0D6F32494BF6015330FC601572338E149C65218CD08018E0CD70AE3B
+    amount: "0.00002268"
+    decimals: 8
+prices:
+  - asset:
+      notation: BTC.BTC
+      kind: native
+    usd: "16722.227791206933"
+    source: midgard:history.depths
+details:
+  pool: BTC/BTC

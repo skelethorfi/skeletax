@@ -1,0 +1,79 @@
+{
+  "description": "addLiquidity success: [BTC/BTC] -> []; referencePrices = all",
+  "source": "midgard",
+  "wallet": "bc1qz0w77jfx0c86jjweljk98c4mafctgazhjnaf7n",
+  "data": {
+    "date": "1668444622461817147",
+    "height": "8223516",
+    "in": [
+      {
+        "address": "bc1qz0w77jfx0c86jjweljk98c4mafctgazhjnaf7n",
+        "coins": [
+          {
+            "amount": "140002825",
+            "asset": "BTC/BTC"
+          }
+        ],
+        "txID": "D4C3AA19D45F04C000FDF50F93CD70B8282A9B59D94E1D0E9B19A700A5D30DD1"
+      }
+    ],
+    "metadata": {
+      "addLiquidity": {
+        "affiliateAddress": "",
+        "affiliateFee": "0",
+        "liquidityUnits": "139974640",
+        "memo": ""
+      }
+    },
+    "out": [],
+    "pools": [
+      "BTC/BTC"
+    ],
+    "status": "success",
+    "type": "addLiquidity"
+  },
+  "thornodeTxs": [
+    {
+      "tx": {
+        "id": "D4C3AA19D45F04C000FDF50F93CD70B8282A9B59D94E1D0E9B19A700A5D30DD1",
+        "chain": "BTC",
+        "from_address": "bc1qz0w77jfx0c86jjweljk98c4mafctgazhjnaf7n",
+        "to_address": "bc1q5zg5288jpg32xfn34mvwk6vvygyhk6s0mj9f7p",
+        "coins": [
+          {
+            "asset": "BTC.BTC",
+            "amount": "140644000"
+          }
+        ],
+        "gas": [
+          {
+            "asset": "BTC.BTC",
+            "amount": "7000"
+          }
+        ],
+        "memo": "+:BTC/BTC:t:0"
+      },
+      "stages": {
+        "inbound_observed": {
+          "final_count": 92,
+          "completed": true
+        },
+        "inbound_finalised": {
+          "completed": true
+        },
+        "swap_status": {
+          "pending": false
+        },
+        "swap_finalised": {
+          "completed": true
+        }
+      }
+    }
+  ],
+  "usdPrices": {
+    "BTC.BTC": "16476.947116414336"
+  },
+  "treatment": {
+    "referencePrices": "all"
+  }
+}

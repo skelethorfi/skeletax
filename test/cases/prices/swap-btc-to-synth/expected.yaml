@@ -1,0 +1,29 @@
+wallet: bc1q2d2ealhcljw7gxldexph8nk8zatrt0l6sfhgqa
+timestamp: 2022-03-09T20:19:10.670Z
+type: bridge-trade-out
+baseCurrency: BTC
+baseAmount: "1.018491"
+quoteCurrency: ThorSynth.BTC.BTC
+quoteAmount: "1.01681035"
+feeCurrency: BTC
+feeAmount: "0.00005824"
+from: bc1q2d2ealhcljw7gxldexph8nk8zatrt0l6sfhgqa
+to: thorchain
+blockchain: BTC
+referencePricePerUnit: "42461.242317159755"
+referencePriceCurrency: USD
+description: 1/2 - Swap 1.018491 BTC to 1.01681035 Synth BTC/BTC; 86164D22C316B687F713B4CBFB5B661C2EF9350B7E7C200BD3A985629E573BF1
+id: 2022-03-09T20:19:10.670Z.out.dd6ef24c2980
+---
+wallet: thor16ker8lgzjjn5qaxat6u62npre7lkmwdaynampm
+timestamp: 2022-03-09T20:19:20.670Z
+type: bridge-trade-in
+baseCurrency: ThorSynth.BTC.BTC
+baseAmount: "1.01681035"
+from: thorchain
+to: thor16ker8lgzjjn5qaxat6u62npre7lkmwdaynampm
+blockchain: THORChain
+referencePricePerUnit: "42461.242317159755"
+referencePriceCurrency: USD
+description: 2/2 - Swap 1.018491 BTC to 1.01681035 Synth BTC/BTC; 86164D22C316B687F713B4CBFB5B661C2EF9350B7E7C200BD3A985629E573BF1
+id: 2022-03-09T20:19:10.670Z.in.dd810e9eeec8

@@ -1,0 +1,45 @@
+id: midgard/addLiquidity.C2464B416BB28AD81C5685037B26C56BAC1EE82623CEF33DD8D7FA1A1902383B
+protocol: thorchain
+kind: lp.add
+status: success
+time: 2021-07-02T15:10:45.360Z
+memo: +:BTC.BTC:thor1l7rzfcphhelk2pc06cj5t9z4kvkj06vmv0yed3
+legs:
+  - direction: out
+    wallet: bc1quhcwdm0ggweqvanqv2le7rlmk6jqvgfdw86sxj
+    asset:
+      notation: BTC.BTC
+      kind: native
+    role: principal
+    basis: observed
+    txid: C2464B416BB28AD81C5685037B26C56BAC1EE82623CEF33DD8D7FA1A1902383B
+    amount: "0.01327494"
+    decimals: 8
+  - direction: out
+    wallet: bc1quhcwdm0ggweqvanqv2le7rlmk6jqvgfdw86sxj
+    asset:
+      notation: BTC.BTC
+      kind: native
+    role: gas
+    basis: observed
+    txid: C2464B416BB28AD81C5685037B26C56BAC1EE82623CEF33DD8D7FA1A1902383B
+    amount: "0.00042897"
+    decimals: 8
+  - direction: in
+    wallet: bc1quhcwdm0ggweqvanqv2le7rlmk6jqvgfdw86sxj
+    asset:
+      notation: BTC.BTC
+      kind: position
+      position: lp
+    role: principal
+    basis: observed
+    amount: "34.49337985"
+    decimals: 8
+prices:
+  - asset:
+      notation: BTC.BTC
+      kind: native
+    usd: "35029.349503725054"
+    source: midgard:history.depths
+details:
+  pool: BTC.BTC
