@@ -453,12 +453,14 @@ scope (the same tx: stale legs that would otherwise sit beside its upload).
 Unless an entry is their ID in Summ, legs that also name the tx of a row
 outside the scope that the plan uploads are not deleted, and the rows of
 the scope and other legs with no row naming that tx wait with them, as do
-the rows and legs naming any other tx of theirs (nothing of theirs is
-carried: no delete, edit, upload, categorisation, adoption, report or
-override), each noted: deleting the
+the scope's rows and legs naming any other tx of theirs (nothing of theirs
+is carried: no delete, edit, upload, categorisation, adoption, superseded
+row, held entry, report or override), each noted: deleting the
 legs would drop that row's side from Summ until its own plan uploads it,
 and uploading beside them could hold a side twice, so a scoped apply leaves
-the tx as it is until the scope takes the other row too. A row outside the
+the tx as it is until the scope takes the other row too. Legs an entry
+names by their ID in Summ are deleted all the same, with a note when rows
+of their tx wait. A row outside the
 scope that Summ already holds, or that Summ imports itself, loses nothing,
 so it does not stop the delete. Held entries with no row are listed when
 the scope matches their legs, without this check (nothing is deleted). The plan is made

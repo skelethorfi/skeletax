@@ -1206,8 +1206,8 @@ export function parseScope(text: string): string[] {
  * that name a txid of a row in scope (the same tx). Everything else is left for another plan, so a decision on a row
  * outside the scope (an override set to no that depends on other changes of the full plan) is not carried early. Legs
  * that also name the tx of a row outside the scope that the full plan uploads are not deleted, and the rows of the
- * scope naming that tx wait with them: a scoped apply leaves such a tx as it is rather than dropping or doubling a
- * side of it.
+ * scope and legs naming that tx, or any other tx of theirs, wait with them: a scoped apply leaves such a tx as it is
+ * rather than dropping or doubling a side of it.
  */
 function narrow(
   plan: Plan,
@@ -1268,6 +1268,10 @@ function narrow(
   }
   const waiting = [...waitRows, ...waitLegs.keys()];
   if (waiting.length) plan.notes.push(`scope: ${waiting.join(", ")} wait with the legs of their tx left above`);
+  // Legs an entry names by their ID in Summ are deleted all the same: said, as their tx's rows may not be uploaded
+  for (const d of plan.delete.filter((d) => d.id === null && entries.includes(d.summId)))
+    if (txidsOf(legsOf(d.legIds)).some((t) => leftTx.has(t)))
+      plan.notes.push(`scope: legs ${d.summId} are deleted as named, though rows of their tx wait`);
   const ids = new Set([...matched].filter((id) => !waitRows.has(id)));
   plan.delete = plan.delete.filter((d) => (d.id !== null ? ids.has(d.id) : !waitLegs.has(d.summId)));
   plan.adopted = plan.adopted.filter((a) => ids.has(a.id));

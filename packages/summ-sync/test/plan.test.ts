@@ -1358,13 +1358,25 @@ test("a scoped plan deletes legs with no row that name a txid of a row in scope:
     scope: [r.id, "2024-03-01T10:00:00.000Z.out.222222222222"],
   });
   assert.deepEqual(
-    [named2.plan.delete.map((d) => d.summId), named2.plan.upload],
-    [["2024-03-01T10:00:00.000Z.out.222222222222"], []],
+    [named2.plan.delete.map((d) => d.summId), named2.plan.upload, named2.plan.notes.at(-1)],
+    [
+      ["2024-03-01T10:00:00.000Z.out.222222222222"],
+      [],
+      "scope: legs 2024-03-01T10:00:00.000Z.out.222222222222 are deleted as named, though rows of their tx wait",
+    ],
   );
   // Every tx of a waiting row waits: its stale legs of another tx are not deleted either
   const r2 = { ...r, txids: [TX1, TX2], description: `${TX1} ${TX2}` };
   const chained = plan({ rows: [r2, outside], legs: [...both, ...gone("6", `Sent; ${TX2}`)], scope: [r.id] }).plan;
   assert.deepEqual([chained.delete, chained.upload], [[], []]);
+  // and every tx of a waiting leg: a row of the scope naming only that tx waits too
+  const r3 = row({ id: "2024-03-01T10:00:00.000Z.out.cccccccccccc", txids: [TX2], description: TX2 });
+  const viaLeg = plan({
+    rows: [r, r3, outside],
+    legs: [...both, ...gone("6", `Sent; ${TX1} ${TX2}`)],
+    scope: [r.id, r3.id],
+  });
+  assert.deepEqual([viaLeg.plan.delete, viaLeg.plan.upload], [[], []]);
   // A remake (delete and upload of a row in scope) waits whole
   const remade = plan({
     rows: [r, outside],
