@@ -62,10 +62,11 @@ Filed years go in a separate apply with `--approve-filed`.
   plan) or `yes`; set it to `no` to have the plan set the run's value back.
   With `--only <scope file>`, the plan covers only the rows the file's
   entries match, one per line (a `#` at the start or after a space starts
-  a comment): a row ID, a txid, or any other text found in the row's CSV
-  line (e.g. `ThorSavers.` or a wallet address); legs with no row match by
-  their ID in Summ, a txid or the text in their description, or a txid of
-  a row in scope. Everything else, including a decision on a row outside
+  a comment): a row ID, a txid (any 64 hex digits), or any other text
+  found in the row's CSV line (e.g. `ThorSavers.` or a wallet address);
+  legs with no row match by their ID in Summ, a txid or the text in their
+  description, or a txid of a row in scope (unless they also name the tx
+  of a row outside it). Everything else, including a decision on a row outside
   the scope, waits for another plan, and so does a categorisation whose
   event has an upload outside the scope; `plan.md` notes each, and each
   entry that matches nothing. Use it to apply one stage at a time.

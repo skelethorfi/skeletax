@@ -1188,10 +1188,13 @@ export function scopeMatch(entries: string[], row: Row | null, summId = "", legs
 
 /** One scope entry per line of a scope file; blank lines are left out, and a comment: `#` at the start or after a space. */
 export function parseScope(text: string): string[] {
-  return text
+  const entries = text
     .split(/\r?\n/)
     .map((l) => l.replace(/(^|\s)#.*$/, "").trim())
     .filter((l) => l !== "");
+  const zero = entries.find((e) => /^(0x)?0{64}$/.test(e));
+  if (zero) throw new Error(`scope: ${zero} is a placeholder txid, which links no rows`);
+  return entries;
 }
 
 /**
@@ -1207,9 +1210,23 @@ function narrow(
   eventOf: Map<string, Row[]>,
 ): void {
   const ids = new Set(rows.filter((r) => scopeMatch(entries, r)).map((r) => r.id));
-  const txids = new Set(rows.filter((r) => ids.has(r.id)).flatMap((r) => r.txids.filter((t) => !/^0+$/.test(t))));
-  const legsIn = (summId: string, legIds: string[]) =>
-    scopeMatch(entries, null, summId, legsOf(legIds)) || txidsOf(legsOf(legIds)).some((t) => txids.has(t));
+  const real = (t: string) => !/^0+$/.test(t);
+  const txids = new Set(rows.filter((r) => ids.has(r.id)).flatMap((r) => r.txids.filter(real)));
+  const outside = new Map(
+    rows.filter((r) => !ids.has(r.id)).flatMap((r) => r.txids.filter(real).map((t) => [t, r.id] as const)),
+  );
+  // Legs naming a txid of a row in scope are the same tx, unless they also name one of a row outside it: deleting
+  // them would leave that row's side out of Summ until its own plan uploads it
+  const legsIn = (summId: string, legIds: string[]) => {
+    const legs = legsOf(legIds);
+    if (scopeMatch(entries, null, summId, legs)) return true;
+    const named = txidsOf(legs).filter(real);
+    if (!named.some((t) => txids.has(t))) return false;
+    const others = [...new Set(named.flatMap((t) => (outside.has(t) ? [outside.get(t) as string] : [])))];
+    if (others.length)
+      plan.notes.push(`scope: legs ${summId} also name the tx of ${others.join(", ")}, outside the scope`);
+    return !others.length;
+  };
   const uploads = new Set(plan.upload.flatMap((u) => u.ids));
   plan.adopted = plan.adopted.filter((a) => ids.has(a.id));
   plan.superseded = plan.superseded.filter((s) => ids.has(s.run));

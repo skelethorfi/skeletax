@@ -1210,6 +1210,7 @@ test("a hold may name a txid: every row naming it is held, and legs naming it wi
 });
 
 test("a scope file: one entry per line, comments and blank lines left out", () => {
+  assert.throws(() => parseScope("0".repeat(64)), /placeholder txid/);
   assert.deepEqual(parseScope("Pool#3 # a comment\n#all of it\n"), ["Pool#3"]);
   assert.deepEqual(parseScope(`# savers stage\nExSavers.\n\n${TX1}  # the claim\n  row-1\n`), [
     "ExSavers.",
@@ -1302,18 +1303,33 @@ test("a scoped plan keeps a categorise back while its event has an upload outsid
 });
 
 test("a scoped plan deletes legs with no row that name a txid of a row in scope: the same tx", () => {
-  const r = row({ id: "2024-03-01T10:00:00.000Z.out.111111111111" });
-  const stale = legsOf(row({ id: "2024-03-01T10:00:00.000Z.out.222222222222" }), {}, "a2");
-  const other = legsOf(
-    row({ id: "2024-03-01T10:00:00.000Z.out.333333333333", txids: [TX2], description: `Sent; ${TX2}` }),
-    {},
-    "a3",
-  );
-  const { plan: p } = plan({ rows: [r], legs: [...stale, ...other], scope: [r.id] });
+  const TX3 = "3".repeat(64);
+  const ZERO = "0".repeat(64);
+  const r = row({ id: "2024-03-01T10:00:00.000Z.out.111111111111", txids: [TX1, ZERO], description: `${TX1} ${ZERO}` });
+  const outside = row({
+    id: "2024-03-01T10:00:00.000Z.in.999999999999",
+    type: "receive",
+    txids: [TX3],
+    description: TX3,
+  });
+  const gone = (n: string, description: string) =>
+    legsOf(row({ id: `2024-03-01T10:00:00.000Z.out.${n.repeat(12)}`, description }), {}, `a${n}`);
+  const legs = [
+    ...gone("2", `Sent; ${TX1}`),
+    ...gone("3", `Sent; ${TX2}`),
+    // a placeholder txid links nothing
+    ...gone("4", `Sent; ${ZERO}`),
+    // also the tx of a row outside the scope: left for the plan that uploads that row
+    ...gone("5", `Swapped; ${TX1} ${TX3}`),
+  ];
+  const { plan: p } = plan({ rows: [r, outside], legs, scope: [r.id] });
   assert.deepEqual(
     [p.delete.map((d) => d.summId), p.upload.flatMap((u) => u.ids)],
     [["2024-03-01T10:00:00.000Z.out.222222222222"], [r.id]],
   );
+  assert.deepEqual(p.notes, [
+    `scope: legs 2024-03-01T10:00:00.000Z.out.555555555555 also name the tx of ${outside.id}, outside the scope`,
+  ]);
 });
 
 test("an event whose Summ actions hold a manual entry gets nothing planned: the user's pairing is held, every row sharing its txids too", () => {

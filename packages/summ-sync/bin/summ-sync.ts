@@ -35,6 +35,7 @@ try {
     const at = rest.indexOf("--only");
     const only = at >= 0 ? rest[at + 1] : undefined;
     if (at >= 0 && (only === undefined || only.startsWith("--"))) throw new Error("--only needs a scope file");
+    if (rest.lastIndexOf("--only") !== at) throw new Error("--only given twice");
     const args = rest.filter((_, i) => at < 0 || (i !== at && i !== at + 1));
     const unknown = args.find((a) => a.startsWith("--"));
     if (unknown) throw new Error(`plan: unknown option ${unknown}\n${USAGE}`);
