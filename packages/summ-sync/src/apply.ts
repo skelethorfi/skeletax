@@ -396,6 +396,11 @@ export async function runApply(
     for (const u of result.uploads)
       console.log(`  ${u.file}: ${u.rows} rows${present.has(u.file) ? "" : " (missing!)"}`);
     console.log("Then pull, plan and apply again.");
-  } else console.log("Then pull and plan again.");
+  } else
+    console.log(
+      opts.dryRun
+        ? "Then pull and plan again."
+        : "Then pull and plan again, and recalculate in Summ before reading any figures.",
+    );
   return result;
 }
