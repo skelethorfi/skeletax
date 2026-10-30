@@ -389,10 +389,10 @@ export function makePlan(input: PlanInput): PlanResult {
         ? (input.uploadedPrices?.get(row.id) ?? null)
         : null;
     // Not the sync's price: its edit no longer stands, a price other than the one decided on, or more edits in the
-    // action's history than the sync's own lines for its legs. A read-back that failed (after null) says no more than
+    // action's history than the sync's own edits of its legs. A read-back that failed (after null) says no more than
     // that, so the edit is made again
     const actionLegs = new Set((legsByAction.get(base.actionId) ?? [base]).map((l) => l.legId));
-    const lines = input.applyLog.filter((e) => e.field === "price" && actionLegs.has(e.legId)).length;
+    const lines = input.applyLog.filter((e) => e.intent && e.field === "price" && actionLegs.has(e.legId)).length;
     const foreign =
       !stands && (own?.after != null || (found !== undefined && !decided) || users - count("undo") > lines);
 

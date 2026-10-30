@@ -37,8 +37,10 @@ export interface AppliedEdit {
   legId: string;
   field: string;
   value: Value;
-  /** A price edit: the local price Summ showed after it, which says whether the edit still stands. */
+  /** A price edit: the local price Summ showed after it, which says whether the edit still stands; null unconfirmed. */
   after?: number | null;
+  /** A price edit's line written before the call, so each edit has exactly one. */
+  intent?: boolean;
 }
 
 export function readAdopted(stateDir: string): Map<string, string> {

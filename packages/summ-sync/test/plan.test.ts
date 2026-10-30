@@ -1896,7 +1896,11 @@ const priced = (over: Partial<Row> = {}) => row({ referencePrice: "2.5", referen
 const pricedLegs = (r: Row, over: Partial<Leg> = {}) => legsOf(r, { price: 3.9, ...over });
 const priceEdits = (p: ReturnType<typeof plan>["plan"]) =>
   p.edit.flatMap((e) => e.changes).filter((c) => c.field === "price");
-const priceLine = (legId: string, value: number, after: number | null) => ({ legId, field: "price", value, after });
+// What apply logs for one price edit: the line before the call, then the result
+const priceLine = (legId: string, value: number, after: number | null) => [
+  { legId, field: "price", value, intent: true },
+  { legId, field: "price", value, after },
+];
 const priceHistory = (...lines: string[]) => new Map([["action1", lines]]);
 const USER_PRICE = "30 Oct 2026 20:39 · user · Price: EUR 3.90 → EUR 3.95";
 const UNDO_PRICE = "30 Oct 2026 20:40 · undo · Price: EUR 3.95 → EUR 3.90";
@@ -1928,7 +1932,7 @@ test("price: the plan is empty after the sync's own edit, with or without a hist
   const r = priced();
   const legs = pricedLegs(r);
   for (const history of [priceHistory(USER_PRICE), priceHistory()]) {
-    const p = plan({ rows: [r], legs, history, applyLog: [priceLine(legs[0].legId, 2.5, 3.9)] }).plan;
+    const p = plan({ rows: [r], legs, history, applyLog: priceLine(legs[0].legId, 2.5, 3.9) }).plan;
     assert.deepEqual(priceEdits(p), []);
     assert.deepEqual(p.overridden, []);
   }
@@ -1937,7 +1941,7 @@ test("price: the plan is empty after the sync's own edit, with or without a hist
 test("price: a moved reference price is edited again", () => {
   const r = priced({ referencePrice: "2.6" });
   const legs = pricedLegs(r);
-  const p = plan({ rows: [r], legs, applyLog: [priceLine(legs[0].legId, 2.5, 3.9)] }).plan;
+  const p = plan({ rows: [r], legs, applyLog: priceLine(legs[0].legId, 2.5, 3.9) }).plan;
   assert.deepEqual(
     priceEdits(p).map((c) => c.desired),
     [2.6],
@@ -1978,7 +1982,7 @@ test("price: a local price other than the one after the sync's edit is captured,
   const r = priced();
   const legs = pricedLegs(r);
   for (const history of [priceHistory(USER_PRICE, USER_PRICE), priceHistory()]) {
-    const p = plan({ rows: [r], legs, history, applyLog: [priceLine(legs[0].legId, 2.5, 3.8)] }).plan;
+    const p = plan({ rows: [r], legs, history, applyLog: priceLine(legs[0].legId, 2.5, 3.8) }).plan;
     assert.deepEqual(priceEdits(p), []);
     assert.deepEqual(
       p.overridden.map((o) => o.kind),
@@ -1991,14 +1995,14 @@ test("price: retainUserEdit no sets the run's price over the sync's earlier edit
   const r = priced();
   const legs = pricedLegs(r);
   const overrides = [priceOverride(r, "no")];
-  const before = plan({ rows: [r], legs, overrides, applyLog: [priceLine(legs[0].legId, 2.5, 3.8)] }).plan;
+  const before = plan({ rows: [r], legs, overrides, applyLog: priceLine(legs[0].legId, 2.5, 3.8) }).plan;
   assert.equal(priceEdits(before).length, 1);
   const moved = legs.map((l) => ({ ...l, price: 3.85 }));
   const after = plan({
     rows: [r],
     legs: moved,
     overrides,
-    applyLog: [priceLine(legs[0].legId, 2.5, 3.8), priceLine(legs[0].legId, 2.5, 3.85)],
+    applyLog: [...priceLine(legs[0].legId, 2.5, 3.8), ...priceLine(legs[0].legId, 2.5, 3.85)],
   }).plan;
   assert.deepEqual(priceEdits(after), []);
   assert.deepEqual(after.overridden, []);
@@ -2027,7 +2031,7 @@ test("price: a failed read-back is no drift: the edit is made again", () => {
     rows: [r],
     legs,
     history: priceHistory(USER_PRICE),
-    applyLog: [priceLine(legs[0].legId, 2.5, null)],
+    applyLog: priceLine(legs[0].legId, 2.5, null),
   }).plan;
   assert.equal(priceEdits(p).length, 1);
   assert.deepEqual(p.overridden, []);
@@ -2036,15 +2040,24 @@ test("price: a failed read-back is no drift: the edit is made again", () => {
 test("price: after a failed read-back, a further edit in the history or a null price is not taken as the sync's", () => {
   const r = priced();
   const legs = pricedLegs(r);
-  const line = priceLine(legs[0].legId, 2.5, null);
-  const edited = plan({ rows: [r], legs, history: priceHistory(USER_PRICE, USER_PRICE), applyLog: [line] }).plan;
+  const lines = priceLine(legs[0].legId, 2.5, null);
+  const edited = plan({ rows: [r], legs, history: priceHistory(USER_PRICE, USER_PRICE), applyLog: lines }).plan;
   assert.deepEqual(priceEdits(edited), []);
   assert.deepEqual(
     edited.overridden.map((o) => o.kind),
     ["captured"],
   );
   const unpriced = legs.map((l) => ({ ...l, price: null }));
-  assert.equal(priceEdits(plan({ rows: [r], legs: unpriced, applyLog: [line] }).plan).length, 1);
+  assert.equal(priceEdits(plan({ rows: [r], legs: unpriced, applyLog: lines }).plan).length, 1);
+});
+
+test("price: a crash after the edit is not taken for the user's edit; the edit is made again", () => {
+  const r = priced();
+  const legs = pricedLegs(r);
+  const applyLog = priceLine(legs[0].legId, 2.5, null).slice(0, 1);
+  const p = plan({ rows: [r], legs, history: priceHistory(USER_PRICE), applyLog }).plan;
+  assert.equal(priceEdits(p).length, 1);
+  assert.deepEqual(p.overridden, []);
 });
 
 test("price: retainUserEdit no is honoured with no history and an upload file at the run's price", () => {
@@ -2085,7 +2098,7 @@ test("price: the sync's edit of one leg is no drift for the other leg of its act
     rows: [a, b],
     legs,
     history: priceHistory(USER_PRICE),
-    applyLog: [priceLine(legs[0].legId, 2.5, 3.9)],
+    applyLog: priceLine(legs[0].legId, 2.5, 3.9),
   }).plan;
   assert.deepEqual(
     priceEdits(p).map((c) => c.legId),
@@ -2097,7 +2110,7 @@ test("price: the sync's edit of one leg is no drift for the other leg of its act
 test("price: a recorded price the run no longer has is reported", () => {
   const r = row();
   const legs = pricedLegs(r);
-  const p = plan({ rows: [r], legs, applyLog: [priceLine(legs[0].legId, 2.5, 3.9)] }).plan;
+  const p = plan({ rows: [r], legs, applyLog: priceLine(legs[0].legId, 2.5, 3.9) }).plan;
   assert.deepEqual(
     p.report.map((e) => e.kind),
     ["price-blank"],

@@ -368,13 +368,16 @@ behind. So the sync cannot read the USD price back from Summ, and does not
 convert anything itself: an FX rate would add a source, and a threshold to
 hide its noise.
 
-**The recorded price.** After a price edit, apply reads the leg back, waiting
-out Summ's lagging search until the price moves, up to five tries, and logs the
-local price Summ shows (`after`) beside the USD price. A price still unchanged is
-taken as an edit that moved nothing; if Summ was only slower than that, the next
-plan captures the sync's own price as an override, which the user sets to `yes`
-or `no`. Summ's change history cannot do this: it shows a rounded price, and only
-the latest versions.
+**The recorded price.** Apply writes a `price` line (`intent`) before each price
+edit, so a crash or a lost answer leaves the edit unconfirmed rather than
+unrecorded. It then reads the leg from the rebuilt actions the edit's result
+names, since only Summ's search lags a write, and logs a second line with the local
+price Summ shows (`after`). The read counts only when the leg's `updatedAt` is later
+than before the edit and the leg is marked USD. `updatedAt` moves on any write, even
+one that leaves the price as it was and adds no history line, so an unchanged price
+is not mistaken for a lost edit or a stale read. After a few short tries `after` is
+null: unconfirmed, nothing assumed. Summ's change history cannot do this: it shows a
+rounded price, and only the latest versions.
 The USD price a leg holds is:
 
 1. when the log has a `price` line for the leg: the latest line's value, if the
@@ -412,14 +415,14 @@ A price is not the sync's when:
   or Summ repricing the leg);
 - with no line standing, the leg's price is not the one an override was decided on;
 - with no line standing, the action's history has more `user` than `undo` `Price`
-  lines than the sync has lines for the action's legs. The history is per action,
+  lines than the sync has edits (`intent` lines) of the action's legs. The history is per action,
   so another row's edit in the action can count here too; and since the log is
   whole and the history a window, a user's edit can go unseen on an action where
   the sync edited another leg, and shows as an ordinary price edit in the plan. An
   edit the user made and undid is not drift. Deleting a price override asks again
   only while the history still shows the edit.
 
-A line with no `after` (the read-back failed) proves nothing: unless one of these
+A line with no `after` (unconfirmed, or a crash after the `intent`) proves nothing: unless one of these
 holds, the edit is made again. A `no` is applied whenever the leg shows the price
 it was decided on, including after an undo back to that price. The override's
 `run` is in USD and its `summ` in the local currency.
@@ -618,8 +621,9 @@ error):
 4. Print the upload files for the user to upload.
 5. Write `apply-log.jsonl` as it goes: each call, its result and its undo
    handle, one line per changed field (`legId`, `field`, `value`) for
-   plan's drift check and recorded prices (a price line's value is in USD,
-   with the local price read back after the edit, `after`),
+   plan's drift check and recorded prices (a price edit has an `intent` line
+   before the call and a line after it with the local price read back, `after`;
+   its value is in USD),
    and each skip.
 
 While the plan has uploads (for the years this apply covers), apply holds

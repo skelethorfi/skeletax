@@ -36,6 +36,8 @@ export interface Leg {
   price?: number | null;
   /** Summ's mark that the price was given in USD. An undo leaves it behind, so it does not prove the price is. */
   priceValueCurrency?: string;
+  /** Moves on every write to the leg, even one that changes nothing; also moves on Summ's own rebuilds. */
+  updatedAt?: string;
   /** A fee Summ keeps on the leg itself (`feeQuantity`); some imports hold it there with no fee leg. */
   feeQuantity?: number;
   feeCurrency?: string;
@@ -82,6 +84,7 @@ export function legsOf(detail: ActionDetail): Leg[] {
       comments: ((leg.comments as { comment?: string }[] | undefined) ?? []).map((c) => text(c.comment)),
       price: typeof leg.price === "number" ? leg.price : null,
       ...(leg.priceValueCurrency ? { priceValueCurrency: text(leg.priceValueCurrency) } : {}),
+      ...(leg.updatedAt ? { updatedAt: text(leg.updatedAt) } : {}),
       ...(Number(leg.feeQuantity) > 0
         ? {
             feeQuantity: Number(leg.feeQuantity),
