@@ -179,10 +179,8 @@ describe("reference prices (docs/specs/prices.md)", () => {
   test("a run prices only bundles that can give rows: inside its periods, one listing per action", async () => {
     const dir = tempDir();
     const config = path.join(dir, "config.toml");
-    fs.writeFileSync(
-      config,
-      'fromDate = "2024-07-01"\ntoDate = "2025-06-30"\nfrequency = "yearly"\nreferencePrices = "all"\nwallets = []\n',
-    );
+    // No referencePrices: the default, "all"
+    fs.writeFileSync(config, 'fromDate = "2024-07-01"\ntoDate = "2025-06-30"\nfrequency = "yearly"\nwallets = []\n');
     const get = mock.method(
       http,
       "get",
@@ -223,6 +221,21 @@ describe("reference prices (docs/specs/prices.md)", () => {
     assert.deepEqual(bundles, [inside]);
     assert.equal(get.mock.calls.length, 0);
     get.mock.restore();
+  });
+
+  test("an offline run whose store has no prices says how to fix it", async () => {
+    const dir = tempDir();
+    const config = path.join(dir, "config.toml");
+    fs.writeFileSync(config, 'fromDate = "2024-07-01"\ntoDate = "2025-06-30"\nfrequency = "yearly"\nwallets = []\n');
+    const inside = toBundle(readCaseInput("test/cases/liquidity/add-btc-rune-symmetric"));
+    const exporter = new Exporter(config, { offline: true, today: new Date("2026-10-30T00:00:00Z") });
+
+    await assert.rejects(exporter.withPrices([inside]), (error: Error) => {
+      assert.equal(error.name, "StoreMissError");
+      assert.match(error.message, /^Offline: nothing stored for midgard-/);
+      assert.match(error.message, /run without --offline to fetch them, or set referencePrices = "swaps"/);
+      return true;
+    });
   });
 
   test("a pool not swapped in the day before the bucket or the day after has a frozen price: none", async () => {

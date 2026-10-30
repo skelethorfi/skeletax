@@ -61,8 +61,7 @@ Both are optional; a config without `[assets]` exports L1 names. Synths are
 always prefixed. On Maya the prefix is `Maya` (`MayaSecured.BTC.BTC`).
 
 Summ does not recognise the synth names, so their value comes from the CSV's
-reference price columns where a row has them (swaps carry Midgard's USD
-prices).
+reference price columns: every row Midgard prices carries one (`prices.md`).
 
 ## History
 

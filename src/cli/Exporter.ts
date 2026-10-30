@@ -13,7 +13,7 @@ import type { ITaxConfig } from "../config/ITaxConfig.ts";
 import { generateDateRanges } from "../utils/DateRange.ts";
 import path from "path";
 import { TaxConfig } from "../config/TaxConfig.ts";
-import { type FetchMode, RecordStore } from "../sources/store/RecordStore.ts";
+import { type FetchMode, RecordStore, StoreMissError } from "../sources/store/RecordStore.ts";
 import { SnapshotManifest } from "../sources/store/SnapshotManifest.ts";
 import { getProtocol, MAYA, type Protocol, THORCHAIN, withAssetNames } from "../domain/Protocol.ts";
 import { MayaDistributionSource, MidgardSource, type Source, TcySource, ViewblockSource } from "../sources/Source.ts";
@@ -193,8 +193,21 @@ export class Exporter {
     );
     const priced: RawBundle[] = [];
 
-    for (const bundle of bundles) {
-      priced.push(exported.has(bundle) ? await prices.add(bundle) : bundle);
+    try {
+      for (const bundle of bundles) {
+        priced.push(exported.has(bundle) ? await prices.add(bundle) : bundle);
+      }
+    } catch (error) {
+      // A store made before reference prices has none (docs/specs/prices.md, The option)
+      if (error instanceof StoreMissError) {
+        throw new StoreMissError(
+          `${error.message.replace(/^Offline: nothing stored for /, "")}. This store has no reference prices for ` +
+            `this run: run without --offline to fetch them, or set referencePrices = "swaps" to reproduce an earlier ` +
+            "run (docs/specs/prices.md)",
+        );
+      }
+
+      throw error;
     }
 
     return priced;

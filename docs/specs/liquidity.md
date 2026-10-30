@@ -24,17 +24,18 @@ liquidity auction adds rows of its own (`maya.md`).
 
 ## Price helper
 
-Summ has no market price for an LP token, so the `ReceiveLpToken` and
-`ReturnLpToken` rows come without a value. The `Spam` row holds the value of
-what went in or came out, in an asset Summ does price: the first asset's
-amount times the number of assets (twice the first asset for a symmetric add,
-a copy of the one asset for an asymmetric add). Summ prices it and ignores it;
-the user copies its fiat value onto the LP token row by hand (`../summ.md`).
+Summ has no market price for an LP token. With `referencePrices = "all"`
+(the default) the `ReceiveLpToken` and `ReturnLpToken` rows carry a reference
+price: the USD value of what went in or came out at Midgard's pool prices, per
+unit (`prices.md`).
 
-With `referencePrices = "all"` (the default) the LP token rows carry a reference price
-instead: the USD value of the same assets at Midgard's pool prices, per unit
-(`prices.md`). The price helper stays, unpriced, so Summ's own value can be
-compared with it.
+The `Spam` row holds the value of the same assets in an asset Summ does price:
+the first asset's amount times the number of assets (twice the first asset
+for a symmetric add, a copy of the one asset for an asymmetric add). Summ
+prices it and ignores it. It has no reference price, so Summ's own value can
+be compared with the token's; where a token row has none (`prices.md`, or
+with `referencePrices = "swaps"`), the user copies the helper's fiat value
+onto it by hand (`../summ.md`).
 
 The liquidity-auction position's helper is the deposited asset's side, twice
 (`maya.md`).

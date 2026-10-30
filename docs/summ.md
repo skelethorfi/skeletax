@@ -65,23 +65,25 @@ categorised the same way, e.g. **Add Liquidity** and **Remove Liquidity**.
 
 ## Missing market prices
 
-Summ cannot price everything:
-
-- **Tokens it doesn't know**, e.g. a swap of RUNE to VTHOR. Copy the fiat value
-  of the RUNE side (Cross Chain Sell) onto the VTHOR side (Cross Chain Buy).
-- **Liquidity and savers positions.** The position token has no market price.
-  Each add or withdrawal comes with a `Spam` price-helper row that holds the
-  value of what went in or came out: copy its fiat value onto the **Receive LP
-  Token** row (or **Return LP Token** for a withdrawal). The rows are described
-  in [specs/liquidity.md](specs/liquidity.md).
-
 Every row whose asset Midgard prices carries Midgard's USD price as a
-reference price (swaps: each side's own price), and the LP and savers token
-rows carry the value of what went in or came out, so they need no copying by
-hand. With `referencePrices = "swaps"` in the config only swaps (and bRUNE
-sells and TCY distributions) carry one, as before October 2026.
-A token row left blank (a Maya liquidity-auction position, one holding an
-asset Midgard has no price for, an action that is not `success`, or a row of
-`all.csv` more than a day outside the run's periods) still needs the price helper's value
+reference price, which Summ uses instead of its own market price (swaps: each
+side's own price). That covers what Summ cannot price itself:
+
+- **Tokens it doesn't know**, e.g. VTHOR received in a swap from RUNE: the
+  swap's own price for each side.
+- **Liquidity and savers positions.** The position token has no market price,
+  so the **Receive LP Token** and **Return LP Token** rows carry the value of
+  what went in or came out, per unit. Each add or withdrawal also comes with a
+  `Spam` price-helper row holding the same assets, which Summ prices itself,
+  so its value can be compared with the token's.
+
+Copy a value by hand only where a row has no reference price: a token row
+left blank (a Maya liquidity-auction position, one holding an asset Midgard
+has no price for or a pool that was frozen, an action that is not `success`,
+or a row of `all.csv` more than a day outside the run's periods) takes the
+price helper's fiat value, and an unknown token outside a swap takes the
+value of what it was exchanged for. With `referencePrices = "swaps"` in the
+config only swaps (and bRUNE sells and TCY distributions) carry one, as before
+October 2026, and every LP token needs the helper's value
 ([specs/prices.md](specs/prices.md)). The old CoinMarketCap price lookup and the `addReferencePrices`
 wallet setting were removed; a config that still sets it gets a warning.
