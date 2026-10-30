@@ -21,7 +21,7 @@ export interface Treatment {
   mayaLiquidityAuction?: MayaLiquidityAuction;
   // Senders whose transfers to the wallet are income (ITaxConfig.incomeFrom); unset: the known distributors
   incomeFrom?: string[];
-  // Which rows carry a reference price (docs/specs/prices.md). Default: 'swaps'
+  // Which rows carry a reference price (docs/specs/prices.md). Default: 'all'
   referencePrices?: ReferencePrices;
 }
 
@@ -29,7 +29,7 @@ export interface Treatment {
 export function exportSumm(activities: Activity[], treatment: Treatment = {}): SummRow[] {
   return activities.flatMap((activity) =>
     toRows(activity, withAssetNames(getProtocol(activity.protocol), treatment.assets), treatment).map((row) =>
-      withId(treatment.referencePrices === "all" ? withReferencePrice(row, activity) : row, activity),
+      withId((treatment.referencePrices ?? "all") === "all" ? withReferencePrice(row, activity) : row, activity),
     ),
   );
 }

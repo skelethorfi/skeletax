@@ -17,15 +17,21 @@ The exporter never guesses a price.
 
 `referencePrices` in the config:
 
-| Value               | Rows that carry a reference price                                                                                                                                                                                 |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"swaps"` (default) | as before this option: swaps (each side at Midgard's `inPriceUSD` / `outPriceUSD`), a bRUNE sell (RUNE's price, `rujira.md`) and a TCY distribution (the RUNE price the TCY API gives). No other price is fetched |
-| `"all"`             | those, and every other row whose asset has a price below. A run fetches the prices it needs                                                                                                                       |
+| Value             | Rows that carry a reference price                                                                                                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `"all"` (default) | every row whose asset has a price below, and position tokens. A run fetches the prices it needs                                                                                                                    |
+| `"swaps"`         | as before October 2026: swaps (each side at Midgard's `inPriceUSD` / `outPriceUSD`), a bRUNE sell (RUNE's price, `rujira.md`) and a TCY distribution (the RUNE price the TCY API gives). No other price is fetched |
 
-The default keeps every row of an existing export as it was, and a run with
-the default fetches nothing new, so `--offline` replays of an existing store
-still work. Row IDs are the same under either value (`periods.md`): the
-price is not part of the ID.
+`"all"` is the default because it is the more accurate: each row is valued
+at Midgard's price for the action's own 5 minutes, every leg of an action from
+the same source, so an LP or savers add or withdrawal creates no gain or loss
+from pricing alone; Summ's own prices are hourly or coarser. It became the
+default in October 2026 (until then `"swaps"`). A store made before then has no
+price records, so an `--offline` or `--replay` run of an earlier run stops on
+the first missing price, with a message saying what to do: set
+`referencePrices = "swaps"` to reproduce such a run's rows, or (offline) run
+online once to fetch the prices. Row IDs are the same under either value
+(`periods.md`): the price is not part of the ID.
 
 ## Prices by asset
 
@@ -123,12 +129,12 @@ CACAO's price.
   the day before the bucket or the day after), stay blank.
 - A row that already has a price keeps it (a swap's own price is used over
   the pool's).
-- The default (`"swaps"`) never takes a price from `usdPrices`, even when a
-  bundle carries them (a golden case fetched by the fixture tool does).
+- `"swaps"` never takes a price from `usdPrices`, even when a bundle carries
+  them (a golden case fetched by the fixture tool does).
 
 ## Fetching and the store
 
-With `referencePrices = "all"`, a run interprets each bundle before export,
+With `referencePrices = "all"` (the default), a run interprets each bundle before export,
 collects the assets of its legs, and fetches each asset's price once per
 bucket. Only bundles that can give rows are priced: one listing of each
 action (the first wallet's, as `dedupeBundles` keeps), dated inside the run's
@@ -177,8 +183,8 @@ prices with Summ's own (below).
 
 ## Open
 
-- Reference prices on every row are the chosen treatment. Still to do: the
-  default value, and Summ sync setting the price of rows already in Summ.
+- Reference prices on every row are the chosen treatment and the default.
+  Still to do: Summ sync setting the price of rows already in Summ.
 
 ## Tests
 
@@ -193,5 +199,6 @@ prices with Summ's own (below).
   checked); the stored records (open bucket fetched again, unknown pool stored as no
   price, offline read and miss, CACAO from Maya's history); a bundle's prices
   without the zero ones; an unpriced position and the unpriced helper; that
-  a run prices only bundles inside its periods, once per action; and that the
-  default fills nothing new, even for a bundle that carries prices.
+  a run prices only bundles inside its periods, once per action; that `"all"`
+  is the default; and that `"swaps"` fetches no price and fills nothing new,
+  even for a bundle that carries prices.

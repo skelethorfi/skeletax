@@ -132,7 +132,7 @@ describe("reference prices (docs/specs/prices.md)", () => {
     assert.equal(payout.referencePricePerUnit, input.usdPrices!["BTC.BTC"]);
   });
 
-  test("the default ('swaps') fills nothing new, even when the bundle carries prices", () => {
+  test("'swaps' fills nothing new, even when the bundle carries prices", () => {
     const cases = {
       "prices/lp-add-symmetric": "liquidity/add-btc-rune-symmetric",
       "prices/savers-withdraw": "liquidity/withdraw-btc-savers",
@@ -141,8 +141,13 @@ describe("reference prices (docs/specs/prices.md)", () => {
     };
 
     for (const [priced, plain] of Object.entries(cases)) {
-      const { treatment: _, ...input } = readCaseInput(`test/cases/${priced}`);
-      assert.deepEqual(runCase(input), readCaseExpected(`test/cases/${plain}`));
+      const input = readCaseInput(`test/cases/${priced}`);
+      assert.deepEqual(
+        runCase({ ...input, treatment: { referencePrices: "swaps" } }),
+        readCaseExpected(`test/cases/${plain}`),
+      );
+      // With no treatment, the default fills them
+      assert.deepEqual(runCase({ ...input, treatment: undefined }), readCaseExpected(`test/cases/${priced}`));
     }
   });
 
@@ -174,10 +179,8 @@ describe("reference prices (docs/specs/prices.md)", () => {
   test("a run prices only bundles that can give rows: inside its periods, one listing per action", async () => {
     const dir = tempDir();
     const config = path.join(dir, "config.toml");
-    fs.writeFileSync(
-      config,
-      'fromDate = "2024-07-01"\ntoDate = "2025-06-30"\nfrequency = "yearly"\nreferencePrices = "all"\nwallets = []\n',
-    );
+    // No referencePrices: the default, "all"
+    fs.writeFileSync(config, 'fromDate = "2024-07-01"\ntoDate = "2025-06-30"\nfrequency = "yearly"\nwallets = []\n');
     const get = mock.method(
       http,
       "get",
@@ -198,6 +201,56 @@ describe("reference prices (docs/specs/prices.md)", () => {
     // BTC.BTC's price and its swaps before and after, and RUNE's price
     assert.equal(get.mock.calls.length, 4);
     get.mock.restore();
+  });
+
+  test("a run with referencePrices = 'swaps' fetches no price", async () => {
+    const dir = tempDir();
+    const config = path.join(dir, "config.toml");
+    fs.writeFileSync(
+      config,
+      'fromDate = "2024-07-01"\ntoDate = "2025-06-30"\nfrequency = "yearly"\nreferencePrices = "swaps"\nwallets = []\n',
+    );
+    const get = mock.method(
+      http,
+      "get",
+      historyGet(() => ({ assetPriceUSD: "1" })),
+    );
+    const inside = toBundle(readCaseInput("test/cases/liquidity/add-btc-rune-symmetric"));
+    const bundles = await new Exporter(config, { today: new Date("2026-10-30T00:00:00Z") }).withPrices([inside]);
+
+    assert.deepEqual(bundles, [inside]);
+    assert.equal(get.mock.calls.length, 0);
+    get.mock.restore();
+  });
+
+  test("an offline run whose store has no prices says how to fix it", async () => {
+    const dir = tempDir();
+    const config = path.join(dir, "config.toml");
+    fs.writeFileSync(config, 'fromDate = "2024-07-01"\ntoDate = "2025-06-30"\nfrequency = "yearly"\nwallets = []\n');
+    const inside = toBundle(readCaseInput("test/cases/liquidity/add-btc-rune-symmetric"));
+    const exporter = new Exporter(config, { offline: true, today: new Date("2026-10-30T00:00:00Z") });
+
+    await assert.rejects(exporter.withPrices([inside]), (error: Error) => {
+      assert.equal(error.name, "StoreMissError");
+      assert.match(error.message, /^Offline: nothing stored for midgard-/);
+      assert.match(error.message, /run without --offline to fetch it, or set referencePrices = "swaps"/);
+      assert.match(error.stack ?? "", /run without --offline/);
+      return true;
+    });
+
+    // A replay of a run that read no prices: the run, not the store, lacks them
+    const replayed = path.join(dir, "snapshots.json");
+    fs.writeJSONSync(replayed, { layout: 3, records: [], lists: [] });
+    const replay = new Exporter(config, { replay: replayed, today: new Date("2026-10-30T00:00:00Z") });
+    await assert.rejects(replay.withPrices([inside]), (error: Error) => {
+      assert.match(
+        error.message,
+        / in the replayed run\. The replayed run has no reference price for this: set referencePrices = "swaps"/,
+      );
+      assert.match(error.stack ?? "", /in the replayed run\. The replayed run has no reference price/);
+      assert.doesNotMatch(error.message, /--offline/);
+      return true;
+    });
   });
 
   test("a pool not swapped in the day before the bucket or the day after has a frozen price: none", async () => {
@@ -325,11 +378,13 @@ describe("reference prices (docs/specs/prices.md)", () => {
     assert.equal(formatPrice(12), "12");
   });
 
-  test("the config takes 'swaps' or 'all'", () => {
+  test("the config takes 'swaps' or 'all'; 'all' is the default", () => {
     const today = new Date("2026-10-30T00:00:00Z");
     const config = { fromDate: "2025-07-01", frequency: "none" as const, wallets: [] };
     assert.equal(TaxConfig.applyDefaults({ ...config, referencePrices: "all" }, today).referencePrices, "all");
-    assert.equal(TaxConfig.applyDefaults(config, today).referencePrices, undefined);
+    assert.equal(TaxConfig.applyDefaults({ ...config, referencePrices: "swaps" }, today).referencePrices, "swaps");
+    // The default: reference prices on every row
+    assert.equal(TaxConfig.applyDefaults(config, today).referencePrices, "all");
     assert.throws(
       () => TaxConfig.applyDefaults({ ...config, referencePrices: "every" as any }, today),
       /referencePrices must be "swaps" or "all"/,

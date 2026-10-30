@@ -102,6 +102,8 @@ export class TaxConfig {
       pendingStuckDays: 30,
       pendingGraceDays: 3,
       toDate: dateToday,
+      // Reference prices on every row (docs/specs/prices.md)
+      referencePrices: "all" as const,
     };
 
     return {

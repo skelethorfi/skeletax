@@ -15,6 +15,7 @@ describe("TaxConfig", () => {
       pendingStuckDays: 30,
       pendingGraceDays: 3,
       toDate: "2026-06-30",
+      referencePrices: "all",
     });
   });
 
@@ -102,6 +103,7 @@ describe("TaxConfig", () => {
       pendingStuckDays: 90,
       pendingGraceDays: 5,
       wallets: [],
+      referencePrices: "all",
     });
   });
 });

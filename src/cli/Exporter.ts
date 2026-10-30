@@ -13,7 +13,7 @@ import type { ITaxConfig } from "../config/ITaxConfig.ts";
 import { generateDateRanges } from "../utils/DateRange.ts";
 import path from "path";
 import { TaxConfig } from "../config/TaxConfig.ts";
-import { type FetchMode, RecordStore } from "../sources/store/RecordStore.ts";
+import { type FetchMode, RecordStore, StoreMissError } from "../sources/store/RecordStore.ts";
 import { SnapshotManifest } from "../sources/store/SnapshotManifest.ts";
 import { getProtocol, MAYA, type Protocol, THORCHAIN, withAssetNames } from "../domain/Protocol.ts";
 import { MayaDistributionSource, MidgardSource, type Source, TcySource, ViewblockSource } from "../sources/Source.ts";
@@ -168,11 +168,11 @@ export class Exporter {
     return bundles;
   }
 
-  // With referencePrices = 'all', each bundle with the USD prices of its legs (docs/specs/prices.md); otherwise the
+  // With referencePrices = 'all' (the default), each bundle with the USD prices of its legs (docs/specs/prices.md); otherwise the
   // bundles as they are, so a run fetches no price. Only a bundle that can give rows is priced: one listing of each
   // action, dated inside the run's periods (a day's margin either side, for the time zone).
   async withPrices(bundles: RawBundle[]): Promise<RawBundle[]> {
-    if (this.config.referencePrices !== "all") {
+    if ((this.config.referencePrices ?? "all") !== "all") {
       return bundles;
     }
 
@@ -193,8 +193,25 @@ export class Exporter {
     );
     const priced: RawBundle[] = [];
 
-    for (const bundle of bundles) {
-      priced.push(exported.has(bundle) ? await prices.add(bundle) : bundle);
+    try {
+      for (const bundle of bundles) {
+        priced.push(exported.has(bundle) ? await prices.add(bundle) : bundle);
+      }
+    } catch (error) {
+      // A store, or a replayed run, from before reference prices has no price record (docs/specs/prices.md, The
+      // option)
+      if (error instanceof StoreMissError) {
+        const hint = error.message.endsWith(" in the replayed run")
+          ? `. The replayed run has no reference price for this: set referencePrices = "swaps" to reproduce a run ` +
+            "made before reference prices (docs/specs/prices.md)"
+          : `. The store is missing a reference price record: run without --offline to fetch it, or set ` +
+            `referencePrices = "swaps" to reproduce an earlier run (docs/specs/prices.md)`;
+        // Node prints the stack, which holds the message as it was thrown
+        error.stack = error.stack?.replace(error.message, () => error.message + hint);
+        error.message += hint;
+      }
+
+      throw error;
     }
 
     return priced;

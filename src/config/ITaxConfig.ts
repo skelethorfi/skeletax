@@ -41,7 +41,8 @@ export interface ITaxConfig {
   // (docs/specs/sends.md). Unset: the known distribution wallets' MAYA (KNOWN_DISTRIBUTORS); set, it replaces
   // them, so [] makes every transfer received a receive
   incomeFrom?: string[];
-  // Which rows carry a USD reference price (docs/specs/prices.md): 'swaps' (default: swaps, bRUNE sells and TCY
-  // distributions, as before) or 'all' (every row whose asset Midgard prices, and position tokens; fetches prices)
+  // Which rows carry a USD reference price (docs/specs/prices.md): 'all' (default: every row whose asset Midgard
+  // prices, and position tokens; fetches prices) or 'swaps' (only swaps, bRUNE sells and TCY distributions, as
+  // before October 2026; fetches no price)
   referencePrices?: ReferencePrices;
 }
