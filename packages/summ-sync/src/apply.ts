@@ -22,7 +22,7 @@
 import { appendFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { type ActionDetail, parseActions, parseDetail } from "./parse.ts";
-import { type DeleteEntry, type EditEntry, type Plan, same } from "./plan.ts";
+import { type Change, type DeleteEntry, type EditEntry, type Plan, same } from "./plan.ts";
 import { type Leg, latestSnapshot, legsOf, readSnapshotFile, storeAction } from "./snapshot.ts";
 import { mergeTables } from "./state.ts";
 
@@ -333,8 +333,12 @@ export async function applyPlan(
     say(`  ignored the made-up leg of ${id}${undo ? ` (undo ${undo})` : ""}`);
   }
 
+  const edited = new Set<string>();
+
   /** True when the edit was made. */
   async function editLegs(kind: string, entry: EditEntry): Promise<boolean> {
+    // Summ's search lags a write: another row of an action just edited could be read, and edited, as it was
+    if (edited.has(entry.actionId)) await sleep(settleMs);
     const found = await lookUp(client, entry.changes[0].legId);
     if (!found) return skip(entry.id, `leg ${entry.changes[0].legId} is no longer in Summ`);
     for (const change of entry.changes) {
@@ -385,23 +389,25 @@ export async function applyPlan(
     const text = await client.callTool("edit_transaction", args);
     result.edited++;
     const undo = undoHandle(text);
-    const before = found.legs.find((l) => l.legId === priced?.legId)?.updatedAt;
-    const after = priced ? await readBackPrice(client, text, priced.legId, before, settleMs) : null;
     // One line per change, in the shape plan reads back (legId, field, value) to tell the sync's own edits from drift
-    for (const c of entry.changes)
-      write({
-        call: "edit_transaction",
-        kind,
-        id: entry.id,
-        actionId: found.actionId,
-        legId: c.legId,
-        field: c.field,
-        from: c.summ,
-        value: c.desired,
-        ...(c.field === "price" ? { after } : {}),
-        undo,
-      });
+    const line = (c: Change) => ({
+      call: "edit_transaction",
+      kind,
+      id: entry.id,
+      actionId: found.actionId,
+      legId: c.legId,
+      field: c.field,
+      from: c.summ,
+      value: c.desired,
+      undo,
+    });
+    for (const c of entry.changes) if (c !== priced) write(line(c));
     write({ call: "edit_transaction", kind, id: entry.id, actionId: found.actionId, undo, result: text });
+    if (priced) {
+      const before = found.legs.find((l) => l.legId === priced.legId)?.updatedAt;
+      write({ ...line(priced), after: await readBackPrice(client, text, priced.legId, before, settleMs) });
+    }
+    edited.add(entry.actionId);
     say(`  ${kind} ${entry.id}: ${summary}${undo ? ` (undo ${undo})` : ""}`);
     return true;
   }

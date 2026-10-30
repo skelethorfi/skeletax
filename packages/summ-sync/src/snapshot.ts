@@ -136,7 +136,7 @@ export function storeAction(stateDir: string, detail: ActionDetail, replace = fa
  * id (lastModified, updatedAt, balanceSnapshot, sortPriority, the count of earlier versions) are left out. */
 export function syncView(detail: ActionDetail): string {
   return JSON.stringify({
-    legs: legsOf(detail),
+    legs: legsOf(detail).map(({ updatedAt: _, ...leg }) => leg),
     history: detail.history.filter((h) => !/earlier versions not read/.test(h)),
   });
 }

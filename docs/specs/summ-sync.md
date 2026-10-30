@@ -422,6 +422,10 @@ A price is not the sync's when:
   edit the user made and undid is not drift. Deleting a price override asks again
   only while the history still shows the edit.
 
+An edit that failed still counts as one of the sync's, since it may have landed, so
+a user's edit of that leg before the next plan shows as an ordinary price edit in the
+plan rather than an override.
+
 A line with no `after` (unconfirmed, or a crash after the `intent`) proves nothing: unless one of these
 holds, the edit is made again. A `no` is applied whenever the leg shows the price
 it was decided on, including after an undo back to that price. The override's
