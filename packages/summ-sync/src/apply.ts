@@ -341,8 +341,15 @@ export async function applyPlan(
     // Summ keeps no USD figure: the local price it now shows is what says, later, that this edit still stands.
     // The edit is made, so a failed read must not stop the log line
     const priced = entry.changes.filter((c) => c.field === "price");
-    if (priced.length) await sleep(settleMs);
-    const after = priced.length ? await lookUp(client, priced[0].legId).catch(() => null) : null;
+    let after: Found | null = null;
+    // Summ's search lags a write and shows the old price meanwhile. A price still unchanged at the last try is an
+    // edit that moved nothing (the same USD at the same rate)
+    for (let i = 0; i < 5 && priced.length; i++) {
+      await sleep(settleMs);
+      after = await lookUp(client, priced[0].legId).catch(() => null);
+      const shown = after?.legs.find((l) => l.legId === priced[0].legId)?.price;
+      if (shown !== undefined && !same("price", shown, priced[0].summ)) break;
+    }
     // One line per change, in the shape plan reads back (legId, field, value) to tell the sync's own edits from drift
     for (const c of entry.changes)
       write({

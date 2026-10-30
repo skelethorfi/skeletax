@@ -368,14 +368,16 @@ behind. So the sync cannot read the USD price back from Summ, and does not
 convert anything itself: an FX rate would add a source, and a threshold to
 hide its noise.
 
-**The recorded price.** After a price edit, apply reads the leg back and logs
-the local price Summ now shows (`after`) beside the USD price. Summ's change
-history cannot do this: it shows a rounded price, and only the latest versions.
+**The recorded price.** After a price edit, apply reads the leg back, waiting
+out Summ's lagging search until the price moves (up to five tries; a price still
+unchanged is an edit that moved nothing), and logs the local price Summ shows
+(`after`) beside the USD price. Summ's change history cannot do this: it shows a
+rounded price, and only the latest versions.
 The USD price a leg holds is:
 
 1. when the log has a `price` line for the leg: the latest line's value, if the
    leg still shows that line's `after`;
-2. with no such line, no `user` `Price` line in the action's history, and the
+2. with no such line, no override decided on the leg's price, no `user` `Price` line in the action's history, and the
    leg marked USD: the reference price of the row in the newest
    `plans/*/upload/` file holding its ID, if any. A row uploaded outside a plan
    has none, and is edited once. A file does not prove it was the one uploaded:
@@ -399,11 +401,22 @@ the same number, and a difference is a real change.
 
 A price that is not the sync's is drift, handled as in Drift and overrides: the
 user's price is kept and captured as `undecided`, and the decision holds for
-that local price. It is not the sync's when the leg no longer shows the `after`
-of its latest line (a user's edit, an undo, or Summ repricing the leg), or, with
-no line, when the action's history has more `user` than `undo` `Price` lines (an
-edit the user made and undid is not drift). The override's `run` is in USD and
-its `summ` in the local currency.
+that local price. Prices go by the leg's local price rather than by history and
+log values, since the history is a window: a decision is kept, or applied, while
+the leg shows the price it was made on, and a different price is captured again.
+A price is not the sync's when:
+
+- the leg no longer shows the `after` of its latest line (a user's edit, an undo,
+  or Summ repricing the leg);
+- with no line, the leg's price is not the one an override was decided on;
+- with no line, the action's history has more `user` than `undo` `Price` lines,
+  beyond the sync's own edits of the action's other legs. The history is per
+  action, so another row's edit in the action can count here too. An edit the
+  user made and undid is not drift. Deleting a price override asks again only
+  while the history still shows the edit.
+
+A line with no `after` (the read-back failed) says nothing: the edit is made
+again. The override's `run` is in USD and its `summ` in the local currency.
 
 A row planned for delete and upload gets no price edit: the upload carries its
 price.

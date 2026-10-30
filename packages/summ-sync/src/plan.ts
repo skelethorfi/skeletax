@@ -380,13 +380,21 @@ export function makePlan(input: PlanInput): PlanResult {
     const own = input.applyLog.filter((e) => e.field === "price" && e.legId === base.legId).at(-1);
     const summ = base.price ?? null;
     const stands = own !== undefined && same("price", own.after ?? null, summ);
+    const found = overrides.find((o) => o.id === row.id && o.leg === "base" && o.field === "price");
+    const decided = found && same("price", found.summ, summ);
+    // A decision on this very price says the price is not the sync's, whatever the mark says
     const recorded = stands
       ? Number(own.value)
-      : !own && users === 0 && base.priceValueCurrency === "USD"
+      : !own && !decided && users === 0 && base.priceValueCurrency === "USD"
         ? (input.uploadedPrices?.get(row.id) ?? null)
         : null;
-    // The sync's edit no longer stands, or an edit it has no record of: not the sync's price
-    const foreign = own ? !stands : users > count("undo");
+    // The history is per action: the sync's own edits of the action's other legs are its lines too
+    const others = new Set((legsByAction.get(base.actionId) ?? []).map((l) => l.legId).filter((l) => l !== base.legId));
+    const otherEdits = input.applyLog.filter((e) => e.field === "price" && others.has(e.legId)).length;
+    // Not the sync's price: its edit no longer stands, a price other than the one decided on, or an edit it has no
+    // record of. A read-back that failed (after null) says nothing: the edit is simply made again
+    const foreign =
+      !stands && (own ? own.after != null : (found !== undefined && !decided) || users - count("undo") > otherEdits);
 
     const desired = row.referencePrice && row.referencePriceCurrency === "USD" ? Number(row.referencePrice) : null;
     if (desired === null) {
@@ -400,8 +408,6 @@ export function makePlan(input: PlanInput): PlanResult {
         });
       return null;
     }
-    const found = overrides.find((o) => o.id === row.id && o.leg === "base" && o.field === "price");
-    const decided = found && same("price", found.summ, summ);
     if (decided && found.retainUserEdit !== "no") {
       if (!same("price", found.run, desired))
         plan.overridden.push({ kind: "run-changed", override: found, runNow: desired });

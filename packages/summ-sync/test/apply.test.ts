@@ -174,6 +174,22 @@ test("a price edit sends the USD price with its currency and logs the USD price"
   assert.deepEqual([change?.field, change?.value, typeof change?.after], ["price", 2.5, "number"]);
 });
 
+test("a price edit's read-back waits out a lagging search", async () => {
+  const lagging = new FakeSumm();
+  lagging.add("a", [{ _id: "leg-1", trade: "income", quantity: "1", price: 3.9 }]);
+  const inspect = lagging.callTool.bind(lagging);
+  let reads = 0;
+  lagging.callTool = async (name: string, args: Record<string, unknown>) => {
+    const text = await inspect(name, args);
+    if (name !== "inspect_transaction" || ++reads !== 2) return text;
+    return text.replace('"price":3.8', '"price":3.9');
+  };
+  const changes: EditEntry["changes"] = [{ leg: "base", legId: "leg-1", field: "price", summ: 3.9, desired: 3.8 }];
+  const { log } = await run(lagging, planFile({ edit: [edit({ changes })] }));
+  assert.equal(reads, 3);
+  assert.equal(log.find((l) => l.legId === "leg-1")?.after, 3.8);
+});
+
 test("several changes of one leg go in one edit", async () => {
   const summ = new FakeSumm();
   summ.add("a", [{ _id: "leg-1", trade: "withdrawal", quantity: "1" }]);
