@@ -198,13 +198,17 @@ export class Exporter {
         priced.push(exported.has(bundle) ? await prices.add(bundle) : bundle);
       }
     } catch (error) {
-      // A store made before reference prices has none (docs/specs/prices.md, The option)
+      // A store, or a replayed run, from before reference prices has no price record (docs/specs/prices.md, The
+      // option)
       if (error instanceof StoreMissError) {
-        throw new StoreMissError(
-          `${error.message.replace(/^Offline: nothing stored for /, "")}. This store has no reference prices for ` +
-            `this run: run without --offline to fetch them, or set referencePrices = "swaps" to reproduce an earlier ` +
-            "run (docs/specs/prices.md)",
-        );
+        const hint = error.message.endsWith(" in the replayed run")
+          ? `. The replayed run read no reference price for this: set referencePrices = "swaps" to reproduce it ` +
+            "(docs/specs/prices.md)"
+          : `. The store is missing a reference price record: run without --offline to fetch it, or set ` +
+            `referencePrices = "swaps" to reproduce an earlier run (docs/specs/prices.md)`;
+        // Node prints the stack, which holds the message as it was thrown
+        error.stack = error.stack?.replace(error.message, error.message + hint);
+        error.message += hint;
       }
 
       throw error;

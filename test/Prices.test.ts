@@ -233,7 +233,21 @@ describe("reference prices (docs/specs/prices.md)", () => {
     await assert.rejects(exporter.withPrices([inside]), (error: Error) => {
       assert.equal(error.name, "StoreMissError");
       assert.match(error.message, /^Offline: nothing stored for midgard-/);
-      assert.match(error.message, /run without --offline to fetch them, or set referencePrices = "swaps"/);
+      assert.match(error.message, /run without --offline to fetch it, or set referencePrices = "swaps"/);
+      assert.match(error.stack ?? "", /run without --offline/);
+      return true;
+    });
+
+    // A replay of a run that read no prices: the run, not the store, lacks them
+    const replayed = path.join(dir, "snapshots.json");
+    fs.writeJSONSync(replayed, { layout: 3, records: [], lists: [] });
+    const replay = new Exporter(config, { replay: replayed, today: new Date("2026-10-30T00:00:00Z") });
+    await assert.rejects(replay.withPrices([inside]), (error: Error) => {
+      assert.match(
+        error.message,
+        / in the replayed run\. The replayed run read no reference price for this: set referencePrices = "swaps"/,
+      );
+      assert.doesNotMatch(error.message, /--offline/);
       return true;
     });
   });
