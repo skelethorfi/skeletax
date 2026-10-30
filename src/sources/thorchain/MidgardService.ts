@@ -4,7 +4,9 @@ import {
   type CacaoPrice,
   MIDGARD_LIST,
   POOL_PRICE_RULES,
+  POOL_SWAPS_RULES,
   type PoolPrice,
+  type PoolSwaps,
   RUNE_PRICE_RULES,
   type RunePrice,
 } from "../store/Sources.ts";
@@ -39,6 +41,9 @@ export function midgardAddress(address: string): string {
 
   return [...new Set([address.toLowerCase(), checksumAddress(address), address])].join(",");
 }
+
+// A pool price counts only if the pool was swapped within this many seconds before the bucket and after it
+const SWAPS_WINDOW = 24 * 60 * 60;
 
 // The start (Unix seconds) of the 5-minute history bucket holding `date`
 export function bucketStart(date: Date): number {
@@ -100,6 +105,9 @@ export class MidgardService {
     );
   }
 
+  // Price and swap-count records are filed by their bucket's start and given no date: an open bucket or window
+  // always ends, so it is fetched again however old its action is (with the action's date it would count as stuck
+  // after pendingStuckDays, docs/specs/snapshots.md)
   // RUNE's USD price in the 5-minute bucket holding `date`, as a `<source>-rune-price` record
   async getRunePrice(date: Date): Promise<RunePrice> {
     const start = bucketStart(date);
@@ -121,7 +129,6 @@ export class MidgardService {
         };
       },
       RUNE_PRICE_RULES,
-      date,
     );
   }
 
@@ -146,7 +153,6 @@ export class MidgardService {
         };
       },
       CACAO_PRICE_RULES,
-      date,
     );
   }
 
@@ -186,7 +192,41 @@ export class MidgardService {
         };
       },
       POOL_PRICE_RULES,
-      date,
+    );
+  }
+
+  // How many times a pool was swapped in the 24 hours before the bucket holding `date` and in the 24 hours after
+  // it, as a `<source>-pool-swaps` record keyed '<pool>.<bucket start>' (docs/specs/prices.md, Frozen pools)
+  async getPoolSwaps(pool: string, date: Date): Promise<PoolSwaps> {
+    const start = bucketStart(date);
+    const url = (from: number, to: number) => `${this.basePath}/v2/history/swaps?pool=${pool}&from=${from}&to=${to}`;
+    const count = async (from: number, to: number) => {
+      const total = (await http.get(url(from, to))).data?.meta?.totalCount;
+
+      if (total === undefined) {
+        throw new Error(`[Midgard] no swap count for ${pool} from ${from} to ${to}`);
+      }
+
+      return String(total);
+    };
+
+    return this.store.record<PoolSwaps>(
+      `${this.source}-pool-swaps`,
+      `${pool}.${start}`,
+      async () => {
+        const end = start + SWAPS_WINDOW;
+        return {
+          data: {
+            pool,
+            startTime: String(start),
+            before: await count(start - SWAPS_WINDOW, start),
+            after: await count(start, end),
+            final: isFinal({ endTime: String(end) }),
+          },
+          url: url(start - SWAPS_WINDOW, end),
+        };
+      },
+      POOL_SWAPS_RULES,
     );
   }
 

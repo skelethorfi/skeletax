@@ -120,6 +120,13 @@ export class PriceSource {
       usd = (await midgard.getCacaoPrice(time)).cacaoPriceUSD;
     } else {
       usd = (await midgard.getPoolPrice(key, time)).assetPriceUSD;
+
+      // A pool nothing swapped in the day before or the day after has a frozen price (docs/specs/prices.md, Frozen
+      // pools). Until the day after has ended it is judged on the day before; a later run fetches it again.
+      if (usd && Number(usd) > 0) {
+        const swaps = await midgard.getPoolSwaps(key, time);
+        usd = Number(swaps.before) > 0 && (!swaps.final || Number(swaps.after) > 0) ? usd : undefined;
+      }
     }
 
     return usd && Number(usd) > 0 ? usd : undefined;
