@@ -13,11 +13,17 @@ import { formatPrice } from "../src/export/summ/prices.ts";
 import { TaxConfig } from "../src/config/TaxConfig.ts";
 import { Exporter } from "../src/cli/Exporter.ts";
 
-// Answers every history request with one bucket: the one asked for
-const historyGet = (fields: (url: string) => object) => async (url: string) => {
-  const [startTime, endTime] = [/from=(\d+)/.exec(url)![1], /to=(\d+)/.exec(url)![1]];
-  return { data: { intervals: [{ startTime, endTime, ...fields(url) }] } } as any;
-};
+// Answers every history request with one bucket, the one asked for; a swaps request with `swaps` swaps
+const historyGet =
+  (fields: (url: string) => object, swaps = 10) =>
+  async (url: string) => {
+    if (url.includes("/history/swaps")) {
+      return { data: { intervals: [], meta: { totalCount: String(swaps) } } } as any;
+    }
+
+    const [startTime, endTime] = [/from=(\d+)/.exec(url)![1], /to=(\d+)/.exec(url)![1]];
+    return { data: { intervals: [{ startTime, endTime, ...fields(url) }] } } as any;
+  };
 
 const tempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-prices-"));
 
@@ -187,8 +193,38 @@ describe("reference prices (docs/specs/prices.md)", () => {
     assert.deepEqual(bundles[0].usdPrices, { "BTC.BTC": "100000", "THOR.RUNE": "2" });
     assert.equal(bundles[1].usdPrices, undefined);
     assert.equal(bundles[2].usdPrices, undefined);
-    assert.equal(get.mock.calls.length, 2);
+    // BTC.BTC's price and its swaps, and RUNE's price
+    assert.equal(get.mock.calls.length, 3);
     get.mock.restore();
+  });
+
+  test("a pool nothing swapped in the 24 hours up to the bucket has a frozen price: none", async () => {
+    const input = readCaseInput("test/cases/prices/lp-add-symmetric");
+    const priced = async (swaps: number) => {
+      const get = mock.method(
+        http,
+        "get",
+        historyGet(
+          (url) => (url.includes("/history/rune") ? { runePriceUSD: "2" } : { assetPriceUSD: "100000" }),
+          swaps,
+        ),
+      );
+      const midgard = new MidgardService(new RecordStore(tempDir()), "midgard", "https://midgard");
+      const bundle = await new PriceSource(new Map([["thorchain", midgard]])).add(toBundle(input));
+      const urls = get.mock.calls.map((call) => call.arguments[0]);
+      get.mock.restore();
+      return { usdPrices: bundle.usdPrices, urls };
+    };
+
+    const frozen = await priced(0);
+    // RUNE is not checked: its price comes from the deepest USD pools
+    assert.deepEqual(frozen.usdPrices, { "THOR.RUNE": "2" });
+    assert.ok(frozen.urls.includes("https://midgard/v2/history/swaps?pool=BTC.BTC&from=1738072500&to=1738158900"));
+    assert.deepEqual((await priced(1)).usdPrices, { "BTC.BTC": "100000", "THOR.RUNE": "2" });
+
+    // The LP token of an add from a frozen pool has no price either
+    const rows = runCase({ ...input, usdPrices: frozen.usdPrices }) as any[];
+    assert.equal(rows.find((row) => row.type === "receive-lp-token").referencePricePerUnit, undefined);
   });
 
   test("a derived price is a plain decimal", () => {

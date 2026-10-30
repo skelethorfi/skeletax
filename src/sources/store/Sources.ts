@@ -110,6 +110,20 @@ export interface PoolPrice {
 
 export const POOL_PRICE_RULES: RecordRules<PoolPrice> = RUNE_PRICE_RULES as RecordRules<any>;
 
+// A pool's swap count over the 24 hours up to the end of a 5-minute bucket (/v2/history/swaps?pool=), keyed
+// '<pool>.<bucket start>': none means the pool's price was frozen (docs/specs/prices.md, Frozen pools)
+export interface PoolSwaps {
+  pool: string;
+  // The bucket's start, and the window (Unix seconds)
+  startTime: string;
+  from: string;
+  to: string;
+  count: string;
+  final: boolean;
+}
+
+export const POOL_SWAPS_RULES: RecordRules<PoolSwaps> = RUNE_PRICE_RULES as RecordRules<any>;
+
 // Viewblock adds each amount's value at today's price (usdNew), which changes on every fetch and would make
 // every fetch look like a change in the source data. It is dropped before a tx is stored; the value at
 // the time of the tx (usd) is kept.
@@ -204,6 +218,8 @@ export const SOURCES: { [source: string]: ListSource | { kind: "record"; rules: 
   "midgard-rune-price": { kind: "record", rules: RUNE_PRICE_RULES },
   "midgard-pool-price": { kind: "record", rules: POOL_PRICE_RULES },
   "maya-midgard-pool-price": { kind: "record", rules: POOL_PRICE_RULES },
+  "midgard-pool-swaps": { kind: "record", rules: POOL_SWAPS_RULES },
+  "maya-midgard-pool-swaps": { kind: "record", rules: POOL_SWAPS_RULES },
   "maya-midgard-cacao-price": { kind: "record", rules: CACAO_PRICE_RULES },
   "viewblock-tx": { kind: "record", rules: VIEWBLOCK_TX_RULES },
   "evm-receipt": { kind: "record", rules: EVM_RECEIPT_RULES },
