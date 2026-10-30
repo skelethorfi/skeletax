@@ -77,6 +77,10 @@ side's own price). That covers what Summ cannot price itself:
   `Spam` price-helper row holding the same assets, which Summ prices itself,
   so its value can be compared with the token's.
 
+Rows already in Summ keep the price they were uploaded with. Summ sync sets the
+reference price on those it manages, listed apart in its plan
+([specs/summ-sync.md](specs/summ-sync.md#prices)).
+
 Copy a value by hand only where a row has no reference price: a token row
 left blank (a Maya liquidity-auction position, one holding an asset Midgard
 has no price for or a pool that was frozen, an action that is not `success`,

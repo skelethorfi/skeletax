@@ -174,17 +174,13 @@ fetches them for every case it adds.
 
 ## Summ sync
 
-Summ sync does not compare prices (`summ-sync.md`, Compared fields). A row
-already in Summ keeps the price it was uploaded with: turning `"all"` on
-changes no plan, so those rows keep Summ's market price until they are
-deleted and uploaded again, or their price is edited. Setting the price of
-rows already in Summ is a follow-up, decided after comparing the reference
-prices with Summ's own (below).
+Summ sync sets the reference price of managed rows already in Summ, and keeps
+a record of the USD price each leg holds, since Summ does not (`summ-sync.md`,
+Prices). Categorised rows' legs keep Summ's market price.
 
 ## Open
 
 - Reference prices on every row are the chosen treatment and the default.
-  Still to do: Summ sync setting the price of rows already in Summ.
 
 ## Tests
 

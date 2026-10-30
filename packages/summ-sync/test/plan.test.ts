@@ -9,7 +9,7 @@ import type { Row, RunFile } from "../src/run.ts";
 import type { Leg } from "../src/snapshot.ts";
 import type { Override } from "../src/state.ts";
 import { mergeTables, readOverrides } from "../src/state.ts";
-import { renderPlan, uploadFiles, writePlan } from "../src/write-plan.ts";
+import { priceLines, renderPlan, uploadedPrices, uploadFiles, writePlan } from "../src/write-plan.ts";
 import { categorisedTxids } from "../src/pull.ts";
 import { summType } from "../src/summ-types.ts";
 
@@ -1890,4 +1890,275 @@ test("CSV types map to the trade Summ holds for them", () => {
   // Summ's enum has `collateral`, not `collateralDeposit`: a CSV collateral-deposit row is held as `collateral`
   assert.deepEqual(summType("collateral-deposit"), { side: "outgoing", trade: "collateral" });
   assert.deepEqual(summType("collateral-withdrawal"), { side: "incoming", trade: "collateralWithdrawal" });
+});
+
+const priced = (over: Partial<Row> = {}) => row({ referencePrice: "2.5", referencePriceCurrency: "USD", ...over });
+const pricedLegs = (r: Row, over: Partial<Leg> = {}) => legsOf(r, { price: 3.9, ...over });
+const priceEdits = (p: ReturnType<typeof plan>["plan"]) =>
+  p.edit.flatMap((e) => e.changes).filter((c) => c.field === "price");
+// What apply logs for one price edit: the line before the call, then the result
+const priceLine = (legId: string, value: number, after: number | null) => [
+  { legId, field: "price", value, intent: true },
+  { legId, field: "price", value, after },
+];
+const priceHistory = (...lines: string[]) => new Map([["action1", lines]]);
+const USER_PRICE = "30 Oct 2026 20:39 · user · Price: EUR 3.90 → EUR 3.95";
+const UNDO_PRICE = "30 Oct 2026 20:40 · undo · Price: EUR 3.95 → EUR 3.90";
+const priceOverride = (r: Row, retainUserEdit: Override["retainUserEdit"], summ = 3.9): Override => ({
+  id: r.id,
+  leg: "base",
+  field: "price",
+  run: 2.5,
+  summ,
+  seenAt: "",
+  reason: "",
+  retainUserEdit,
+});
+
+test("price: a leg with no recorded price is edited, in USD", () => {
+  const r = priced();
+  const legs = pricedLegs(r);
+  assert.deepEqual(priceEdits(plan({ rows: [r], legs }).plan), [
+    { leg: "base", legId: legs[0].legId, field: "price", summ: 3.9, desired: 2.5 },
+  ]);
+});
+
+test("price: a row with no reference price is left alone", () => {
+  const r = row();
+  assert.deepEqual(priceEdits(plan({ rows: [r], legs: pricedLegs(r) }).plan), []);
+});
+
+test("price: the plan is empty after the sync's own edit, with or without a history line for it", () => {
+  const r = priced();
+  const legs = pricedLegs(r);
+  for (const history of [priceHistory(USER_PRICE), priceHistory()]) {
+    const p = plan({ rows: [r], legs, history, applyLog: priceLine(legs[0].legId, 2.5, 3.9) }).plan;
+    assert.deepEqual(priceEdits(p), []);
+    assert.deepEqual(p.overridden, []);
+  }
+});
+
+test("price: a moved reference price is edited again", () => {
+  const r = priced({ referencePrice: "2.6" });
+  const legs = pricedLegs(r);
+  const p = plan({ rows: [r], legs, applyLog: priceLine(legs[0].legId, 2.5, 3.9) }).plan;
+  assert.deepEqual(
+    priceEdits(p).map((c) => c.desired),
+    [2.6],
+  );
+});
+
+test("price: an uploaded leg's price comes from the plan's upload file", () => {
+  const r = priced();
+  const legs = pricedLegs(r, { priceValueCurrency: "USD" });
+  assert.deepEqual(priceEdits(plan({ rows: [r], legs, uploadedPrices: new Map([[r.id, 2.5]]) }).plan), []);
+  assert.equal(priceEdits(plan({ rows: [r], legs }).plan).length, 1);
+});
+
+test("price: the USD mark an undo left behind is not trusted, and the undone edit is no drift", () => {
+  const r = priced();
+  const legs = pricedLegs(r, { priceValueCurrency: "USD" });
+  const p = plan({
+    rows: [r],
+    legs,
+    uploadedPrices: new Map([[r.id, 2.5]]),
+    history: priceHistory(USER_PRICE, UNDO_PRICE),
+  }).plan;
+  assert.equal(priceEdits(p).length, 1);
+  assert.deepEqual(p.overridden, []);
+});
+
+test("price: a price the user set, with no edit of the sync's, is captured and kept", () => {
+  const r = priced();
+  const p = plan({ rows: [r], legs: pricedLegs(r), history: priceHistory(USER_PRICE) }).plan;
+  assert.deepEqual(priceEdits(p), []);
+  assert.deepEqual(
+    p.overridden.map((o) => [o.kind, o.override.field, o.override.summ]),
+    [["captured", "price", 3.9]],
+  );
+});
+
+test("price: a local price other than the one after the sync's edit is captured, however the history reads", () => {
+  const r = priced();
+  const legs = pricedLegs(r);
+  for (const history of [priceHistory(USER_PRICE, USER_PRICE), priceHistory()]) {
+    const p = plan({ rows: [r], legs, history, applyLog: priceLine(legs[0].legId, 2.5, 3.8) }).plan;
+    assert.deepEqual(priceEdits(p), []);
+    assert.deepEqual(
+      p.overridden.map((o) => o.kind),
+      ["captured"],
+    );
+  }
+});
+
+test("price: retainUserEdit no sets the run's price over the sync's earlier edit, and is clean after", () => {
+  const r = priced();
+  const legs = pricedLegs(r);
+  const overrides = [priceOverride(r, "no")];
+  const before = plan({ rows: [r], legs, overrides, applyLog: priceLine(legs[0].legId, 2.5, 3.8) }).plan;
+  assert.equal(priceEdits(before).length, 1);
+  const moved = legs.map((l) => ({ ...l, price: 3.85 }));
+  const after = plan({
+    rows: [r],
+    legs: moved,
+    overrides,
+    applyLog: [...priceLine(legs[0].legId, 2.5, 3.8), ...priceLine(legs[0].legId, 2.5, 3.85)],
+  }).plan;
+  assert.deepEqual(priceEdits(after), []);
+  assert.deepEqual(after.overridden, []);
+});
+
+test("price: a kept override holds with no history left to show it, until the price moves", () => {
+  const r = priced();
+  const legs = pricedLegs(r);
+  assert.deepEqual(priceEdits(plan({ rows: [r], legs, overrides: [priceOverride(r, "yes")] }).plan), []);
+  const moved = plan({
+    rows: [r],
+    legs,
+    overrides: [priceOverride(r, "yes", 4)],
+    history: priceHistory(USER_PRICE),
+  }).plan;
+  assert.deepEqual(
+    moved.overridden.map((o) => o.kind),
+    ["captured"],
+  );
+});
+
+test("price: a failed read-back is no drift: the edit is made again", () => {
+  const r = priced();
+  const legs = pricedLegs(r);
+  const p = plan({
+    rows: [r],
+    legs,
+    history: priceHistory(USER_PRICE),
+    applyLog: priceLine(legs[0].legId, 2.5, null),
+  }).plan;
+  assert.equal(priceEdits(p).length, 1);
+  assert.deepEqual(p.overridden, []);
+});
+
+test("price: after a failed read-back, a further edit in the history or a null price is not taken as the sync's", () => {
+  const r = priced();
+  const legs = pricedLegs(r);
+  const lines = priceLine(legs[0].legId, 2.5, null);
+  const edited = plan({ rows: [r], legs, history: priceHistory(USER_PRICE, USER_PRICE), applyLog: lines }).plan;
+  assert.deepEqual(priceEdits(edited), []);
+  assert.deepEqual(
+    edited.overridden.map((o) => o.kind),
+    ["captured"],
+  );
+  const unpriced = legs.map((l) => ({ ...l, price: null }));
+  assert.equal(priceEdits(plan({ rows: [r], legs: unpriced, applyLog: lines }).plan).length, 1);
+});
+
+test("price: a crash after the edit is not taken for the user's edit; the edit is made again", () => {
+  const r = priced();
+  const legs = pricedLegs(r);
+  const applyLog = priceLine(legs[0].legId, 2.5, null).slice(0, 1);
+  const p = plan({ rows: [r], legs, history: priceHistory(USER_PRICE), applyLog }).plan;
+  assert.equal(priceEdits(p).length, 1);
+  assert.deepEqual(p.overridden, []);
+});
+
+test("price: retainUserEdit no is honoured with no history and an upload file at the run's price", () => {
+  const r = priced();
+  const legs = pricedLegs(r, { priceValueCurrency: "USD" });
+  const p = plan({
+    rows: [r],
+    legs,
+    overrides: [priceOverride(r, "no")],
+    uploadedPrices: new Map([[r.id, 2.5]]),
+  }).plan;
+  assert.equal(priceEdits(p).length, 1);
+});
+
+test("price: a price other than the one decided on is captured with no history, whatever the decision", () => {
+  const r = priced();
+  const legs = pricedLegs(r, { priceValueCurrency: "USD" });
+  for (const decision of ["yes", "no", "undecided"] as const) {
+    const p = plan({
+      rows: [r],
+      legs,
+      overrides: [priceOverride(r, decision, 4)],
+      uploadedPrices: new Map([[r.id, 2.5]]),
+    }).plan;
+    assert.deepEqual(priceEdits(p), []);
+    assert.deepEqual(
+      p.overridden.map((o) => o.kind),
+      ["captured"],
+    );
+  }
+});
+
+test("price: the sync's edit of one leg is no drift for the other leg of its action", () => {
+  const a = priced();
+  const b = priced({ id: "2024-03-01T10:00:00.000Z.in.bbbbbbbbbbbb", type: "receive" });
+  const legs = [...pricedLegs(a), ...pricedLegs(b)];
+  const p = plan({
+    rows: [a, b],
+    legs,
+    history: priceHistory(USER_PRICE),
+    applyLog: priceLine(legs[0].legId, 2.5, 3.9),
+  }).plan;
+  assert.deepEqual(
+    priceEdits(p).map((c) => c.legId),
+    [legs[1].legId],
+  );
+  assert.deepEqual(p.overridden, []);
+});
+
+test("price: a recorded price the run no longer has is reported", () => {
+  const r = row();
+  const legs = pricedLegs(r);
+  const p = plan({ rows: [r], legs, applyLog: priceLine(legs[0].legId, 2.5, 3.9) }).plan;
+  assert.deepEqual(
+    p.report.map((e) => e.kind),
+    ["price-blank"],
+  );
+  assert.deepEqual(priceEdits(p), []);
+});
+
+test("price: a held row gets no price edit", () => {
+  const r = priced();
+  const config = { ...CONFIG, hold: [{ id: r.id, reason: "pending" }] };
+  assert.deepEqual(priceEdits(plan({ rows: [r], legs: pricedLegs(r), config }).plan), []);
+});
+
+test("price: uploadedPrices reads the newest plan's upload file, and a blank price clears an older one", () => {
+  const dir = mkdtempSync(join(tmpdir(), "summ-sync-"));
+  const header = "ID (Optional),Reference Price Per Unit (Optional),Reference Price Currency (Optional)";
+  const write = (plan: string, lines: string[]) => {
+    mkdirSync(join(dir, "plans", plan, "upload"), { recursive: true });
+    writeFileSync(join(dir, "plans", plan, "upload", "f.csv"), [header, ...lines].join("\n") + "\n");
+  };
+  write("2026-01-01T00-00-00", ["a,1.5,USD", "b,2.5,USD", "c,3.5,USD"]);
+  write("2026-01-02T00-00-00", ["b,2.75,USD", "c,,"]);
+  assert.deepEqual(
+    [...uploadedPrices(dir)],
+    [
+      ["a", 1.5],
+      ["b", 2.75],
+    ],
+  );
+});
+
+test("price: plan.md lists price edits apart, the rate furthest from the median at the head", () => {
+  const entry = (id: string, legId: string, summ: number, desired: number) => ({
+    id,
+    filed: false,
+    actionId: "a",
+    changes: [{ leg: "base" as const, legId, field: "price", summ, desired }],
+  });
+  const text = priceLines(
+    [entry("near", "l1", 1.5, 1), entry("mid", "l2", 3, 2), entry("far", "l3", 90, 3), entry("zero", "l4", 0, 5)],
+    new Map([
+      ["l1", 100],
+      ["l2", 1],
+      ["l3", 1],
+    ]),
+  ).join("\n");
+  assert.match(text, /Median rate 1\.5000/);
+  assert.equal(text.split("| zero |").length, 2);
+  assert.ok(text.indexOf("| far |") < text.indexOf("| near |"));
+  assert.ok(text.lastIndexOf("| near |") < text.lastIndexOf("| far |"));
 });

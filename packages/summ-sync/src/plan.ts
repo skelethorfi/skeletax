@@ -18,6 +18,8 @@ export interface PlanInput {
   adopted: Map<string, string>;
   overrides: Override[];
   applyLog: AppliedEdit[];
+  /** The USD price of each row in the newest upload file holding it (plans/<time>/upload). */
+  uploadedPrices?: Map<string, number>;
   now: string;
   /** plan --only: the scope's entries (scopeMatch); the plan covers only the rows they match. */
   scope?: string[];
@@ -76,7 +78,8 @@ export interface ReportEntry {
     | "extra-overlap"
     | "manual-entry"
     | "other-source"
-    | "foreign-pair";
+    | "foreign-pair"
+    | "price-blank";
   filed: boolean;
   id?: string;
   legIds?: string[];
@@ -368,6 +371,67 @@ export function makePlan(input: PlanInput): PlanResult {
     return { ...change, desired };
   }
 
+  // Prices: Summ keeps no USD figure, so the USD price a leg holds comes from the sync's own records: the local
+  // price Summ showed after the sync's edit says whether that edit still stands (spec: Prices).
+  function priceChange(row: Row, base: Leg): Change | null {
+    const history = input.history.get(base.actionId) ?? [];
+    const count = (who: string) => history.filter((h) => h.split(` · ${who} · `)[1]?.includes("Price:")).length;
+    const users = count("user");
+    const own = input.applyLog.filter((e) => e.field === "price" && e.legId === base.legId).at(-1);
+    const summ = base.price ?? null;
+    const stands = own?.after != null && same("price", own.after, summ);
+    const found = overrides.find((o) => o.id === row.id && o.leg === "base" && o.field === "price");
+    const decided = found && same("price", found.summ, summ);
+    // A decision on this very price says the price is not the sync's, whatever the mark says
+    const recorded = stands
+      ? Number(own.value)
+      : !own && !decided && users === 0 && base.priceValueCurrency === "USD"
+        ? (input.uploadedPrices?.get(row.id) ?? null)
+        : null;
+    // Not the sync's price: its edit no longer stands, a price other than the one decided on, or more edits in the
+    // action's history than the sync's own edits of its legs. A read-back that failed (after null) says no more than
+    // that, so the edit is made again
+    const actionLegs = new Set((legsByAction.get(base.actionId) ?? [base]).map((l) => l.legId));
+    const lines = input.applyLog.filter((e) => e.intent && e.field === "price" && actionLegs.has(e.legId)).length;
+    const foreign =
+      !stands && (own?.after != null || (found !== undefined && !decided) || users - count("undo") > lines);
+
+    const desired = row.referencePrice && row.referencePriceCurrency === "USD" ? Number(row.referencePrice) : null;
+    if (desired === null) {
+      if (recorded !== null)
+        plan.report.push({
+          kind: "price-blank",
+          filed: isFiled(row.timestamp),
+          id: row.id,
+          legIds: [base.legId],
+          detail: `the row has no reference price now; Summ holds US$${recorded} from an earlier one, and an edit cannot give the price back to Summ`,
+        });
+      return null;
+    }
+    if (decided && found.retainUserEdit !== "no") {
+      if (!same("price", found.run, desired))
+        plan.overridden.push({ kind: "run-changed", override: found, runNow: desired });
+      if (found.retainUserEdit === "undecided") plan.overridden.push({ kind: "undecided", override: found });
+      return null;
+    }
+    if (foreign && !decided) {
+      const captured: Override = {
+        id: row.id,
+        leg: "base",
+        field: "price",
+        run: desired,
+        summ,
+        seenAt: now,
+        reason: "",
+        retainUserEdit: "undecided",
+      };
+      overrides = [...overrides.filter((o) => o !== found), captured];
+      plan.overridden.push({ kind: "captured", override: captured });
+      return null;
+    }
+    return recorded === desired ? null : { leg: "base", legId: base.legId, field: "price", summ, desired };
+  }
+
   function compare(leg: Leg, role: LegRole, field: keyof Leg, desired: Value): Change[] {
     const summ = leg[field] as Value;
     return same(field, summ, desired) ? [] : [{ leg: role, legId: leg.legId, field, summ, desired }];
@@ -655,6 +719,8 @@ export function makePlan(input: PlanInput): PlanResult {
     ]
       .map((c) => resolve(row.id, base.actionId, c))
       .filter((c): c is Change => c !== null);
+    const price = priceChange(row, base);
+    if (price) changes.push(price);
     if (changes.length) plan.edit.push({ id: row.id, filed: isFiled(row.timestamp), actionId: base.actionId, changes });
   }
 

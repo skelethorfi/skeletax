@@ -22,7 +22,7 @@
 import { appendFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { type ActionDetail, parseActions, parseDetail } from "./parse.ts";
-import { type DeleteEntry, type EditEntry, type Plan, same } from "./plan.ts";
+import { type Change, type DeleteEntry, type EditEntry, type Plan, same } from "./plan.ts";
 import { type Leg, latestSnapshot, legsOf, readSnapshotFile, storeAction } from "./snapshot.ts";
 import { mergeTables } from "./state.ts";
 
@@ -119,6 +119,39 @@ async function lookUp(client: ToolCaller, legId: string): Promise<Found | null> 
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** The rebuilt actions an edit's result names (one line, ids after the colon). */
+export function affectedActions(text: string): string[] {
+  const ids = text.match(/Affected Action IDs[^\n:]*:\**\s*([^\n]+)/i)?.[1] ?? "";
+  return ids.split(/[\s,]+/).filter(Boolean);
+}
+
+/**
+ * The local price Summ holds after a price edit, or null when unconfirmed: nothing is assumed. Summ's search lags a
+ * write, so this reads the actions the edit names. An unchanged price cannot tell an edit that moved nothing from a
+ * stale read or a lost edit; updatedAt moves in all of these only when the edit landed, and the mark must be there.
+ */
+async function readBackPrice(
+  client: ToolCaller,
+  result: string,
+  legId: string,
+  before: string | undefined,
+  settleMs: number,
+): Promise<number | null> {
+  for (let i = 0; i < 3; i++) {
+    if (i) await sleep(settleMs);
+    for (const actionId of affectedActions(result)) {
+      const leg = await client
+        .callTool("inspect_transaction", { actionId })
+        .then((text) => legsOf(parseDetail(text)).find((l) => l.legId === legId))
+        .catch(() => undefined);
+      if (!leg) continue;
+      const moved = leg.updatedAt && before && Date.parse(leg.updatedAt) > Date.parse(before);
+      if (moved && leg.priceValueCurrency === "USD") return leg.price ?? null;
+    }
+  }
+  return null;
+}
+
 export async function applyPlan(
   client: ToolCaller,
   plan: PlanFile,
@@ -130,6 +163,7 @@ export async function applyPlan(
   /** The state dir, whose action store keeps each action before it is deleted. */
   stateDir: string | null = null,
 ): Promise<ApplyResult> {
+  const edited = new Set<string>();
   const result: ApplyResult = { deleted: 0, split: 0, edited: 0, heldBack: 0, skipped: [], uploads: [] };
   const write = opts.dryRun ? null : log;
   const skip = (id: string | null, reason: string, extra: Record<string, unknown> = {}): false => {
@@ -302,6 +336,8 @@ export async function applyPlan(
 
   /** True when the edit was made. */
   async function editLegs(kind: string, entry: EditEntry): Promise<boolean> {
+    // Summ's search lags a write: another row of an action just edited could be read, and edited, as it was
+    if (edited.has(entry.actionId)) await sleep(settleMs);
     const found = await lookUp(client, entry.changes[0].legId);
     if (!found) return skip(entry.id, `leg ${entry.changes[0].legId} is no longer in Summ`);
     for (const change of entry.changes) {
@@ -317,7 +353,13 @@ export async function applyPlan(
       }
     }
     const byLeg = new Map<string, Record<string, unknown>>();
-    for (const c of entry.changes) byLeg.set(c.legId, { ...byLeg.get(c.legId), [c.field]: c.desired });
+    for (const c of entry.changes)
+      byLeg.set(c.legId, {
+        ...byLeg.get(c.legId),
+        [c.field]: c.desired,
+        // Summ converts a USD price at its own rate (spec: Prices)
+        ...(c.field === "price" ? { priceValueCurrency: "USD" } : {}),
+      });
     const args = {
       actionId: found.actionId,
       edits: [...byLeg].map(([transactionId, updates]) => ({ transactionId, updates })),
@@ -329,23 +371,42 @@ export async function applyPlan(
       say(`  would ${kind} ${entry.id}: ${summary}`);
       return true;
     }
-    const text = await client.callTool("edit_transaction", args);
-    result.edited++;
-    const undo = undoHandle(text);
-    // One line per change, in the shape plan reads back (legId, field, value) to tell the sync's own edits from drift
-    for (const c of entry.changes)
+    // Written before the edit: a crash or a lost answer leaves a price edit unconfirmed, not unrecorded
+    const priced = entry.changes.find((c) => c.field === "price");
+    if (priced)
       write({
         call: "edit_transaction",
         kind,
         id: entry.id,
         actionId: found.actionId,
-        legId: c.legId,
-        field: c.field,
-        from: c.summ,
-        value: c.desired,
-        undo,
+        legId: priced.legId,
+        field: "price",
+        from: priced.summ,
+        value: priced.desired,
+        intent: true,
       });
+    const text = await client.callTool("edit_transaction", args);
+    result.edited++;
+    const undo = undoHandle(text);
+    // One line per change, in the shape plan reads back (legId, field, value) to tell the sync's own edits from drift
+    const line = (c: Change) => ({
+      call: "edit_transaction",
+      kind,
+      id: entry.id,
+      actionId: found.actionId,
+      legId: c.legId,
+      field: c.field,
+      from: c.summ,
+      value: c.desired,
+      undo,
+    });
+    for (const c of entry.changes) if (c !== priced) write(line(c));
     write({ call: "edit_transaction", kind, id: entry.id, actionId: found.actionId, undo, result: text });
+    if (priced) {
+      const before = found.legs.find((l) => l.legId === priced.legId)?.updatedAt;
+      write({ ...line(priced), after: await readBackPrice(client, text, priced.legId, before, settleMs) });
+    }
+    edited.add(entry.actionId);
     say(`  ${kind} ${entry.id}: ${summary}${undo ? ` (undo ${undo})` : ""}`);
     return true;
   }

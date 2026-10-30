@@ -4,7 +4,7 @@ import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { actionsWithTxids, pull } from "../src/pull.ts";
-import { legsOf, readAction, readSnapshot, readSnapshotFile } from "../src/snapshot.ts";
+import { legsOf, readAction, readSnapshot, readSnapshotFile, syncView } from "../src/snapshot.ts";
 
 test("actionsWithTxids finds listed actions by tx hash, in any case and with or without 0x", () => {
   const txid = "ab".repeat(32);
@@ -147,4 +147,13 @@ test("legsOf keeps a fee Summ holds on the leg itself, by its currency symbol or
       [undefined, undefined],
     ],
   );
+});
+
+test("syncView leaves out updatedAt, which Summ moves under the same id, and keeps the price", () => {
+  const detail = (updatedAt: string, price: number) => ({
+    action: { _id: "a", incoming: [{ _id: "l", id: "x", trade: "income", quantity: 1, updatedAt, price }] },
+    history: [],
+  });
+  assert.equal(syncView(detail("2026-01-01", 1) as never), syncView(detail("2026-01-02", 1) as never));
+  assert.notEqual(syncView(detail("2026-01-01", 1) as never), syncView(detail("2026-01-01", 2) as never));
 });

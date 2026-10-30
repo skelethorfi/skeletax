@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  affectedActions,
   applyPlan,
   checkFresh,
   runApply,
@@ -19,6 +20,9 @@ import type { DeleteEntry, EditEntry } from "../src/plan.ts";
 const OPTS: ApplyOptions = { approveDeletes: false, approveFiled: false, dryRun: false };
 
 interface FakeLeg {
+  price?: number;
+  priceValueCurrency?: string;
+  updatedAt?: string;
   _id: string;
   trade: string;
   quantity: string;
@@ -58,7 +62,9 @@ class FakeSumm implements ToolCaller {
     if (name === "edit_transaction") {
       const legs = this.actions.get(args.actionId as string) as FakeLeg[];
       for (const { transactionId, updates } of args.edits as { transactionId: string; updates: Partial<FakeLeg> }[]) {
-        Object.assign(legs.find((l) => l._id === transactionId) as FakeLeg, updates);
+        Object.assign(legs.find((l) => l._id === transactionId) as FakeLeg, updates, {
+          updatedAt: new Date(Date.UTC(2026, 0, 2, 0, 0, this.n)).toISOString(),
+        });
       }
       this.actions.delete(args.actionId as string);
       const next = `rebuilt${++this.n}`;
@@ -69,7 +75,7 @@ class FakeSumm implements ToolCaller {
       if (this.splits && madeUp.length) this.actions.set(`alone${this.n}`, madeUp);
       if (this.splits && ignored.length && ignored.length < legs.length) this.actions.set(`ignored${this.n}`, ignored);
       this.actions.set(next, this.splits ? legs.filter((l) => !madeUp.includes(l) && !ignored.includes(l)) : legs);
-      return `Edited 1 action.\n- **Bulk Edit ID**: \`undo${this.n}abcdef\`\n- **Affected Action IDs**: ${next}`;
+      return `Edited 1 action.\nAffected Action IDs (rebuilt — these replace the requested id): ${next}\n- **Bulk Edit ID**: \`undo${this.n}abcdef\``;
     }
     if (name === "bulk_edit_transactions") {
       if (args.filter) throw new Error("a write selected by filter");
@@ -156,6 +162,88 @@ test("an edit looks the leg up again, edits it in its current action and logs th
   });
   const change = log.find((l) => l.legId === "leg-1");
   assert.deepEqual([change?.field, change?.value, change?.undo], ["trade", "bridgeTradeOut", "undo1abcdef"]);
+});
+
+const STALE = "2026-01-01T00:00:00.000Z";
+const priceChange = (desired = 2.5): EditEntry["changes"] => [
+  { leg: "base", legId: "leg-1", field: "price", summ: 3.9, desired },
+];
+const pricedLeg = () => ({ _id: "leg-1", trade: "income", quantity: "1", price: 3.9, updatedAt: STALE });
+
+test("a price edit logs its line first, sends USD, and logs the price read straight from the rebuilt action", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [pricedLeg()]);
+  const { result, log } = await run(summ, planFile({ edit: [edit({ changes: priceChange() })] }));
+  assert.equal(result.edited, 1);
+  const edits = summ.calls.filter((c) => c.name === "edit_transaction");
+  assert.deepEqual(edits[0].args, {
+    actionId: "a",
+    edits: [{ transactionId: "leg-1", updates: { price: 2.5, priceValueCurrency: "USD" } }],
+  });
+  const lines = log.filter((l) => l.legId === "leg-1");
+  assert.deepEqual(
+    lines.map((l) => [l.intent, l.value, "after" in l]),
+    [
+      [true, 2.5, false],
+      [undefined, 2.5, true],
+    ],
+  );
+  // Read by the id the edit named, never through the search
+  const last = summ.calls.at(-1);
+  assert.deepEqual([last?.name, last?.args.actionId], ["inspect_transaction", "rebuilt1"]);
+  assert.equal(lines[1].after, 2.5);
+});
+
+test("a price edit that moved nothing is confirmed by updatedAt, at the first read", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [pricedLeg()]);
+  const moved = summ.callTool.bind(summ);
+  // Summ converts the same USD at the same rate: the local price stays
+  summ.callTool = async (name: string, args: Record<string, unknown>) => {
+    const text = await moved(name, args);
+    return name === "inspect_transaction" ? text.replace('"price":2.5', '"price":3.9') : text;
+  };
+  const { log } = await run(summ, planFile({ edit: [edit({ changes: priceChange() })] }));
+  assert.equal(log.find((l) => l.legId === "leg-1" && !l.intent)?.after, 3.9);
+  assert.equal(summ.calls.filter((c) => c.name === "inspect_transaction").length, 2);
+});
+
+test("a price edit is unconfirmed, not assumed, when updatedAt never moves, whatever the price shows", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [pricedLeg()]);
+  const real = summ.callTool.bind(summ);
+  summ.callTool = async (name: string, args: Record<string, unknown>) => {
+    const text = await real(name, args);
+    return name === "inspect_transaction" ? text.replace(/"updatedAt":"[^"]*"/, `"updatedAt":"${STALE}"`) : text;
+  };
+  const { log } = await run(summ, planFile({ edit: [edit({ changes: priceChange() })] }));
+  assert.equal(log.find((l) => l.legId === "leg-1" && !l.intent)?.after, null);
+});
+
+test("a price edit is unconfirmed when its result names no action, and the log still holds it", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [pricedLeg()]);
+  const real = summ.callTool.bind(summ);
+  summ.callTool = async (name: string, args: Record<string, unknown>) => {
+    const text = await real(name, args);
+    return name === "edit_transaction" ? text.replace(/Affected Action IDs.*\n/, "") : text;
+  };
+  const { result, log } = await run(summ, planFile({ edit: [edit({ changes: priceChange() })] }));
+  assert.equal(result.edited, 1);
+  assert.equal(log.find((l) => l.legId === "leg-1" && !l.intent)?.after, null);
+});
+
+test("affectedActions reads one or several ids from Summ's wording", () => {
+  assert.deepEqual(affectedActions("x\nAffected Action IDs (rebuilt — these replace the requested id): abc\nEditing"), [
+    "abc",
+  ]);
+  assert.deepEqual(
+    affectedActions(
+      "Affected Action IDs (rebuilt — these replace the requested ids, and grouping can change the count): a, b\n",
+    ),
+    ["a", "b"],
+  );
+  assert.deepEqual(affectedActions("Patched"), []);
 });
 
 test("several changes of one leg go in one edit", async () => {
