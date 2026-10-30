@@ -163,6 +163,7 @@ export async function applyPlan(
   /** The state dir, whose action store keeps each action before it is deleted. */
   stateDir: string | null = null,
 ): Promise<ApplyResult> {
+  const edited = new Set<string>();
   const result: ApplyResult = { deleted: 0, split: 0, edited: 0, heldBack: 0, skipped: [], uploads: [] };
   const write = opts.dryRun ? null : log;
   const skip = (id: string | null, reason: string, extra: Record<string, unknown> = {}): false => {
@@ -332,8 +333,6 @@ export async function applyPlan(
     });
     say(`  ignored the made-up leg of ${id}${undo ? ` (undo ${undo})` : ""}`);
   }
-
-  const edited = new Set<string>();
 
   /** True when the edit was made. */
   async function editLegs(kind: string, entry: EditEntry): Promise<boolean> {
