@@ -370,15 +370,16 @@ hide its noise.
 
 **The recorded price.** History lines show a rounded local price to the
 minute, so they cannot be matched to an edit by value; they are counted. An
-action's net `Price` changes are its `user` lines less its `undo` lines (an
-undo's mark stays, its price does not). The USD price a leg holds is:
+action's live `Price` changes are its `user` lines less its `undo` lines. The
+USD price a leg holds is:
 
-1. when the net changes equal the `price` lines `apply-log.jsonl` has for the
-   action's legs, and there is at least one for this leg: the value of the
-   leg's latest line;
-2. when there are no net changes, no such line, and no `undo` line, and the leg
-   is marked USD: the reference price of the row in the newest
-   `plans/*/upload/` file holding its ID, if any;
+1. when the log has `price` lines for the leg and the action has live changes:
+   the value of the leg's latest line. (When the last of several edits was
+   undone this is out of date; the sync does not undo, and the user sees it in
+   Summ's history.)
+2. with no such line, no `user` line, and the leg marked USD: the reference
+   price of the row in the newest `plans/*/upload/` file holding its ID, if any.
+   A row uploaded outside a plan has none, and is edited once;
 3. otherwise none: the leg holds a price the sync knows nothing about.
 
 **Plan.** For a managed base leg (not a held row, not a fee or quote leg,
@@ -395,11 +396,15 @@ Prices are compared as the numbers the CSV and the log hold, with no
 tolerance. Every price comes from a stored Midgard record, so a replay gives
 the same number, and a difference is a real change.
 
-Net changes above the log's lines are drift, handled as in Drift and overrides: the user's value is kept
-and captured as `undecided`. The override's `run` is in USD and its `summ` in
-the local currency. A price edit carries no fields of the row's other
-sections, and a row planned for delete and upload gets no price edit: the
-upload carries its price.
+Live changes above the log's `price` lines for the action's legs are drift,
+handled as in Drift and overrides: the user's price is kept and captured as
+`undecided`. The override's `run` is in USD and its `summ` in the local
+currency, and it records that `excess`, so that after `retainUserEdit: "no"`
+those changes no longer count as drift and the sync's edit is not captured in
+its turn. An edit the user made and undid is not drift.
+
+A row planned for delete and upload gets no price edit: the upload carries its
+price.
 
 A row dated before `filedBefore` is an amendment, like any other edit: it
 needs `--approve-filed`.

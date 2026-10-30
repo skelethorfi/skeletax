@@ -317,7 +317,13 @@ export async function applyPlan(
       }
     }
     const byLeg = new Map<string, Record<string, unknown>>();
-    for (const c of entry.changes) byLeg.set(c.legId, { ...byLeg.get(c.legId), [c.field]: c.desired });
+    for (const c of entry.changes)
+      byLeg.set(c.legId, {
+        ...byLeg.get(c.legId),
+        [c.field]: c.desired,
+        // Summ converts a USD price at its own rate (spec: Prices)
+        ...(c.field === "price" ? { priceValueCurrency: "USD" } : {}),
+      });
     const args = {
       actionId: found.actionId,
       edits: [...byLeg].map(([transactionId, updates]) => ({ transactionId, updates })),

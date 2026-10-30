@@ -19,6 +19,7 @@ import type { DeleteEntry, EditEntry } from "../src/plan.ts";
 const OPTS: ApplyOptions = { approveDeletes: false, approveFiled: false, dryRun: false };
 
 interface FakeLeg {
+  price?: number;
   _id: string;
   trade: string;
   quantity: string;
@@ -156,6 +157,21 @@ test("an edit looks the leg up again, edits it in its current action and logs th
   });
   const change = log.find((l) => l.legId === "leg-1");
   assert.deepEqual([change?.field, change?.value, change?.undo], ["trade", "bridgeTradeOut", "undo1abcdef"]);
+});
+
+test("a price edit sends the USD price with its currency and logs the USD price", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [{ _id: "leg-1", trade: "income", quantity: "1", price: 3.9 }]);
+  const changes: EditEntry["changes"] = [{ leg: "base", legId: "leg-1", field: "price", summ: 3.9, desired: 2.5 }];
+  const { result, log } = await run(summ, planFile({ edit: [edit({ changes })] }));
+  assert.equal(result.edited, 1);
+  const call = summ.calls.find((c) => c.name === "edit_transaction");
+  assert.deepEqual(call?.args, {
+    actionId: "a",
+    edits: [{ transactionId: "leg-1", updates: { price: 2.5, priceValueCurrency: "USD" } }],
+  });
+  const change = log.find((l) => l.legId === "leg-1");
+  assert.deepEqual([change?.field, change?.value], ["price", 2.5]);
 });
 
 test("several changes of one leg go in one edit", async () => {

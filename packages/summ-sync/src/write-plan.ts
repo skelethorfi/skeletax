@@ -6,11 +6,11 @@
 //
 // It writes nothing else: apply adds what the plan adopted and captured to adopted.csv and overrides.json.
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { extraDirsOf, loadConfig } from "./config.ts";
 import { type Change, makePlan, type EditEntry, parseScope, type Plan } from "./plan.ts";
-import { readRun, type Row, type RunFile } from "./run.ts";
+import { parseCsvLine, readRun, type Row, type RunFile } from "./run.ts";
 import { latestSnapshot, readSnapshot } from "./snapshot.ts";
 import { readAdopted, readApplyLog, readOverrides } from "./state.ts";
 
@@ -52,7 +52,11 @@ function uploadNote(plan: Plan, file: string): string {
     : ` (into the THORChain or Maya account, not the ${chain} wallet: no ${chain} tx of their own)`;
 }
 
-export function renderPlan(plan: Plan, snapshot: string, run: string): string {
+export function renderPlan(plan: Plan, snapshot: string, run: string, legs: Map<string, number> = new Map()): string {
+  const withoutPrices = plan.edit
+    .map((e) => ({ ...e, changes: e.changes.filter((c) => c.field !== "price") }))
+    .filter((e) => e.changes.length);
+  const withPrices = plan.edit.filter((e) => e.changes.some((c) => c.field === "price"));
   const lines = [
     "# Summ sync plan",
     "",
@@ -85,11 +89,14 @@ export function renderPlan(plan: Plan, snapshot: string, run: string): string {
         (e) => `| ${show(e.id)} | ${cell(e.summId)} | ${e.legIds.length} | ${e.otherLegs} | ${cell(e.reason)} |`,
       ),
     ]),
-    ...section("Edit", plan.edit, (es) => [
+    ...section("Edit", withoutPrices, (es) => [
       "| Row | Leg | Field | Summ | Desired |",
       "| --- | --- | --- | --- | --- |",
       ...changeLines(es),
     ]),
+    ...section("Edit: reference prices (Summ converts the USD price at its own rate)", withPrices, (es) =>
+      priceLines(es, legs),
+    ),
     ...section("Upload (files in upload/, uploaded by you)", plan.upload, (es) =>
       es.map((e) => `- ${e.file}: ${e.ids.length} rows${uploadNote(plan, e.file)}`),
     ),
@@ -127,6 +134,69 @@ export function renderPlan(plan: Plan, snapshot: string, run: string): string {
   return lines.join("\n");
 }
 
+/** The USD price of each row in the newest upload file holding it: a plan's file is what the user uploaded. */
+export function uploadedPrices(stateDir: string): Map<string, number> {
+  const prices = new Map<string, number>();
+  const plans = join(stateDir, "plans");
+  if (!existsSync(plans)) return prices;
+  for (const name of readdirSync(plans).sort()) {
+    const dir = join(plans, name, "upload");
+    if (!existsSync(dir)) continue;
+    for (const file of readdirSync(dir).filter((f) => f.endsWith(".csv"))) {
+      const [header, ...lines] = readFileSync(join(dir, file), "utf8").split(/\r?\n/).filter(Boolean);
+      const names = parseCsvLine(header);
+      const [id, price, currency] = [
+        "ID (Optional)",
+        "Reference Price Per Unit (Optional)",
+        "Reference Price Currency (Optional)",
+      ].map((c) => names.indexOf(c));
+      if (id < 0 || price < 0 || currency < 0) continue;
+      for (const line of lines) {
+        const values = parseCsvLine(line);
+        if (values[price] && values[currency] === "USD") prices.set(values[id], Number(values[price]));
+        else prices.delete(values[id]);
+      }
+    }
+  }
+  return prices;
+}
+
+/** Price edits, largest first, those whose rate is furthest from the list's median at the head. */
+export function priceLines(entries: EditEntry[], legs: Map<string, number>): string[] {
+  const rows = entries.flatMap((e) =>
+    e.changes
+      .filter((c) => c.field === "price")
+      .map((c) => {
+        // Summ has no price of its own (0 or none) for some rows, e.g. LP tokens: no rate to read
+        const rate = c.summ ? Number(c.summ) / Number(c.desired) : null;
+        return { e, c, rate, value: (legs.get(c.legId) ?? 0) * Number(c.summ ?? 0) };
+      }),
+  );
+  const rates = rows.flatMap((r) => (r.rate === null ? [] : [r.rate])).sort((a, b) => a - b);
+  const median = rates[Math.floor(rates.length / 2)] ?? 0;
+  const line = (r: (typeof rows)[number]) =>
+    `| ${r.e.id} | \`${r.c.legId}\` | ${r.value.toFixed(2)} | ${show(r.c.summ)} | ${show(r.c.desired)} | ${r.rate === null ? "–" : r.rate.toFixed(4)} |`;
+  const table = [
+    "| Row | Leg | Value in Summ | Summ price | USD price | Rate |",
+    "| --- | --- | --- | --- | --- | --- |",
+  ];
+  const furthest = rows
+    .filter((r) => r.rate !== null)
+    .sort((a, b) => Math.abs((b.rate as number) - median) - Math.abs((a.rate as number) - median))
+    .slice(0, 10);
+  return [
+    `Median rate ${median.toFixed(4)}. Furthest from it:`,
+    "",
+    ...table,
+    ...furthest.map(line),
+    "",
+    "All, largest value first:",
+    "",
+    ...table,
+    ...[...rows].sort((a, b) => b.value - a.value).map(line),
+  ];
+}
+
 /** Upload files: per CSV file (and filed or not), its header and the rows Summ lacks, in the file's order. */
 export function uploadFiles(plan: Plan, files: RunFile[], rows: Row[]): { name: string; text: string }[] {
   const byId = new Map(rows.map((r) => [r.id, r]));
@@ -156,6 +226,7 @@ export function writePlan(stateDir: string, runDir: string, only?: string): stri
     adopted: readAdopted(stateDir),
     overrides: readOverrides(stateDir),
     applyLog: readApplyLog(stateDir),
+    uploadedPrices: uploadedPrices(stateDir),
     now,
     scope,
   });
@@ -170,7 +241,10 @@ export function writePlan(stateDir: string, runDir: string, only?: string): stri
       2,
     ) + "\n",
   );
-  writeFileSync(join(dir, "plan.md"), renderPlan(plan, snapshot.name, resolve(runDir)) + "\n");
+  writeFileSync(
+    join(dir, "plan.md"),
+    renderPlan(plan, snapshot.name, resolve(runDir), new Map(snapshot.legs.map((l) => [l.legId, l.quantity]))) + "\n",
+  );
   for (const file of uploadFiles(plan, files, planned)) writeFileSync(join(dir, "upload", file.name), file.text);
 
   console.log(

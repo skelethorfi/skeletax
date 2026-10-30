@@ -27,6 +27,8 @@ export interface Override {
   reason: string;
   /** The user's decision on their value: yes keeps it, no plans the run's value; undecided keeps it and asks again. */
   retainUserEdit: RetainUserEdit;
+  /** A price override: the action's price changes the sync had no record of when captured (spec: Prices). */
+  excess?: number;
 }
 
 export type RetainUserEdit = "yes" | "no" | "undecided";

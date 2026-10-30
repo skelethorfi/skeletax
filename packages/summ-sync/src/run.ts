@@ -40,6 +40,9 @@ export interface Row {
   to: string;
   blockchain: string;
   description: string;
+  /** The row's reference price, as the CSV holds it (blank when it has none). */
+  referencePrice?: string;
+  referencePriceCurrency?: string;
   /** Lower case, without 0x. */
   txids: string[];
   /** From a file in an extra folder (config.extraDirs), not the run's own. */
@@ -60,6 +63,11 @@ const COLUMNS: Record<string, keyof Row> = {
   "Blockchain (Optional)": "blockchain",
   "ID (Optional)": "id",
   "Description (Optional)": "description",
+};
+
+const PRICE_COLUMNS: Record<string, keyof Row> = {
+  "Reference Price Per Unit (Optional)": "referencePrice",
+  "Reference Price Currency (Optional)": "referencePriceCurrency",
 };
 
 const WALLET_FILE = /^(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})_([A-Z0-9]+)_.+\.csv$/;
@@ -115,7 +123,7 @@ export function parseWalletFile(name: string, text: string): { file: RunFile; ro
       throw new Error(`${name}: ${values.length} fields, header has ${names.length}: ${line}`);
     const row = { file: name, chain: file.chain, line, txids: [] as string[] } as unknown as Row;
     names.forEach((column, i) => {
-      const key = COLUMNS[column];
+      const key = COLUMNS[column] ?? PRICE_COLUMNS[column];
       if (key) (row as unknown as Record<string, string>)[key] = values[i];
     });
     if (!row.id) throw new Error(`${name}: a row without an ID: ${line}`);

@@ -32,6 +32,10 @@ export interface Leg {
   source: string;
   importType: string;
   comments: string[];
+  /** Summ's price per unit, always in the user's local currency. */
+  price?: number | null;
+  /** Summ's mark that the price was given in USD. An undo leaves it behind, so it does not prove the price is. */
+  priceValueCurrency?: string;
   /** A fee Summ keeps on the leg itself (`feeQuantity`); some imports hold it there with no fee leg. */
   feeQuantity?: number;
   feeCurrency?: string;
@@ -76,6 +80,8 @@ export function legsOf(detail: ActionDetail): Leg[] {
       source: text(leg.source),
       importType: text(leg.importType),
       comments: ((leg.comments as { comment?: string }[] | undefined) ?? []).map((c) => text(c.comment)),
+      price: typeof leg.price === "number" ? leg.price : null,
+      ...(leg.priceValueCurrency ? { priceValueCurrency: text(leg.priceValueCurrency) } : {}),
       ...(Number(leg.feeQuantity) > 0
         ? {
             feeQuantity: Number(leg.feeQuantity),
