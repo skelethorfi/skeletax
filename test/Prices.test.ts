@@ -233,6 +233,31 @@ describe("reference prices (docs/specs/prices.md)", () => {
     assert.equal(rows.find((row) => row.type === "receive-lp-token").referencePricePerUnit, undefined);
   });
 
+  test("an action of the last 24 hours is judged on the day before until the day after has ended", async () => {
+    const input = readCaseInput("test/cases/prices/lp-add-symmetric");
+    // The same add, an hour ago
+    const hourAgo = Date.now() - 60 * 60 * 1000;
+    const recent = { ...input, data: { ...(input.data as any), date: `${hourAgo}000000` } };
+    const priced = async (swapsBefore: number) => {
+      const get = mock.method(
+        http,
+        "get",
+        historyGet(
+          (url) => (url.includes("/history/rune") ? { runePriceUSD: "2" } : { assetPriceUSD: "100000" }),
+          (url) => (Number(/to=(\d+)/.exec(url)![1]) * 1000 <= hourAgo ? swapsBefore : 0),
+        ),
+      );
+      const midgard = new MidgardService(new RecordStore(tempDir()), "midgard", "https://midgard");
+      const bundle = await new PriceSource(new Map([["thorchain", midgard]])).add(toBundle(recent));
+      get.mock.restore();
+      return bundle.usdPrices;
+    };
+
+    // No swap yet since the bucket: not frozen while the day after is still open
+    assert.deepEqual(await priced(5), { "BTC.BTC": "100000", "THOR.RUNE": "2" });
+    assert.deepEqual(await priced(0), { "THOR.RUNE": "2" });
+  });
+
   test("swap counts are a store record per protocol: fetched again until the day after has ended", async () => {
     const now = Math.floor(Date.now() / 1000 / 300) * 300;
     const get = mock.method(

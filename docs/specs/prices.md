@@ -70,15 +70,18 @@ and CACAO's prices come from the deepest USD pools and are not checked.
 Both sides are needed. Once a halt starts nothing swaps the pool, so the day
 after is empty from the first bucket of the halt on; late in a long halt the
 day before is empty too. A window of the day before alone would keep the
-stale price for the whole first day of a halt (for LUNA, the day it fell
-most). A halt shorter than a day, with swaps on both sides, is not caught:
-the price is stale for those hours.
+stale price for the whole first day of a halt. A pause shorter than a day,
+with swaps on both sides, is not caught: the price is stale for those hours
+(LUNA's pool had such a gap on 2022-05-10, before the halt from 2022-05-11).
+Until the day after has ended (an action in the last 24 hours), the pool is
+judged on the day before, and the record is fetched again on later runs.
 
 The trade-off: a pool swapped less than once a day on either side loses its
 price too, although its price still follows RUNE's. Summ then uses its own
 market price for the row, or values it at zero when it has none (a thin
-Maya pool, a THORChain-native token). Midgard counts swaps per hour, so the
-windows are whole days, not exact to the bucket.
+Maya pool, a THORChain-native token). At zero an acquisition gets no cost
+base, so a later disposal shows too large a gain, and a disposal gets no
+proceeds, so it shows a loss: such rows need a price by hand.
 
 ### Position tokens
 
