@@ -171,7 +171,7 @@ test("a price edit sends the USD price with its currency and logs the USD price"
     edits: [{ transactionId: "leg-1", updates: { price: 2.5, priceValueCurrency: "USD" } }],
   });
   const change = log.find((l) => l.legId === "leg-1");
-  assert.deepEqual([change?.field, change?.value], ["price", 2.5]);
+  assert.deepEqual([change?.field, change?.value, typeof change?.after], ["price", 2.5, "number"]);
 });
 
 test("several changes of one leg go in one edit", async () => {

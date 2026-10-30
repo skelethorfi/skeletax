@@ -368,19 +368,20 @@ behind. So the sync cannot read the USD price back from Summ, and does not
 convert anything itself: an FX rate would add a source, and a threshold to
 hide its noise.
 
-**The recorded price.** History lines show a rounded local price to the
-minute, so they cannot be matched to an edit by value; they are counted. An
-action's live `Price` changes are its `user` lines less its `undo` lines. The
-USD price a leg holds is:
+**The recorded price.** After a price edit, apply reads the leg back and logs
+the local price Summ now shows (`after`) beside the USD price. Summ's change
+history cannot do this: it shows a rounded price, and only the latest versions.
+The USD price a leg holds is:
 
-1. when the log has `price` lines for the leg and the action has live changes:
-   the value of the leg's latest line. (When the last of several edits was
-   undone this is out of date; the sync does not undo, and the user sees it in
-   Summ's history.)
-2. with no such line, no `user` line, and the leg marked USD: the reference
-   price of the row in the newest `plans/*/upload/` file holding its ID, if any.
-   A row uploaded outside a plan has none, and is edited once;
-3. otherwise none: the leg holds a price the sync knows nothing about.
+1. when the log has a `price` line for the leg: the latest line's value, if the
+   leg still shows that line's `after`;
+2. with no such line, no `user` `Price` line in the action's history, and the
+   leg marked USD: the reference price of the row in the newest
+   `plans/*/upload/` file holding its ID, if any. A row uploaded outside a plan
+   has none, and is edited once. A file does not prove it was the one uploaded:
+   a row uploaded from one plan whose price changed in a newer plan made before
+   the next pull is taken to hold the newer price;
+3. otherwise none.
 
 **Plan.** For a managed base leg (not a held row, not a fee or quote leg,
 not a categorised row's leg: Summ's imports keep their market price):
@@ -396,12 +397,13 @@ Prices are compared as the numbers the CSV and the log hold, with no
 tolerance. Every price comes from a stored Midgard record, so a replay gives
 the same number, and a difference is a real change.
 
-Live changes above the log's `price` lines for the action's legs are drift,
-handled as in Drift and overrides: the user's price is kept and captured as
-`undecided`. The override's `run` is in USD and its `summ` in the local
-currency, and it records that `excess`, so that after `retainUserEdit: "no"`
-those changes no longer count as drift and the sync's edit is not captured in
-its turn. An edit the user made and undid is not drift.
+A price that is not the sync's is drift, handled as in Drift and overrides: the
+user's price is kept and captured as `undecided`, and the decision holds for
+that local price. It is not the sync's when the leg no longer shows the `after`
+of its latest line (a user's edit, an undo, or Summ repricing the leg), or, with
+no line, when the action's history has more `user` than `undo` `Price` lines (an
+edit the user made and undid is not drift). The override's `run` is in USD and
+its `summ` in the local currency.
 
 A row planned for delete and upload gets no price edit: the upload carries its
 price.
@@ -597,7 +599,8 @@ error):
 4. Print the upload files for the user to upload.
 5. Write `apply-log.jsonl` as it goes: each call, its result and its undo
    handle, one line per changed field (`legId`, `field`, `value`) for
-   plan's drift check and recorded prices (a price line's value is in USD),
+   plan's drift check and recorded prices (a price line's value is in USD,
+   with the local price read back after the edit, `after`),
    and each skip.
 
 While the plan has uploads (for the years this apply covers), apply holds

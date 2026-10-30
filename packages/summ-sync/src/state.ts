@@ -27,8 +27,6 @@ export interface Override {
   reason: string;
   /** The user's decision on their value: yes keeps it, no plans the run's value; undecided keeps it and asks again. */
   retainUserEdit: RetainUserEdit;
-  /** A price override: the action's price changes the sync had no record of when captured (spec: Prices). */
-  excess?: number;
 }
 
 export type RetainUserEdit = "yes" | "no" | "undecided";
@@ -39,6 +37,8 @@ export interface AppliedEdit {
   legId: string;
   field: string;
   value: Value;
+  /** A price edit: the local price Summ showed after it, which says whether the edit still stands. */
+  after?: number | null;
 }
 
 export function readAdopted(stateDir: string): Map<string, string> {

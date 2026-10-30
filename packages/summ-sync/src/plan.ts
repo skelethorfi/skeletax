@@ -371,50 +371,24 @@ export function makePlan(input: PlanInput): PlanResult {
     return { ...change, desired };
   }
 
-  // Prices: Summ keeps no USD figure, so the USD price a leg holds comes from the sync's own records. History lines
-  // show a rounded local price, so they are counted, not matched (spec: Prices).
+  // Prices: Summ keeps no USD figure, so the USD price a leg holds comes from the sync's own records: the local
+  // price Summ showed after the sync's edit says whether that edit still stands (spec: Prices).
   function priceChange(row: Row, base: Leg): Change | null {
     const history = input.history.get(base.actionId) ?? [];
     const count = (who: string) => history.filter((h) => h.split(` · ${who} · `)[1]?.includes("Price:")).length;
     const users = count("user");
-    const undos = count("undo");
-    const live = users - undos;
-    const actionLegs = new Set((legsByAction.get(base.actionId) ?? [base]).map((l) => l.legId));
-    const lines = input.applyLog.filter((e) => e.field === "price" && actionLegs.has(e.legId));
-    const own = lines.filter((e) => e.legId === base.legId).at(-1);
-    let recorded: number | null = null;
-    if (own && live > 0) recorded = Number(own.value);
-    else if (!own && users === 0 && base.priceValueCurrency === "USD")
-      recorded = input.uploadedPrices?.get(row.id) ?? null;
-
-    const priced = row.referencePrice && row.referencePriceCurrency === "USD";
-    const desired = priced ? Number(row.referencePrice) : null;
+    const own = input.applyLog.filter((e) => e.field === "price" && e.legId === base.legId).at(-1);
     const summ = base.price ?? null;
-    const found = overrides.find((o) => o.id === row.id && o.leg === "base" && o.field === "price");
-    const excess = live - lines.length;
-    if (excess - (found?.retainUserEdit === "no" ? (found.excess ?? 0) : 0) > 0) {
-      if (desired === null) return null;
-      if (found && found.retainUserEdit !== "no" && same("price", found.summ, summ)) {
-        if (!same("price", found.run, desired))
-          plan.overridden.push({ kind: "run-changed", override: found, runNow: desired });
-        if (found.retainUserEdit === "undecided") plan.overridden.push({ kind: "undecided", override: found });
-        return null;
-      }
-      const captured: Override = {
-        id: row.id,
-        leg: "base",
-        field: "price",
-        run: desired,
-        summ,
-        seenAt: now,
-        reason: "",
-        retainUserEdit: "undecided",
-        excess,
-      };
-      overrides = [...overrides.filter((o) => o !== found), captured];
-      plan.overridden.push({ kind: "captured", override: captured });
-      return null;
-    }
+    const stands = own !== undefined && same("price", own.after ?? null, summ);
+    const recorded = stands
+      ? Number(own.value)
+      : !own && users === 0 && base.priceValueCurrency === "USD"
+        ? (input.uploadedPrices?.get(row.id) ?? null)
+        : null;
+    // The sync's edit no longer stands, or an edit it has no record of: not the sync's price
+    const foreign = own ? !stands : users > count("undo");
+
+    const desired = row.referencePrice && row.referencePriceCurrency === "USD" ? Number(row.referencePrice) : null;
     if (desired === null) {
       if (recorded !== null)
         plan.report.push({
@@ -424,6 +398,29 @@ export function makePlan(input: PlanInput): PlanResult {
           legIds: [base.legId],
           detail: `the row has no reference price now; Summ holds US$${recorded} from an earlier one, and an edit cannot give the price back to Summ`,
         });
+      return null;
+    }
+    const found = overrides.find((o) => o.id === row.id && o.leg === "base" && o.field === "price");
+    const decided = found && same("price", found.summ, summ);
+    if (decided && found.retainUserEdit !== "no") {
+      if (!same("price", found.run, desired))
+        plan.overridden.push({ kind: "run-changed", override: found, runNow: desired });
+      if (found.retainUserEdit === "undecided") plan.overridden.push({ kind: "undecided", override: found });
+      return null;
+    }
+    if (foreign && !decided) {
+      const captured: Override = {
+        id: row.id,
+        leg: "base",
+        field: "price",
+        run: desired,
+        summ,
+        seenAt: now,
+        reason: "",
+        retainUserEdit: "undecided",
+      };
+      overrides = [...overrides.filter((o) => o !== found), captured];
+      plan.overridden.push({ kind: "captured", override: captured });
       return null;
     }
     return recorded === desired ? null : { leg: "base", legId: base.legId, field: "price", summ, desired };

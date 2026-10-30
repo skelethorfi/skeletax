@@ -338,6 +338,11 @@ export async function applyPlan(
     const text = await client.callTool("edit_transaction", args);
     result.edited++;
     const undo = undoHandle(text);
+    // Summ keeps no USD figure: the local price it now shows is what says, later, that this edit still stands.
+    // The edit is made, so a failed read must not stop the log line
+    const priced = entry.changes.filter((c) => c.field === "price");
+    if (priced.length) await sleep(settleMs);
+    const after = priced.length ? await lookUp(client, priced[0].legId).catch(() => null) : null;
     // One line per change, in the shape plan reads back (legId, field, value) to tell the sync's own edits from drift
     for (const c of entry.changes)
       write({
@@ -349,6 +354,7 @@ export async function applyPlan(
         field: c.field,
         from: c.summ,
         value: c.desired,
+        ...(c.field === "price" ? { after: after?.legs.find((l) => l.legId === c.legId)?.price ?? null } : {}),
         undo,
       });
     write({ call: "edit_transaction", kind, id: entry.id, actionId: found.actionId, undo, result: text });
