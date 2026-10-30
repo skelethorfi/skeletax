@@ -294,6 +294,30 @@ describe("reference prices (docs/specs/prices.md)", () => {
     empty.mock.restore();
   });
 
+  test("an open window is fetched again however old its action: it is never stuck", async () => {
+    const now = Math.floor(Date.now() / 1000 / 300) * 300;
+    const get = mock.method(
+      http,
+      "get",
+      historyGet(() => ({ assetPriceUSD: "5" }), 3),
+    );
+    const dir = tempDir();
+    // The next run is 40 days later: past pendingStuckDays, after which a pending THORNode tx is not fetched again
+    const later = new Date(Date.now() + 40 * 86400_000);
+    const run = (today?: Date) =>
+      new MidgardService(new RecordStore(dir, { pendingStuckDays: 30, today }), "midgard", "https://midgard");
+    const open = new Date(now * 1000);
+
+    assert.equal((await run().getPoolSwaps("BTC.BTC", open)).final, false);
+    assert.equal((await run().getPoolPrice("BTC.BTC", open)).final, false);
+    const calls = get.mock.calls.length;
+    await run(later).getPoolSwaps("BTC.BTC", open);
+    await run(later).getPoolPrice("BTC.BTC", open);
+    // Two swap counts and one price
+    assert.equal(get.mock.calls.length, calls + 3);
+    get.mock.restore();
+  });
+
   test("a derived price is a plain decimal", () => {
     assert.equal(formatPrice(6.070787274132481), "6.07078727413248");
     assert.equal(formatPrice(16555.740027200513), "16555.7400272005");

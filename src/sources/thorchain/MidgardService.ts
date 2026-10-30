@@ -45,6 +45,10 @@ export function midgardAddress(address: string): string {
 // A pool price counts only if the pool was swapped within this many seconds before the bucket and after it
 const SWAPS_WINDOW = 24 * 60 * 60;
 
+// Price and swap-count records are filed by their bucket's start, not the action's date: an open bucket or window
+// always ends, so it is fetched again however old the action is (an action's date would make it stuck after
+// pendingStuckDays, docs/specs/snapshots.md)
+
 // The start (Unix seconds) of the 5-minute history bucket holding `date`
 export function bucketStart(date: Date): number {
   return Math.floor(date.getTime() / 1000 / RUNE_PRICE_INTERVAL) * RUNE_PRICE_INTERVAL;
@@ -126,7 +130,6 @@ export class MidgardService {
         };
       },
       RUNE_PRICE_RULES,
-      date,
     );
   }
 
@@ -151,7 +154,6 @@ export class MidgardService {
         };
       },
       CACAO_PRICE_RULES,
-      date,
     );
   }
 
@@ -191,7 +193,6 @@ export class MidgardService {
         };
       },
       POOL_PRICE_RULES,
-      date,
     );
   }
 
@@ -227,7 +228,6 @@ export class MidgardService {
         };
       },
       POOL_SWAPS_RULES,
-      date,
     );
   }
 

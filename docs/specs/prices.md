@@ -74,7 +74,9 @@ stale price for the whole first day of a halt. A pause shorter than a day,
 with swaps on both sides, is not caught: the price is stale for those hours
 (LUNA's pool had such a gap on 2022-05-10, before the halt from 2022-05-11).
 Until the day after has ended (an action in the last 24 hours), the pool is
-judged on the day before, and the record is fetched again on later runs.
+judged on the day before, and the record is fetched again on later runs: a
+halt that began earlier that day keeps its stale price until a run after the
+day has passed.
 
 The trade-off: a pool swapped less than once a day on either side loses its
 price too, although its price still follows RUNE's. Summ then uses its own
@@ -152,7 +154,10 @@ Each price is a store record (`snapshots.md`):
 | `midgard-pool-swaps`, `maya-midgard-pool-swaps` | `<pool>.<bucket start>`: the pool's swaps in the 24 hours before the bucket and after it (fetched again until the day after has ended) |
 
 A bucket still open when fetched has a partial price: it is stored as not
-final and fetched again on the next run. A pool with no price (`0`, or
+final and fetched again on the next run, however long after (a bucket or
+window always ends, so unlike a pending tx it is never stuck after
+`pendingStuckDays`). The same holds for a swap count whose day after has not
+ended. A pool with no price (`0`, or
 unknown) is stored too, so a replay does not ask again. With `--offline`, a
 price not in the store is an error, like any other cache miss. Midgard's
 history endpoints take times, not heights.
