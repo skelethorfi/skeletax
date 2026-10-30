@@ -168,11 +168,11 @@ export class Exporter {
     return bundles;
   }
 
-  // With referencePrices = 'all', each bundle with the USD prices of its legs (docs/specs/prices.md); otherwise the
+  // With referencePrices = 'all' (the default), each bundle with the USD prices of its legs (docs/specs/prices.md); otherwise the
   // bundles as they are, so a run fetches no price. Only a bundle that can give rows is priced: one listing of each
   // action, dated inside the run's periods (a day's margin either side, for the time zone).
   async withPrices(bundles: RawBundle[]): Promise<RawBundle[]> {
-    if (this.config.referencePrices !== "all") {
+    if ((this.config.referencePrices ?? "all") !== "all") {
       return bundles;
     }
 

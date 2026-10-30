@@ -30,9 +30,11 @@ Which is helpful to identify the wallets when looking at the generated CSV filen
 Set `fromDate`, `toDate`, and `frequency` ("monthly", "yearly", "none") for how to split up the CSV files.
 Set `timezone` (e.g. "Europe/London") so the periods follow your tax year in local time; the default is UTC ([periods](specs/periods.md)).
 
-Set `referencePrices = "all"` to give every row a USD reference price from Midgard where one exists, including the
-LP and savers position tokens Summ cannot price. The default, `"swaps"`, keeps the rows as before: only swaps (and
-bRUNE sells and TCY distributions) carry one. See [reference prices](specs/prices.md).
+Every row gets a USD reference price from Midgard where one exists, including the LP and savers position tokens
+Summ cannot price (`referencePrices = "all"`, the default). The first run fetches those prices, at one request a
+second, and later runs read them from the store. Set `referencePrices = "swaps"` to keep the rows as before October
+2026 (only swaps, bRUNE sells and TCY distributions carry one, and no price is fetched), e.g. to replay an earlier run
+with `--offline`. See [reference prices](specs/prices.md).
 
 The `blockchain` property for each wallet is only used in creating the CSV filenames, so it can be anything.
 e.g. "THOR", "BTC", "ETH"

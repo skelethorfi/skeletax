@@ -2,8 +2,8 @@ import type { Activity, Leg } from "../../domain/Activity.ts";
 import { formatAmount } from "../../domain/Amount.ts";
 import type { SummRow } from "./csv/index.ts";
 
-// Which rows carry a reference price (docs/specs/prices.md): 'swaps' (default) leaves the rows as the mappers
-// make them; 'all' fills every other row whose asset has a price
+// Which rows carry a reference price (docs/specs/prices.md): 'all' (default) fills every row whose asset has a
+// price; 'swaps' leaves the rows as the mappers make them
 export const REFERENCE_PRICES = ["swaps", "all"] as const;
 export type ReferencePrices = (typeof REFERENCE_PRICES)[number];
 

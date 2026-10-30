@@ -31,7 +31,7 @@ amount times the number of assets (twice the first asset for a symmetric add,
 a copy of the one asset for an asymmetric add). Summ prices it and ignores it;
 the user copies its fiat value onto the LP token row by hand (`../summ.md`).
 
-With `referencePrices = "all"` the LP token rows carry a reference price
+With `referencePrices = "all"` (the default) the LP token rows carry a reference price
 instead: the USD value of the same assets at Midgard's pool prices, per unit
 (`prices.md`). The price helper stays, unpriced, so Summ's own value can be
 compared with it.

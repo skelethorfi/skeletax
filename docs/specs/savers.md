@@ -67,7 +67,7 @@ non-taxable without changing the rows.
 | Fee on the deposit                                      | the deposit's inbound fee: L1 gas for an L1 wallet (blank when neither THORNode nor Viewblock has it), 0.02 RUNE for a synth from a THORChain wallet                                 | `fees.md`                                                                                                                                                                                          |
 
 The price-helper row has the asset amount, so it values the position at what
-was sent: the position's cost base. With `referencePrices = "all"` the
+was sent: the position's cost base. With `referencePrices = "all"` (the default) the
 position token rows carry the value of what went in or came out as a reference
 price (`prices.md`).
 
