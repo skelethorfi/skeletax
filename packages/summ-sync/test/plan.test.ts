@@ -2033,6 +2033,20 @@ test("price: a failed read-back is no drift: the edit is made again", () => {
   assert.deepEqual(p.overridden, []);
 });
 
+test("price: after a failed read-back, a further edit in the history or a null price is not taken as the sync's", () => {
+  const r = priced();
+  const legs = pricedLegs(r);
+  const line = priceLine(legs[0].legId, 2.5, null);
+  const edited = plan({ rows: [r], legs, history: priceHistory(USER_PRICE, USER_PRICE), applyLog: [line] }).plan;
+  assert.deepEqual(priceEdits(edited), []);
+  assert.deepEqual(
+    edited.overridden.map((o) => o.kind),
+    ["captured"],
+  );
+  const unpriced = legs.map((l) => ({ ...l, price: null }));
+  assert.equal(priceEdits(plan({ rows: [r], legs: unpriced, applyLog: [line] }).plan).length, 1);
+});
+
 test("price: retainUserEdit no is honoured with no history and an upload file at the run's price", () => {
   const r = priced();
   const legs = pricedLegs(r, { priceValueCurrency: "USD" });
