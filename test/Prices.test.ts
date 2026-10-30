@@ -245,8 +245,9 @@ describe("reference prices (docs/specs/prices.md)", () => {
     await assert.rejects(replay.withPrices([inside]), (error: Error) => {
       assert.match(
         error.message,
-        / in the replayed run\. The replayed run read no reference price for this: set referencePrices = "swaps"/,
+        / in the replayed run\. The replayed run has no reference price for this: set referencePrices = "swaps"/,
       );
+      assert.match(error.stack ?? "", /in the replayed run\. The replayed run has no reference price/);
       assert.doesNotMatch(error.message, /--offline/);
       return true;
     });

@@ -202,12 +202,12 @@ export class Exporter {
       // option)
       if (error instanceof StoreMissError) {
         const hint = error.message.endsWith(" in the replayed run")
-          ? `. The replayed run read no reference price for this: set referencePrices = "swaps" to reproduce it ` +
-            "(docs/specs/prices.md)"
+          ? `. The replayed run has no reference price for this: set referencePrices = "swaps" to reproduce a run ` +
+            "made before reference prices (docs/specs/prices.md)"
           : `. The store is missing a reference price record: run without --offline to fetch it, or set ` +
             `referencePrices = "swaps" to reproduce an earlier run (docs/specs/prices.md)`;
         // Node prints the stack, which holds the message as it was thrown
-        error.stack = error.stack?.replace(error.message, error.message + hint);
+        error.stack = error.stack?.replace(error.message, () => error.message + hint);
         error.message += hint;
       }
 

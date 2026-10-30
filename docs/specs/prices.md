@@ -30,8 +30,8 @@ default in October 2026 (until then `"swaps"`). A store made before then has no
 price records, so an `--offline` or `--replay` run of an earlier run stops on
 the first missing price, with a message saying what to do: set
 `referencePrices = "swaps"` to reproduce such a run's rows, or (offline) run
-online once to fetch the prices. Row IDs are the same under either value (`periods.md`): the price
-is not part of the ID.
+online once to fetch the prices. Row IDs are the same under either value
+(`periods.md`): the price is not part of the ID.
 
 ## Prices by asset
 
