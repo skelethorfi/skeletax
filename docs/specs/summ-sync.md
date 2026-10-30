@@ -410,7 +410,7 @@ A price is not the sync's when:
 
 - the leg no longer shows the `after` of its latest line (a user's edit, an undo,
   or Summ repricing the leg);
-- with no line, the leg's price is not the one an override was decided on;
+- with no line standing, the leg's price is not the one an override was decided on;
 - with no line standing, the action's history has more `user` than `undo` `Price`
   lines than the sync has lines for the action's legs. The history is per action,
   so another row's edit in the action can count here too; and since the log is
