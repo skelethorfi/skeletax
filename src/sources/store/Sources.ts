@@ -110,15 +110,16 @@ export interface PoolPrice {
 
 export const POOL_PRICE_RULES: RecordRules<PoolPrice> = RUNE_PRICE_RULES as RecordRules<any>;
 
-// A pool's swap count over the 24 hours up to the end of a 5-minute bucket (/v2/history/swaps?pool=), keyed
-// '<pool>.<bucket start>': none means the pool's price was frozen (docs/specs/prices.md, Frozen pools)
+// A pool's swap counts over the 24 hours before a 5-minute bucket and the 24 hours after it
+// (/v2/history/swaps?pool=), keyed '<pool>.<bucket start>': none on either side means the pool's price was frozen
+// (docs/specs/prices.md, Frozen pools)
 export interface PoolSwaps {
   pool: string;
-  // The bucket's start, and the window (Unix seconds)
+  // The bucket's start (Unix seconds)
   startTime: string;
-  from: string;
-  to: string;
-  count: string;
+  before: string;
+  after: string;
+  // The window after had ended when fetched
   final: boolean;
 }
 

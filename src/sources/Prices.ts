@@ -121,9 +121,11 @@ export class PriceSource {
     } else {
       usd = (await midgard.getPoolPrice(key, time)).assetPriceUSD;
 
-      // A pool nothing swapped in the last day has a frozen price (docs/specs/prices.md, Frozen pools)
-      if (usd && Number(usd) > 0 && Number((await midgard.getPoolSwaps(key, time)).count) === 0) {
-        usd = undefined;
+      // A pool nothing swapped in the day before or the day after has a frozen price (docs/specs/prices.md, Frozen
+      // pools)
+      if (usd && Number(usd) > 0) {
+        const swaps = await midgard.getPoolSwaps(key, time);
+        usd = Number(swaps.before) > 0 && Number(swaps.after) > 0 ? usd : undefined;
       }
     }
 

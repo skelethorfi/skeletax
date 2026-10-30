@@ -42,7 +42,7 @@ export function midgardAddress(address: string): string {
   return [...new Set([address.toLowerCase(), checksumAddress(address), address])].join(",");
 }
 
-// A pool price counts only if the pool was swapped within this many seconds before the bucket's end
+// A pool price counts only if the pool was swapped within this many seconds before the bucket and after it
 const SWAPS_WINDOW = 24 * 60 * 60;
 
 // The start (Unix seconds) of the 5-minute history bucket holding `date`
@@ -195,34 +195,35 @@ export class MidgardService {
     );
   }
 
-  // How many times a pool was swapped in the 24 hours up to the end of the bucket holding `date`, as a
-  // `<source>-pool-swaps` record keyed '<pool>.<bucket start>' (docs/specs/prices.md, Frozen pools)
+  // How many times a pool was swapped in the 24 hours before the bucket holding `date` and in the 24 hours after
+  // it, as a `<source>-pool-swaps` record keyed '<pool>.<bucket start>' (docs/specs/prices.md, Frozen pools)
   async getPoolSwaps(pool: string, date: Date): Promise<PoolSwaps> {
     const start = bucketStart(date);
-    const to = start + RUNE_PRICE_INTERVAL;
-    const from = to - SWAPS_WINDOW;
-    const url = `${this.basePath}/v2/history/swaps?pool=${pool}&from=${from}&to=${to}`;
+    const url = (from: number, to: number) => `${this.basePath}/v2/history/swaps?pool=${pool}&from=${from}&to=${to}`;
+    const count = async (from: number, to: number) => {
+      const total = (await http.get(url(from, to))).data?.meta?.totalCount;
+
+      if (total === undefined) {
+        throw new Error(`[Midgard] no swap count for ${pool} from ${from} to ${to}`);
+      }
+
+      return String(total);
+    };
 
     return this.store.record<PoolSwaps>(
       `${this.source}-pool-swaps`,
       `${pool}.${start}`,
       async () => {
-        const count = (await http.get(url)).data.meta.totalCount;
-
-        if (count === undefined) {
-          throw new Error(`[Midgard] no swap count for ${pool} up to ${to}`);
-        }
-
+        const end = start + SWAPS_WINDOW;
         return {
           data: {
             pool,
             startTime: String(start),
-            from: String(from),
-            to: String(to),
-            count: String(count),
-            final: isFinal({ endTime: String(to) }),
+            before: await count(start - SWAPS_WINDOW, start),
+            after: await count(start, end),
+            final: isFinal({ endTime: String(end) }),
           },
-          url,
+          url: url(start - SWAPS_WINDOW, end),
         };
       },
       POOL_SWAPS_RULES,

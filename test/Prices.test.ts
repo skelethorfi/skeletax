@@ -15,10 +15,11 @@ import { Exporter } from "../src/cli/Exporter.ts";
 
 // Answers every history request with one bucket, the one asked for; a swaps request with `swaps` swaps
 const historyGet =
-  (fields: (url: string) => object, swaps = 10) =>
+  (fields: (url: string) => object, swaps: number | ((url: string) => number) = 10) =>
   async (url: string) => {
     if (url.includes("/history/swaps")) {
-      return { data: { intervals: [], meta: { totalCount: String(swaps) } } } as any;
+      const count = typeof swaps === "number" ? swaps : swaps(url);
+      return { data: { intervals: [], meta: { totalCount: String(count) } } } as any;
     }
 
     const [startTime, endTime] = [/from=(\d+)/.exec(url)![1], /to=(\d+)/.exec(url)![1]];
@@ -101,6 +102,7 @@ describe("reference prices (docs/specs/prices.md)", () => {
 
     // RUNE has a price; BTC.BTC's '0' (no pool at that time) is no price
     assert.deepEqual(bundle.usdPrices, { "THOR.RUNE": "2.02" });
+    // RUNE's price and BTC.BTC's: a pool with no price is not checked for swaps
     assert.equal(get.mock.calls.length, 2);
     get.mock.restore();
   });
@@ -193,38 +195,78 @@ describe("reference prices (docs/specs/prices.md)", () => {
     assert.deepEqual(bundles[0].usdPrices, { "BTC.BTC": "100000", "THOR.RUNE": "2" });
     assert.equal(bundles[1].usdPrices, undefined);
     assert.equal(bundles[2].usdPrices, undefined);
-    // BTC.BTC's price and its swaps, and RUNE's price
-    assert.equal(get.mock.calls.length, 3);
+    // BTC.BTC's price and its swaps before and after, and RUNE's price
+    assert.equal(get.mock.calls.length, 4);
     get.mock.restore();
   });
 
-  test("a pool nothing swapped in the 24 hours up to the bucket has a frozen price: none", async () => {
+  test("a pool not swapped in the day before the bucket or the day after has a frozen price: none", async () => {
     const input = readCaseInput("test/cases/prices/lp-add-symmetric");
-    const priced = async (swaps: number) => {
+    // The bucket starts at 1738158600: the day before ends there, the day after starts there
+    const before = "https://midgard/v2/history/swaps?pool=BTC.BTC&from=1738072200&to=1738158600";
+    const after = "https://midgard/v2/history/swaps?pool=BTC.BTC&from=1738158600&to=1738245000";
+    const priced = async (swapsBefore: number, swapsAfter: number) => {
       const get = mock.method(
         http,
         "get",
         historyGet(
           (url) => (url.includes("/history/rune") ? { runePriceUSD: "2" } : { assetPriceUSD: "100000" }),
-          swaps,
+          (url) => (url === before ? swapsBefore : url === after ? swapsAfter : NaN),
         ),
       );
       const midgard = new MidgardService(new RecordStore(tempDir()), "midgard", "https://midgard");
       const bundle = await new PriceSource(new Map([["thorchain", midgard]])).add(toBundle(input));
-      const urls = get.mock.calls.map((call) => call.arguments[0]);
       get.mock.restore();
-      return { usdPrices: bundle.usdPrices, urls };
+      return bundle.usdPrices;
     };
 
-    const frozen = await priced(0);
     // RUNE is not checked: its price comes from the deepest USD pools
-    assert.deepEqual(frozen.usdPrices, { "THOR.RUNE": "2" });
-    assert.ok(frozen.urls.includes("https://midgard/v2/history/swaps?pool=BTC.BTC&from=1738072500&to=1738158900"));
-    assert.deepEqual((await priced(1)).usdPrices, { "BTC.BTC": "100000", "THOR.RUNE": "2" });
+    assert.deepEqual(await priced(0, 0), { "THOR.RUNE": "2" });
+    // A halt's first day: swaps before it, none after
+    assert.deepEqual(await priced(5, 0), { "THOR.RUNE": "2" });
+    // Late in a long halt: none before
+    assert.deepEqual(await priced(0, 5), { "THOR.RUNE": "2" });
+    assert.deepEqual(await priced(1, 1), { "BTC.BTC": "100000", "THOR.RUNE": "2" });
 
     // The LP token of an add from a frozen pool has no price either
-    const rows = runCase({ ...input, usdPrices: frozen.usdPrices }) as any[];
+    const rows = runCase({ ...input, usdPrices: await priced(5, 0) }) as any[];
     assert.equal(rows.find((row) => row.type === "receive-lp-token").referencePricePerUnit, undefined);
+  });
+
+  test("swap counts are a store record per protocol: fetched again until the day after has ended", async () => {
+    const now = Math.floor(Date.now() / 1000 / 300) * 300;
+    const get = mock.method(
+      http,
+      "get",
+      historyGet(() => ({}), 3),
+    );
+    const dir = tempDir();
+    const run = (source: string, offline = false) =>
+      new MidgardService(new RecordStore(dir, { offline }), source, "https://midgard");
+    const past = new Date(1715998300000);
+
+    assert.deepEqual(await run("maya-midgard").getPoolSwaps("BTC.BTC", past), {
+      pool: "BTC.BTC",
+      startTime: "1715998200",
+      before: "3",
+      after: "3",
+      final: true,
+    });
+    // Stored under the protocol's own source: Maya's count is not THORChain's
+    assert.equal((await run("maya-midgard", true).getPoolSwaps("BTC.BTC", past)).after, "3");
+    await assert.rejects(run("midgard", true).getPoolSwaps("BTC.BTC", past), /Offline/);
+
+    // The day after a recent bucket has not ended: not final, fetched again on the next run
+    assert.equal((await run("midgard").getPoolSwaps("BTC.BTC", new Date(now * 1000))).final, false);
+    const calls = get.mock.calls.length;
+    await run("midgard").getPoolSwaps("BTC.BTC", new Date(now * 1000));
+    assert.equal(get.mock.calls.length, calls + 2);
+    get.mock.restore();
+
+    // No count in the answer stops the run
+    const empty = mock.method(http, "get", async () => ({ data: {} }) as any);
+    await assert.rejects(run("midgard").getPoolSwaps("ETH.ETH", past), /no swap count for ETH.ETH/);
+    empty.mock.restore();
   });
 
   test("a derived price is a plain decimal", () => {

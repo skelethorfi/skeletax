@@ -59,12 +59,26 @@ price in RUNE at RUNE's current USD price. After THORChain halted Terra in May
 almost nothing: a withdrawal from that pool would have been valued at its
 pre-crash value.
 
-So a pool price counts only if the pool had at least one swap in the 24 hours
-up to the end of the bucket (Midgard `/v2/history/swaps?pool=<pool>`, the
-window's `totalCount`). A pool with none has no price: its rows, and the
-position tokens valued from it, stay blank. RUNE's and CACAO's prices come
-from the deepest USD pools and are not checked. An illiquid pool swapped
-less than once a day loses its price too; its last price is stale anyway.
+So a pool price counts only if the pool was swapped at least once in the 24
+hours before the bucket and at least once in the 24 hours after it (Midgard
+`/v2/history/swaps?pool=<pool>`, each window's `totalCount`, which counts
+every swap that moves the pool's price: to and from RUNE, synth mints and
+burns, trade and secured assets). A pool with none on either side has no
+price: its rows, and the position tokens valued from it, stay blank. RUNE's
+and CACAO's prices come from the deepest USD pools and are not checked.
+
+Both sides are needed. Once a halt starts nothing swaps the pool, so the day
+after is empty from the first bucket of the halt on; late in a long halt the
+day before is empty too. A window of the day before alone would keep the
+stale price for the whole first day of a halt (for LUNA, the day it fell
+most). A halt shorter than a day, with swaps on both sides, is not caught:
+the price is stale for those hours.
+
+The trade-off: a pool swapped less than once a day on either side loses its
+price too, although its price still follows RUNE's. Summ then uses its own
+market price for the row, or values it at zero when it has none (a thin
+Maya pool, a THORChain-native token). Midgard counts swaps per hour, so the
+windows are whole days, not exact to the bucket.
 
 ### Position tokens
 
@@ -101,7 +115,7 @@ CACAO's price.
   token's reference value with the helper's value, and fall back to the
   helper's value where the two differ.
 - Rows whose asset has no price (above), or whose pool was frozen (no swap in
-  the 24 hours up to the bucket), stay blank.
+  the day before the bucket or the day after), stay blank.
 - A row that already has a price keeps it (a swap's own price is used over
   the pool's).
 - The default (`"swaps"`) never takes a price from `usdPrices`, even when a
@@ -127,12 +141,12 @@ that have a price are kept. The interpreter's activity gets them as `prices`
 
 Each price is a store record (`snapshots.md`):
 
-| Record                                          | Key                                                                              |
-| ----------------------------------------------- | -------------------------------------------------------------------------------- |
-| `midgard-rune-price` (exists)                   | the bucket's start (Unix seconds)                                                |
-| `maya-midgard-cacao-price`                      | the bucket's start                                                               |
-| `midgard-pool-price`, `maya-midgard-pool-price` | `<pool>.<bucket start>`                                                          |
-| `midgard-pool-swaps`, `maya-midgard-pool-swaps` | `<pool>.<bucket start>`: the pool's swaps in the 24 hours up to the bucket's end |
+| Record                                          | Key                                                                                                                                    |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `midgard-rune-price` (exists)                   | the bucket's start (Unix seconds)                                                                                                      |
+| `maya-midgard-cacao-price`                      | the bucket's start                                                                                                                     |
+| `midgard-pool-price`, `maya-midgard-pool-price` | `<pool>.<bucket start>`                                                                                                                |
+| `midgard-pool-swaps`, `maya-midgard-pool-swaps` | `<pool>.<bucket start>`: the pool's swaps in the 24 hours before the bucket and after it (fetched again until the day after has ended) |
 
 A bucket still open when fetched has a partial price: it is stored as not
 final and fetched again on the next run. A pool with no price (`0`, or
@@ -155,12 +169,8 @@ prices with Summ's own (below).
 
 ## Open
 
-- Compared with Summ's market prices (October 2026): Midgard's prices match
-  to a median of about 0.6%, inside the noise of the USD to AUD rate, but
-  Summ's are hourly or coarser and lag in fast moves, and a frozen pool gave
-  a wrong price (above). Reference prices on every row are the chosen
-  treatment. Still to do: the default value, and Summ sync setting the price
-  of rows already in Summ.
+- Reference prices on every row are the chosen treatment. Still to do: the
+  default value, and Summ sync setting the price of rows already in Summ.
 
 ## Tests
 
@@ -171,7 +181,7 @@ prices with Summ's own (below).
 - `test/Prices.test.ts`: which pool or index an asset is priced from (a
   denom with a path, `x/…/…`, `ibc/…`, is none); no token price for an action
   that is not `success`; the
-  frozen-pool check (no swap in 24 hours: no price; only a priced pool is
+  frozen-pool check (no swap in the day before or after: no price; only a priced pool is
   checked); the stored records (open bucket fetched again, unknown pool stored as no
   price, offline read and miss, CACAO from Maya's history); a bundle's prices
   without the zero ones; an unpriced position and the unpriced helper; that
