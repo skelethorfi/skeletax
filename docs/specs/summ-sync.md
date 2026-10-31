@@ -383,8 +383,8 @@ until the sync sets it.
 
 **What Summ holds.** A leg's `price` is always in the user's local currency.
 Given a USD price, by upload or by an edit with `priceValueCurrency: "USD"`,
-Summ converts it at its own rate, marks the leg `priceValueCurrency: "USD"`
-and keeps no USD figure. Only a base leg is priced this way (Trades below). The mark
+Summ converts it at its own rate and keeps no USD figure. An edit marks the leg
+`priceValueCurrency: "USD"`; an upload does not. Only a base leg is priced this way (Trades below). The mark
 proves nothing on its own: `undo_edit` restores `price` and leaves the mark
 behind. So the sync cannot read the USD price back from Summ, and does not
 convert anything itself: an FX rate would add a source, and a threshold to
@@ -404,12 +404,13 @@ The USD price a leg holds is:
 
 1. when the log has a `price` line for the leg: the latest line's value, if the
    leg still shows that line's `after`;
-2. with no such line, no override decided on the leg's price, no `user` `Price` line in the action's history, and the
-   leg marked USD: the reference price of the row in the newest
-   `plans/*/upload/` file holding its ID, if any. A row uploaded outside a plan
-   has none, and is edited once. A file does not prove it was the one uploaded:
-   a row uploaded from one plan whose price changed in a newer plan made before
-   the next pull is taken to hold the newer price;
+2. with no such line, no override decided on the leg's price and no `user` `Price` line in the action's history:
+   the reference price of the row in the newest `plans/*/upload/` file made before the leg's `createdAt`, by the
+   time in the plan folder's name. A file with no price for the row, or no such file, gives none, and the leg is
+   edited once. So a newer plan's file does not count for a leg already in Summ. A row uploaded outside a plan has
+   none. A file does not prove it was the one uploaded: a plan made after the upload file's plan and before the
+   upload is taken as the source. A user edit older than the history window Summ shows reads as the sync's. A leg
+   with no `createdAt` (an old import) goes by the newest file, and only if marked USD;
 3. otherwise none.
 
 **Plan.** For a managed base leg, and an import's leg matched to a categorised row

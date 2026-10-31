@@ -8,6 +8,18 @@ import { type Leg, normaliseTxid } from "./snapshot.ts";
 import type { AppliedEdit, LegRole, Override, Value, LeftLeg } from "./state.ts";
 import { type SummType, summBlockchain, summType } from "./summ-types.ts";
 
+/** A row's price in one plan's upload file: null when the file has it with no USD price. */
+export interface UploadedFile {
+  planTime: number;
+  price: number | null;
+}
+
+/** The price in the newest plan file made before the leg existed: what the user can have uploaded. */
+export function priceUploadedBefore(files: UploadedFile[] | undefined, createdAt: string): number | null {
+  const created = Date.parse(createdAt);
+  return files?.filter((f) => f.planTime < created).at(-1)?.price ?? null;
+}
+
 export interface PlanInput {
   files: RunFile[];
   rows: Row[];
@@ -22,6 +34,8 @@ export interface PlanInput {
   leftLegs?: LeftLeg[];
   /** The USD price of each row in the newest upload file holding it (plans/<time>/upload). */
   uploadedPrices?: Map<string, number>;
+  /** Each plan's upload-file price of a row, oldest first: says what a leg was uploaded with (spec: Prices). */
+  uploadFiles?: Map<string, UploadedFile[]>;
   now: string;
   /** plan --only: the scope's entries (scopeMatch); the plan covers only the rows they match. */
   scope?: string[];
@@ -475,8 +489,12 @@ export function makePlan(input: PlanInput): PlanResult {
     // A decision on this very price says the price is not the sync's, whatever the mark says
     const recorded = stands
       ? Number(own.value)
-      : !own && !decided && users === 0 && base.priceValueCurrency === "USD"
-        ? (input.uploadedPrices?.get(row.id) ?? null)
+      : !own && !decided && users === 0
+        ? base.createdAt
+          ? priceUploadedBefore(input.uploadFiles?.get(row.id), base.createdAt)
+          : base.priceValueCurrency === "USD"
+            ? (input.uploadedPrices?.get(row.id) ?? null)
+            : null
         : null;
     // Not the sync's price: its edit no longer stands, a price other than the one decided on, or more edits in the
     // action's history than the sync's own edits of its legs. A read-back that failed (after null) says no more than
