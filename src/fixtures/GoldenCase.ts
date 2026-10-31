@@ -5,7 +5,7 @@ import type { Action } from "@xchainjs/xchain-midgard";
 import type { TxStatusResponse } from "@xchainjs/xchain-thornode";
 import type { SummRow } from "../export/summ/csv/index.ts";
 import type { ViewblockInbound, ViewblockTx } from "../sources/viewblock/index.ts";
-import type { EvmReceipt } from "../sources/evm/EvmReceipts.ts";
+import type { EvmReceipt, EvmTokenPayout } from "../sources/evm/EvmReceipts.ts";
 import { runBundle } from "../pipeline/run.ts";
 import type { Treatment } from "../export/summ/index.ts";
 import type { TcyDistributionItem } from "../sources/tcy/TcyDistributionService.ts";
@@ -41,6 +41,8 @@ export interface GoldenCaseInput {
   // Viewblock's gas and EVM receipts of the inbounds (docs/specs/fees.md)
   viewblockInbounds?: ViewblockInbound[];
   evmReceipts?: EvmReceipt[];
+  // What an aggregator outbound delivered (docs/specs/activity.md, Aggregator payouts)
+  tokenPayout?: EvmTokenPayout;
   // THORChain sends attached as the action's inbounds (a Maya liquidity auction's deposits)
   inbounds?: Action[];
   // The native fee at the action's height (Maya), base units
@@ -160,6 +162,7 @@ export function toBundle(input: GoldenCaseInput): RawBundle {
     cosmosTxs: input.cosmosTxs ?? [],
     ...(input.viewblockInbounds ? { viewblockInbounds: input.viewblockInbounds } : {}),
     ...(input.evmReceipts ? { evmReceipts: input.evmReceipts } : {}),
+    ...(input.tokenPayout ? { tokenPayout: input.tokenPayout } : {}),
     ...(input.inbounds ? { inbounds: input.inbounds } : {}),
     ...(input.nativeFee ? { nativeFee: input.nativeFee } : {}),
     ...(input.runePriceUsd ? { runePriceUsd: input.runePriceUsd } : {}),
@@ -179,6 +182,7 @@ export function toCaseInput(bundle: RawBundle, description: string): GoldenCaseI
     ...(bundle.cosmosTxs.length ? { cosmosTxs: bundle.cosmosTxs } : {}),
     ...(bundle.viewblockInbounds?.length ? { viewblockInbounds: bundle.viewblockInbounds } : {}),
     ...(bundle.evmReceipts?.length ? { evmReceipts: bundle.evmReceipts } : {}),
+    ...(bundle.tokenPayout ? { tokenPayout: bundle.tokenPayout } : {}),
     ...(bundle.inbounds?.length ? { inbounds: bundle.inbounds } : {}),
     ...(bundle.nativeFee ? { nativeFee: bundle.nativeFee } : {}),
     ...(bundle.runePriceUsd ? { runePriceUsd: bundle.runePriceUsd } : {}),

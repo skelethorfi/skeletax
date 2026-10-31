@@ -1,9 +1,9 @@
 import type { Action, Transaction } from "@xchainjs/xchain-midgard";
 import type { Activity, Leg, Price } from "../../domain/Activity.ts";
-import { parseAmount } from "../../domain/Amount.ts";
-import { toAsset } from "../../domain/Asset.ts";
+import { formatAmount, parseAmount } from "../../domain/Amount.ts";
+import { type Asset, toAsset } from "../../domain/Asset.ts";
 import type { Issue } from "../../domain/Issue.ts";
-import { getActionDate } from "../../sources/thorchain/MidgardUtils.ts";
+import { getActionDate, parseMidgardAsset } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { inboundGas } from "./gas.ts";
@@ -53,6 +53,11 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
     .filter((coin) => coin.asset === inputCoin.asset)
     .reduce((sum, coin) => sum + BigInt(coin.amount), 0n);
   const txid = input.txID ?? "";
+  // The token an aggregator delivered, when the pool asset was only passing through (docs/specs/activity.md)
+  const payout = bundle.tokenPayout?.token;
+  const received = payout
+    ? { asset: deliveredAsset(bundle), amount: parseAmount(payout.amount, payout.decimals) }
+    : { asset: outputAsset, amount: amount(outputCoin) };
   const legs: Leg[] = [
     {
       direction: "out",
@@ -79,8 +84,8 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
     {
       direction: "in",
       wallet: output.address,
-      asset: outputAsset,
-      amount: amount(outputCoin),
+      asset: received.asset,
+      amount: received.amount,
       role: "principal",
       basis: "observed",
       ...(output.txID ? { txid: output.txID } : {}),
@@ -99,11 +104,33 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
         memo: action.metadata.swap?.memo,
         legs: gas ? [...legs, { ...gas, txid }] : legs,
         prices: getPrices(action, inputCoin.asset, outputCoin.asset),
-        details: {},
+        details: payout ? { paidVia: `${formatAmount(amount(outputCoin))} ${outputCoin.asset}` } : {},
       },
     ],
-    issues: [],
+    issues:
+      bundle.tokenPayout && !payout
+        ? [
+            {
+              kind: "warning",
+              message: `the memo names a final token but no such transfer reached the wallet: ${outputCoin.asset} is exported; check what ${output.txID} paid`,
+            },
+          ]
+        : [],
   };
+}
+
+// The token as Midgard would name it. A symbol that would read as another currency (UNI-V2 as UNI, LUNA as LUNC), or that a CSV
+// or a Summ view can't hold (A/B reads as a synth), stops the action rather than record the wrong asset.
+function deliveredAsset(bundle: RawBundle): Asset {
+  const { chain, token } = bundle.tokenPayout!;
+  const symbol = token!.symbol.toUpperCase();
+  const notation = `${chain}.${symbol}-${token!.contract.toUpperCase()}`;
+
+  if (/[/\s\p{Cc}]/u.test(symbol) || parseMidgardAsset(notation).currency !== symbol) {
+    throw new Error(`swap: token symbol "${token!.symbol}" (${token!.contract}) does not fit asset notation`);
+  }
+
+  return toAsset(notation);
 }
 
 // A swap still pending past the cut-off that paid nothing out, which the source exports only then: the wallet

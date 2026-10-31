@@ -1,5 +1,5 @@
 import { RecordStore } from "../store/RecordStore.ts";
-import { EVM_RECEIPT_RULES } from "../store/Sources.ts";
+import { EVM_PAYOUT_RULES, EVM_RECEIPT_RULES } from "../store/Sources.ts";
 import { EVM_RPC_URLS } from "../../config/apiUrls.ts";
 import { http } from "../http.ts";
 
@@ -22,6 +22,49 @@ export interface EvmReceipt {
   effectiveGasPrice: string;
   // The L1 data fee of an OP-stack chain (BASE)
   l1Fee?: string;
+}
+
+// What an aggregator outbound delivered (docs/specs/activity.md, Aggregator payouts): the memo's final token
+// that the tx transferred to the wallet. No token when no such transfer shows: usually the aggregator's swap
+// failed and the wallet got the pool asset. `amount` is in the token's base units.
+export interface EvmTokenPayout {
+  chain: string;
+  transactionHash: string;
+  token: { contract: string; symbol: string; decimals: number; amount: string } | null;
+}
+
+const ERC20_TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+// A symbol() or decimals() answer: an ABI string, or (older tokens) a bytes32
+export function decodeSymbol(hex: string): string {
+  const bytes = Buffer.from(hex.replace(/^0x/, ""), "hex");
+  const text =
+    bytes.length > 32 ? bytes.subarray(64, 64 + Number(BigInt(`0x${bytes.subarray(32, 64).toString("hex")}`))) : bytes;
+  return text.toString("utf8").replace(/\0+$/, "");
+}
+
+// The final token's transfers to the wallet in a receipt's logs, summed. tail: the memo's short form of the
+// token, the end of its contract address
+export function findTokenTransfer(
+  logs: { address: string; topics: string[]; data: string }[],
+  to: string,
+  tail: string,
+): { contract: string; amount: string } | undefined {
+  const paddedTo = `0x${to.replace(/^0x/i, "").toLowerCase().padStart(64, "0")}`;
+  const transfers = logs.filter(
+    (log) =>
+      log.topics[0] === ERC20_TRANSFER &&
+      log.topics.length === 3 &&
+      log.topics[2]?.toLowerCase() === paddedTo &&
+      log.address.toLowerCase().endsWith(tail.toLowerCase()),
+  );
+
+  if (new Set(transfers.map((log) => log.address.toLowerCase())).size > 1) {
+    throw new Error(`more than one token ending ${tail} was paid to ${to}`);
+  }
+
+  const amount = transfers.reduce((sum, log) => sum + BigInt(log.data), 0n);
+  return amount > 0n ? { contract: transfers[0].address.toLowerCase(), amount: amount.toString() } : undefined;
 }
 
 // What the wallet paid to send the tx, in wei (docs/specs/fees.md)
@@ -76,18 +119,93 @@ export class EvmReceipts {
     );
   }
 
-  private async fetchReceipt(chain: string, url: string, hash: string): Promise<EvmReceipt> {
-    const response = await http.post(url, {
-      jsonrpc: "2.0",
-      id: 1,
-      method: "eth_getTransactionReceipt",
-      params: [hash],
-    });
+  // The token an aggregator outbound paid `to` (docs/specs/activity.md, Aggregator payouts). Undefined only when
+  // replaying a run made before this source was read: such a run keeps the pool asset.
+  async getTokenPayout(
+    chain: string,
+    txId: string,
+    to: string,
+    tail: string,
+    date?: Date,
+  ): Promise<EvmTokenPayout | undefined> {
+    if (this.store.addedSinceReplay("evm-payout")) {
+      return undefined;
+    }
+
+    const url = this.urls[chain];
+
+    if (!url) {
+      throw new Error(`No RPC endpoint for ${chain}`);
+    }
+
+    const hash = `0x${txId.replace(/^0x/i, "").toLowerCase()}`;
+    return this.store.record(
+      "evm-payout",
+      `${chain}.${hash}`,
+      async () => ({ data: await this.fetchTokenPayout(chain, url, hash, to, tail), url }),
+      EVM_PAYOUT_RULES,
+      date,
+    );
+  }
+
+  private async fetchTokenPayout(
+    chain: string,
+    url: string,
+    hash: string,
+    to: string,
+    tail: string,
+  ): Promise<EvmTokenPayout> {
+    const receipt = await this.rawReceipt(chain, url, hash);
+
+    // A reverted outbound, or an endpoint that leaves logs out, says nothing about what arrived, so it is never stored
+    if (BigInt(receipt.status ?? 0) !== 1n || !Array.isArray(receipt.logs)) {
+      throw new Error(`${chain} receipt ${hash}: not a successful tx with logs`);
+    }
+
+    const transfer = findTokenTransfer(receipt.logs, to, tail);
+
+    if (!transfer) {
+      return { chain, transactionHash: receipt.transactionHash, token: null };
+    }
+
+    const call = async (data: string, name: string) => {
+      const answer = await this.rpc(
+        chain,
+        url,
+        "eth_call",
+        [{ to: transfer.contract, data }, "latest"],
+        `token ${transfer.contract} ${name}`,
+      );
+
+      if (!answer || answer === "0x") {
+        throw new Error(`${chain} token ${transfer.contract}: no ${name}`);
+      }
+
+      return answer as string;
+    };
+    const symbol = decodeSymbol(await call("0x95d89b41", "symbol"));
+    const decimals = Number(BigInt(await call("0x313ce567", "decimals")));
+
+    if (!symbol) {
+      throw new Error(`${chain} token ${transfer.contract}: no symbol`);
+    }
+
+    return { chain, transactionHash: receipt.transactionHash, token: { ...transfer, symbol, decimals } };
+  }
+
+  private async rpc(chain: string, url: string, method: string, params: unknown[], what: string): Promise<any> {
+    const response = await http.post(url, { jsonrpc: "2.0", id: 1, method, params });
     const { result, error } = response.data ?? {};
 
     if (error) {
-      throw rpcError(`${chain} receipt ${hash}: ${error.message ?? JSON.stringify(error)}`, isRateLimit(error));
+      throw rpcError(`${chain} ${what}: ${error.message ?? JSON.stringify(error)}`, isRateLimit(error));
     }
+
+    return result;
+  }
+
+  private async rawReceipt(chain: string, url: string, hash: string): Promise<any> {
+    const result = await this.rpc(chain, url, "eth_getTransactionReceipt", [hash], `receipt ${hash}`);
 
     // A pruning node answers null, as it does for a tx it never saw. A load-balanced endpoint can briefly route to
     // one, so it is retried; never stored, so a later run asks again.
@@ -98,6 +216,11 @@ export class EvmReceipts {
       );
     }
 
+    return result;
+  }
+
+  private async fetchReceipt(chain: string, url: string, hash: string): Promise<EvmReceipt> {
+    const result = await this.rawReceipt(chain, url, hash);
     const { effectiveGasPrice } = result;
 
     // Every receipt has it since London (2021), old txs included; an endpoint that leaves it out can't be used

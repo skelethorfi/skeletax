@@ -70,7 +70,8 @@ reference price, which Summ uses instead of its own market price (swaps: each
 side's own price). That covers what Summ cannot price itself:
 
 - **Tokens it doesn't know**, e.g. VTHOR received in a swap from RUNE: the
-  swap's own price for each side.
+  swap's own price for each side. A token an aggregator delivered takes the
+  value of what was sent.
 - **Liquidity and savers positions.** The position token has no market price,
   so the **Receive LP Token** and **Return LP Token** rows carry the value of
   what went in or came out, per unit. Each add or withdrawal also comes with a

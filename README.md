@@ -16,6 +16,9 @@ which values are observed on-chain and which are assumed.
 
 - **THORChain swaps** (including streaming swaps with an unfilled part
   returned) and **refunds**: [fees.md](docs/specs/fees.md)
+- **Swaps paid out through an aggregator** on Ethereum, Avalanche, BSC or Base
+  (RUNE to ETH to a token): the row names the token that reached the wallet, at
+  the value of what was sent ([activity.md](docs/specs/activity.md#aggregator-payouts)).
 - **Liquidity** (add and withdraw): [liquidity.md](docs/specs/liquidity.md)
 - **Savers**: [savers.md](docs/specs/savers.md)
 - **Lending** (loan open and repayment): [loans.md](docs/specs/loans.md)
@@ -55,9 +58,12 @@ which values are observed on-chain and which are assumed.
   Rujira contracts. Levana perps are discontinued: enter positions by hand
   ([rujira.md](docs/specs/rujira.md#levana)).
 - The conversion of open savers positions to TCY in January 2025.
-- Aggregated swaps (routed through more than THORChain).
+- Swaps sent in through an aggregator (a token swapped on a DEX, then into
+  THORChain): THORChain only sees the pool asset arrive, so the row names that
+  asset, not the token the wallet spent. Enter these by hand. Same for any
+  aggregator swap on Maya.
 
-A run never drops what it can't map: each such action is saved under
+Otherwise a run never drops what it can't map: each such action is saved under
 `unsupported/` (or `failures/`) in the run's output folder and listed in its
 `summary.md`.
 

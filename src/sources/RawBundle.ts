@@ -1,7 +1,7 @@
 import type { Action } from "@xchainjs/xchain-midgard";
 import type { TxStatusResponse } from "@xchainjs/xchain-thornode";
 import type { ViewblockInbound, ViewblockTx } from "./viewblock/index.ts";
-import type { EvmReceipt } from "./evm/EvmReceipts.ts";
+import type { EvmReceipt, EvmTokenPayout } from "./evm/EvmReceipts.ts";
 import { getDistributionDate, type TcyDistributionItem } from "./tcy/TcyDistributionService.ts";
 import type { CosmosTx } from "./thorchain/CosmosTxService.ts";
 import type { TcyClaimData } from "./tcy/TcyClaimService.ts";
@@ -30,6 +30,8 @@ export interface RawBundle {
   viewblockInbounds?: ViewblockInbound[];
   // The receipts of the inbounds sent on an EVM chain: their fee (docs/specs/fees.md)
   evmReceipts?: EvmReceipt[];
+  // What an aggregator outbound delivered (docs/specs/activity.md, Aggregator payouts)
+  tokenPayout?: EvmTokenPayout;
   // The protocol's native fee at the action's height, in base units, when it is not constant (Maya); it replaces
   // the protocol's default gas (docs/specs/maya.md, Fees)
   nativeFee?: string;

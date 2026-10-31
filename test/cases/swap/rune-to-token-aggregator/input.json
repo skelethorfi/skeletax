@@ -1,5 +1,5 @@
 {
-  "description": "swap/swap success: [THOR.RUNE] -> [ETH.ETH]",
+  "description": "swap/swap success: [THOR.RUNE] -> [ETH.ETH], then an aggregator delivers SNX",
   "source": "midgard",
   "wallet": "thor1lnre6rd4m2fnrpemsmffksvw7wm65gwfcvfa35",
   "data": {
@@ -55,6 +55,16 @@
     ],
     "status": "success",
     "type": "swap"
+  },
+  "tokenPayout": {
+    "chain": "ETH",
+    "transactionHash": "0x1b031ca139b576c2fabaf483a10a47b0efa213f0ee05518c1826c22c93935ab7",
+    "token": {
+      "contract": "0xc011a73ee8576fb46f5e1c5751ca3b9fe0af2a6f",
+      "amount": "4201841995526615545412",
+      "symbol": "SNX",
+      "decimals": 18
+    }
   },
   "thornodeTxs": [
     {

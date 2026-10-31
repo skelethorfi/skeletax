@@ -74,7 +74,7 @@ describe("row IDs and the export treatment", () => {
     const { readCaseInput, runCaseLayers } = await import("../src/fixtures/GoldenCase.ts");
     const { exportSumm } = await import("../src/export/summ/index.ts");
     const [swap] = runCaseLayers(
-      readCaseInput(path.join(import.meta.dirname, "cases", "swap", "rune-to-eth")),
+      readCaseInput(path.join(import.meta.dirname, "cases", "swap", "rune-to-token-aggregator")),
     ).activities;
     const traded = {
       ...swap,
