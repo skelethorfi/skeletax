@@ -85,6 +85,25 @@ export function readApplyLog(stateDir: string): AppliedEdit[] {
   return readLogLines<AppliedEdit>(stateDir).filter((e) => typeof e.legId === "string" && typeof e.field === "string");
 }
 
+/** A made-up leg an apply could not ignore, and left counted. */
+export interface LeftLeg {
+  legId: string;
+  /** The row of the entry that left it, null when the run had none. */
+  id: string | null;
+  plan: string;
+  reason: string;
+}
+
+/** The log's made-up legs left in place, the latest line of each. Any other skip line, an old log's too, names none. */
+export function readLeftLegs(stateDir: string): LeftLeg[] {
+  const left = new Map<string, LeftLeg>();
+  for (const l of readLogLines<Partial<LeftLeg> & { call?: string; leftLeg?: unknown }>(stateDir)) {
+    if (l.call !== "skip" || typeof l.leftLeg !== "string") continue;
+    left.set(l.leftLeg, { legId: l.leftLeg, id: l.id ?? null, plan: String(l.plan), reason: String(l.reason) });
+  }
+  return [...left.values()];
+}
+
 /**
  * Adds a plan's adopted legs and captured overrides to the state dir's tables as they are now, so an edit made
  * by hand since the plan (an override deleted, a reason filled in) is kept. Returns the tables it changed.

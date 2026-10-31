@@ -19,7 +19,7 @@ import { durability, isWriteLine, readLogLines, repairLog, takeLock } from "../s
 import { parseDetail } from "../src/parse.ts";
 import type { DeleteEntry, EditEntry } from "../src/plan.ts";
 import { prune } from "../src/prune.ts";
-import { readApplyLog } from "../src/state.ts";
+import { readApplyLog, readLeftLegs } from "../src/state.ts";
 import { Died, type FakeLeg, FakeSumm } from "./fake-summ.ts";
 
 // Thousands of applies: the disk is not what these tests are about. journal's own tests run with it
@@ -1032,6 +1032,7 @@ test("a made-up leg still sharing after its send landed is reported; the run goe
   assert.equal(summ.leg("made")?.trade, "deposit");
   const skip = logOf(dir).find((l) => l.call === "skip");
   assert.deepEqual([skip?.entry, skip?.legId], ["categorise-0", undefined]);
+  assert.deepEqual(readLeftLegs(dir), [{ legId: "made", id: "r", plan: "p", reason: skip?.reason }]);
   assert.equal(logOf(dir).at(-1)?.reason, "complete");
 });
 
@@ -1172,4 +1173,71 @@ test("a second real signal stops at once", () => {
   const out = spawnSync(process.execPath, [child, dir, planDir, "twice"], { encoding: "utf8" });
   assert.equal(out.signal, "SIGTERM");
   assert.doesNotMatch(out.stdout, /left:/);
+});
+
+test("a deleted row's made-up leg left sharing is on record for later plans; old skip lines name no leg", async () => {
+  const summ = new FakeSumm();
+  summ.add("x", [leg("d", { side: "outgoing" }), soft("made")]);
+  summ.add("y", [leg("keeps", { trade: "deposit" })]);
+  const real = summ.callTool.bind(summ);
+  summ.callTool = async (name, args) => {
+    const text = await real(name, args);
+    // Summ pairs the made-up leg with another once the delete is made
+    if ((args.operation as { type?: string } | undefined)?.type === "delete") {
+      const [id, legs] = summ.holder("made") as [string, FakeLeg[]];
+      summ.actions.delete(id);
+      (summ.holder("keeps") as [string, FakeLeg[]])[1].push(...legs);
+    }
+    return text;
+  };
+  const { dir, planDir } = del1(summ);
+  appendFileSync(
+    join(dir, "apply-log.jsonl"),
+    line({ time: "2023-01-01T00:00:00.000Z", call: "skip", reason: "old" }) + "\n",
+  );
+  const result = await once(summ, dir, planDir);
+  assert.equal(result.deleted, 1);
+  assert.deepEqual(
+    readLeftLegs(dir).map((l) => [l.legId, l.id]),
+    [["made", null]],
+  );
+  assert.equal(logOf(dir).at(-1)?.reason, "complete");
+});
+
+test("a leg no longer made up that also shares its action stops, and is not ignored", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [{ ...soft("made"), importType: "retyped" }, leg("other")]);
+  const { dir, planDir } = stateFor(summ, planOf({ categorise: [ed("r", [], ["made"])] }));
+  await assert.rejects(once(summ, dir, planDir), /leg made is not a made-up leg \(retyped\)/);
+  assert.equal(summ.writes.length, 0);
+  assert.deepEqual(readLeftLegs(dir), []);
+});
+
+test("a read-back holding one of an entry's two priced legs gives neither a price, and stops", async () => {
+  const summ = new FakeSumm();
+  summ.add("t", [leg("sell", { price: 3 }), leg("buy", { trade: "deposit", price: 5 })]);
+  const real = summ.callTool.bind(summ);
+  summ.callTool = async (name, args) => {
+    const text = await real(name, args);
+    // The second leg has moved to an action the result does not name
+    if (name === "edit_transaction") {
+      const [id, legs] = summ.holder("buy") as [string, FakeLeg[]];
+      const buy = legs.find((l) => l._id === "buy") as FakeLeg;
+      summ.actions.set(
+        id,
+        legs.filter((l) => l !== buy),
+      );
+      summ.actions.set("elsewhere", [buy]);
+    }
+    return text;
+  };
+  const plan = planOf({ edit: [ed("r", [set("sell", "price", 3, 1), set("buy", "price", 5, 4)])] });
+  const { dir, planDir } = stateFor(summ, plan);
+  await assert.rejects(once(summ, dir, planDir), /do not show/);
+  const after = (legId: string) =>
+    logOf(dir)
+      .filter((l) => l.legId === legId && !l.intent)
+      .map((l) => l.after);
+  assert.deepEqual([after("sell"), after("buy")], [[null], [null]]);
+  assert.equal(logOf(dir).at(-1)?.reason, "read-back");
 });

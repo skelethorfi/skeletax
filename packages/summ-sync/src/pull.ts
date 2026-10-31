@@ -13,7 +13,8 @@ import { nextDay, startOfDay } from "./dates.ts";
 import { isWriteLine, readLogLines } from "./journal.ts";
 import { McpClient } from "./mcp.ts";
 import { matchesOwnLegs } from "./plan.ts";
-import { type ListedAction, parseActions, parseDetail, parsePageHeader } from "./parse.ts";
+import { isLegAbsent, type ListedAction, parseActions, parseDetail, parsePageHeader } from "./parse.ts";
+import { readLeftLegs } from "./state.ts";
 import { type Config, extraDirsOf, loadConfig } from "./config.ts";
 import { periodsOf, readRun, type Row, type RunFile } from "./run.ts";
 import {
@@ -210,6 +211,15 @@ export async function pull(
       }
     }
     if (txids) for (const id of actionsWithTxids(actions, txids)) needed.add(id);
+    // A made-up leg an apply left in place can be outside all of those: plan must see whether it is still there
+    for (const { legId } of readLeftLegs(stateDir)) {
+      const text = await client.callTool("inspect_transaction", { transactionId: legId }).catch((e: Error) => {
+        if (isLegAbsent(e.message, legId)) return null;
+        throw e;
+      });
+      const id = text === null ? null : parseDetail(text).action._id;
+      if (id !== null && listed.has(id)) needed.add(id);
+    }
 
     const todo = [...needed].filter((id) => !read.has(id));
     console.log(`  ${needed.size} details needed, ${todo.length} to read`);

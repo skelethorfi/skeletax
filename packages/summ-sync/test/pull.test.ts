@@ -33,6 +33,7 @@ function fakeSumm(ids: string[], legs: Record<string, unknown[]> = {}) {
     legs,
     sourceIds: null as string[] | null,
     gone: new Set<string>(),
+    holders: {} as Record<string, string>,
     before: (_: string) => {},
   };
   const inspected: string[] = [];
@@ -49,6 +50,12 @@ function fakeSumm(ids: string[], legs: Record<string, unknown[]> = {}) {
             `## ${i + 1}. send\n- **Action ID**: \`${id}\`\n- **Tx Hash**: \`h${id}\`\n- **Action Category**: send`,
         );
         return `# Transactions (Page 1 of 1, ${actionIds.length} returned, ${actionIds.length} total)\n\n${blocks.join("\n\n")}`;
+      }
+      if (args.transactionId) {
+        const held = state.holders[args.transactionId as string];
+        if (!held)
+          throw new Error(`inspect_transaction: Transaction '${String(args.transactionId)}' was not found. Use it.`);
+        return `\`\`\`json\n${JSON.stringify({ _id: held, outgoing: state.legs[held] ?? [] })}\n\`\`\`\n`;
       }
       const id = args.actionId as string;
       state.before(id);
@@ -350,3 +357,16 @@ test("legsOf keeps a fee Summ holds on the leg itself, by its currency symbol or
     ],
   );
 });
+
+test("a made-up leg an apply left in place has its action read, so plan can see it; a leg gone is not an error", () =>
+  quiet(async () => {
+    const stateDir = stateDirOf();
+    const skip = (leftLeg: string) =>
+      JSON.stringify({ time: "2026-01-01T00:00:00Z", plan: "p", call: "skip", id: null, reason: "r", leftLeg });
+    writeFileSync(join(stateDir, "apply-log.jsonl"), `${skip("made")}\n${skip("gone")}\n`);
+    const { client, state } = fakeSumm(["a", "b"], { a: [], b: [{ _id: "made", quantity: 1 }] });
+    state.sourceIds = ["a"];
+    state.holders = { made: "b" };
+    const file = await pull(stateDir, undefined, { client, now: T0 });
+    assert.ok(readSnapshot(file).legs.some((l) => l.legId === "made"));
+  }));

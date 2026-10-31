@@ -614,8 +614,12 @@ since it may have been made before the error):
    Then each made-up leg of the row is read by its id, waiting a few seconds for Summ to
    split it off, and ignored by its action id, only when that action holds nothing else.
    Already ignored: done. Gone: done if this plan logged its ignore, otherwise stop. No
-   longer a made-up leg: stop. Still sharing: reported with a `skip` line, left as it is, and the
-   run goes on, since its entry's own write stands; the next plan reports it while it lasts. An undo handle cannot be relied on to back
+   longer a made-up leg: stop. Still sharing: left as it is, reported in the run's output, and logged
+   with a `skip` line naming it (`leftLeg`), and the run goes on, since its entry's own write stands.
+   The leg stays counted on its own until it is ignored. Every later plan reports it (`made-up-left`,
+   with its row, if any, and why), whether a delete or a categorise left it, for as long as the pull finds it
+   in Summ and not ignored; pull reads its action by the leg's id for that. A leg outside a pull's range is not
+   seen, as the range's limits say. Older `skip` lines name no leg and are not reported. An undo handle cannot be relied on to back
    out of this: once Summ re-pairs the categorised leg with another (e.g. an uploaded
    bridge-trade-in), the edit's handle is stale.
 5. Only when every entry is done: add the plan's adoptions and captures to the tables

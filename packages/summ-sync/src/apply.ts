@@ -22,7 +22,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { type ActionDetail, parseDetail } from "./parse.ts";
+import { type ActionDetail, isLegAbsent, parseDetail } from "./parse.ts";
 import { type Change, type DeleteEntry, type EditEntry, type Plan, same } from "./plan.ts";
 import {
   appendLogLine,
@@ -201,18 +201,13 @@ export function undoHandle(text: string): string | null {
 
 type Found = { actionId: string; legs: Leg[]; detail: ActionDetail };
 
-// How Summ's tool answers a transaction id it does not hold, for this very id. Any other failure, a gateway's 404 too,
-// is a failed read, which says nothing of the leg
-const isAbsent = (message: string, legId: string) =>
-  message.startsWith(`inspect_transaction: Transaction '${legId}' was not found`);
-
 /** The action that holds a leg now (an action id can change on any write) and its legs; null when Summ has no such leg. */
 async function lookUp(client: ToolCaller, legId: string): Promise<Found | null> {
   let text: string;
   try {
     text = await client.callTool("inspect_transaction", { transactionId: legId });
   } catch (e) {
-    if (isAbsent((e as Error).message, legId)) return null;
+    if (isLegAbsent((e as Error).message, legId)) return null;
     throw e;
   }
   const detail = parseDetail(text);
@@ -586,15 +581,17 @@ export async function applyPlan(
     }
     const leg = now.legs.find((l) => l.legId === legId) as Leg;
     if (isIgnored(leg)) return found(key, id, { legIds: [legId] });
-    // Its entry's own write stands, so this blocks nothing: reported here, and by the next plan while it lasts
+    if (leg.importType !== "soft-transfer")
+      return conflict(key, id, `leg ${legId} is not a made-up leg (${leg.importType})`);
+    // Its entry's own write stands, so this blocks nothing. The leg stays counted until it is ignored: `leftLeg` has
+    // every later plan report it for as long as it is in Summ and not ignored (readLeftLegs), since a deleted row's
+    // made-up leg is named nowhere else
     if (now.legs.length !== 1) {
       const reason = `made-up leg ${legId} still shares its action with ${now.legs.length - 1} other legs; not ignored`;
       result.skipped.push({ id, reason });
       say(`  skipped ${id ?? "(no row)"}: ${reason}`);
-      return write({ call: "skip", entry: key, id, reason });
+      return write({ call: "skip", entry: key, id, reason, leftLeg: legId });
     }
-    if (leg.importType !== "soft-transfer")
-      return conflict(key, id, `leg ${legId} is not a made-up leg (${leg.importType})`);
     // No legId or field: as ever, plan does not read an ignore as an edit
     const tag = {
       operation: "ignore",
