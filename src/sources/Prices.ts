@@ -90,7 +90,11 @@ export class PriceSource {
 
     for (const activity of interpret(bundle, getProtocol(bundle.protocol)).activities) {
       if (bucketStart(activity.time) === bucket) {
-        activity.legs.map((leg) => priceKey(leg.asset)).forEach((key) => key && keys.add(key));
+        // A token an aggregator delivered is valued by what was given up, not by a pool (prices.md)
+        activity.legs
+          .filter((leg) => !(activity.details.paidVia && leg.role === "principal" && leg.direction === "in"))
+          .map((leg) => priceKey(leg.asset))
+          .forEach((key) => key && keys.add(key));
       }
     }
 

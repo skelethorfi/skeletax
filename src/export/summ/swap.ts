@@ -12,6 +12,23 @@ import {
   plusSeconds,
   referencePrice,
 } from "./common.ts";
+import { formatPrice } from "./prices.ts";
+
+// A token an aggregator delivered has no price from the swap: it is worth what was given up for it, so proceeds
+// and cost base match (docs/specs/prices.md)
+function receivedPrice(activity: Activity, swapped: string, received: string, asset: string) {
+  const observed = referencePrice(activity, "midgard:swap.outPriceUSD", asset);
+  const sentUsd = referencePrice(activity, "midgard:swap.inPriceUSD").referencePricePerUnit;
+
+  if (!activity.details.paidVia || !sentUsd) {
+    return observed;
+  }
+
+  return {
+    referencePricePerUnit: formatPrice((Number(swapped) * Number(sentUsd)) / Number(received)),
+    referencePriceCurrency: "USD" as const,
+  };
+}
 
 // A cross-chain trade: the trade-out on the sending wallet carries the fee; the trade-in on the receiving
 // wallet comes 10 s later. A part returned unfilled is netted off the trade-out.
@@ -28,6 +45,7 @@ export function swapRows(activity: Activity, protocol: Protocol): SummRow[] {
   const returnedNote = returned
     ? ` (${named(returned, protocol).amount} ${input.displayCurrency} returned unfilled)`
     : "";
+  const via = activity.details.paidVia ? ` (via ${activity.details.paidVia} and an aggregator)` : "";
   const txId = sent.txid ?? "";
 
   return [
@@ -45,7 +63,7 @@ export function swapRows(activity: Activity, protocol: Protocol): SummRow[] {
       blockchain: legBlockchain(sent, protocol),
       ...referencePrice(activity, "midgard:swap.inPriceUSD"),
       trace: legTrace(sent),
-      description: `1/2 - ${swap}${returnedNote}; ${txId}`,
+      description: `1/2 - ${swap}${via}${returnedNote}; ${txId}`,
     },
     {
       wallet: received.wallet,
@@ -56,9 +74,9 @@ export function swapRows(activity: Activity, protocol: Protocol): SummRow[] {
       from: protocol.counterparty,
       to: received.wallet,
       blockchain: legBlockchain(received, protocol),
-      ...referencePrice(activity, "midgard:swap.outPriceUSD"),
+      ...receivedPrice(activity, input.amount, output.amount, received.asset.notation),
       trace: legTrace(received),
-      description: `2/2 - ${swap}; ${txId}${paidOutNote(received)}`,
+      description: `2/2 - ${swap}${via}; ${txId}${paidOutNote(received)}`,
     },
   ];
 }

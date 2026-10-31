@@ -26,6 +26,7 @@ test/cases/<group>/<name>/
 | `protocol`    | Optional, `maya` for a Maya case (default `thorchain`)                                                                      |
 | `thornodeTxs` | Optional related THORNode `tx/status` responses (swaps and switches)                                                        |
 | `cosmosTxs`   | Optional Cosmos txs of a contract action                                                                                    |
+| `tokenPayout` | Optional, what an aggregator outbound delivered (`activity.md`, Aggregator payouts)                                         |
 | `usdPrices`   | Optional USD prices at the action's time, by `THOR.RUNE`, `MAYA.CACAO` or pool (`prices.md`); the fixture tool fetches them |
 | `treatment`   | Optional config choices the case is mapped with, e.g. `{"referencePrices": "all"}`                                          |
 

@@ -2,7 +2,7 @@ import type { Action } from "@xchainjs/xchain-midgard";
 import type { TxStatusResponse } from "@xchainjs/xchain-thornode";
 import { type ListOptions, monthFolder, type RecordRules } from "./RecordStore.ts";
 import type { ViewblockInbound, ViewblockTx } from "../viewblock/ViewblockTx.ts";
-import type { EvmReceipt } from "../evm/EvmReceipts.ts";
+import type { EvmReceipt, EvmTokenPayout } from "../evm/EvmReceipts.ts";
 import type { TcyDistributionItem } from "../tcy/TcyDistributionService.ts";
 import { getPayoutDate, type MayaDistributionPayout } from "../maya/MayaDistributionService.ts";
 import type { CosmosTx } from "../thorchain/CosmosTxService.ts";
@@ -162,6 +162,7 @@ export const VIEWBLOCK_TX_RULES: RecordRules<ViewblockInbound> = {
 // An EVM tx's receipt, keyed by '<chain>.<hash>' (docs/specs/fees.md): final once it is returned, filed by the
 // action's date
 export const EVM_RECEIPT_RULES: RecordRules<EvmReceipt> = {};
+export const EVM_PAYOUT_RULES: RecordRules<EvmTokenPayout> = {};
 
 // Each TCY distribution is a record, keyed by its wallet and date (one a day): unlike an action or a tx,
 // a distribution belongs to one wallet, and several wallets are paid on the same day
@@ -224,5 +225,6 @@ export const SOURCES: { [source: string]: ListSource | { kind: "record"; rules: 
   "maya-midgard-cacao-price": { kind: "record", rules: CACAO_PRICE_RULES },
   "viewblock-tx": { kind: "record", rules: VIEWBLOCK_TX_RULES },
   "evm-receipt": { kind: "record", rules: EVM_RECEIPT_RULES },
+  "evm-payout": { kind: "record", rules: EVM_PAYOUT_RULES },
   "tcy-claim": { kind: "record", rules: TCY_CLAIM_RULES },
 };

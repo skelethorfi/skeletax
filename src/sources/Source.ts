@@ -109,6 +109,24 @@ function isUnpaidSwap(action: Action): boolean {
   );
 }
 
+// The outbound of a swap whose memo ends in an aggregator's final token, when it is on an EVM chain
+// (=:ASSET:DEST:LIMIT:AFFILIATE:FEE:AGGREGATOR:FINAL:MIN; docs/specs/activity.md, Aggregator payouts)
+export function getAggregatorOutbound(
+  action: Action,
+): { chain: string; txId: string; to: string; tail: string } | undefined {
+  const parts = ((action.metadata?.swap?.memo as string | undefined) ?? "").split(":");
+  const [to, tail] = [parts[2], parts[7]];
+  const out = action.out?.find((tx) => tx.address?.toLowerCase() === to?.toLowerCase());
+  const asset = out?.coins[0]?.asset;
+
+  if (action.type !== ActionTypeEnum.Swap || !tail || !out?.txID || !asset || !isL1Asset(asset)) {
+    return undefined;
+  }
+
+  const { chain } = assetFromStringEx(asset);
+  return isEvmChain(chain) ? { chain, txId: out.txID, to, tail } : undefined;
+}
+
 // Where the gas of an L1 inbound comes from when it is not THORNode (docs/specs/fees.md)
 export interface InboundGasSources {
   viewblock: Viewblock;
@@ -252,6 +270,17 @@ export class MidgardSource implements Source {
       }
     }
 
+    const aggregator = isThorchain && this.inboundGas ? getAggregatorOutbound(action) : undefined;
+    const tokenPayout = aggregator
+      ? await this.inboundGas!.evm.getTokenPayout(
+          aggregator.chain,
+          aggregator.txId,
+          aggregator.to,
+          aggregator.tail,
+          getActionDate(action),
+        )
+      : undefined;
+
     for (const txId of isThorchain ? getCosmosTxIds(action) : []) {
       cosmosTxs.push(await this.cosmosTxs.getTx(txId, getActionDate(action)));
     }
@@ -281,6 +310,7 @@ export class MidgardSource implements Source {
       cosmosTxs,
       ...(viewblockInbounds.length ? { viewblockInbounds } : {}),
       ...(evmReceipts.length ? { evmReceipts } : {}),
+      ...(tokenPayout ? { tokenPayout } : {}),
       ...(nativeFee ? { nativeFee } : {}),
       ...(runePriceUsd ? { runePriceUsd } : {}),
       ...(tcyClaim ? { tcyClaim } : {}),

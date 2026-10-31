@@ -1,6 +1,6 @@
 import type { Action, Transaction } from "@xchainjs/xchain-midgard";
 import type { Activity, Leg, Price } from "../../domain/Activity.ts";
-import { parseAmount } from "../../domain/Amount.ts";
+import { formatAmount, parseAmount } from "../../domain/Amount.ts";
 import { toAsset } from "../../domain/Asset.ts";
 import type { Issue } from "../../domain/Issue.ts";
 import { getActionDate } from "../../sources/thorchain/MidgardUtils.ts";
@@ -53,6 +53,14 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
     .filter((coin) => coin.asset === inputCoin.asset)
     .reduce((sum, coin) => sum + BigInt(coin.amount), 0n);
   const txid = input.txID ?? "";
+  // The token an aggregator delivered, when the pool asset was only passing through (docs/specs/activity.md)
+  const payout = bundle.tokenPayout?.token;
+  const received = payout
+    ? {
+        asset: toAsset(`${bundle.tokenPayout!.chain}.${payout.symbol}-${payout.contract.toUpperCase()}`),
+        amount: parseAmount(payout.amount, payout.decimals),
+      }
+    : { asset: outputAsset, amount: amount(outputCoin) };
   const legs: Leg[] = [
     {
       direction: "out",
@@ -79,8 +87,8 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
     {
       direction: "in",
       wallet: output.address,
-      asset: outputAsset,
-      amount: amount(outputCoin),
+      asset: received.asset,
+      amount: received.amount,
       role: "principal",
       basis: "observed",
       ...(output.txID ? { txid: output.txID } : {}),
@@ -99,7 +107,7 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
         memo: action.metadata.swap?.memo,
         legs: gas ? [...legs, { ...gas, txid }] : legs,
         prices: getPrices(action, inputCoin.asset, outputCoin.asset),
-        details: {},
+        details: payout ? { paidVia: `${formatAmount(amount(outputCoin))} ${outputCoin.asset}` } : {},
       },
     ],
     issues: [],
