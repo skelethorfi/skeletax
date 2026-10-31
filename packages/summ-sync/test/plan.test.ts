@@ -3080,7 +3080,7 @@ test("a delete of what a manual entry sells is held, unless something replaces t
 
 test("a row's delete of what a manual entry sells holds the row's event", () => {
   const r = row({
-    type: "buy",
+    type: "receive",
     baseCurrency: "ETH",
     baseAmount: "0.5",
     quoteCurrency: "",
