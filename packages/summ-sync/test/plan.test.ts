@@ -1970,6 +1970,16 @@ test("price: an upload holds its file's price though Summ does not mark it, by t
   // Files that disagree: any can be the one uploaded, so it is edited once
   const added = new Map([[r.id, [at("2026-01-01T00:00:00Z", null), at("2026-01-15T00:00:00Z", 2.5)]]]);
   assert.equal(priceEdits(plan({ rows: [r], legs: legs("2026-02-01T00:00:00Z"), uploadFiles: added }).plan).length, 1);
+  for (const [first, second] of [
+    [2.5, 2.6],
+    [2.5, null],
+  ] as const) {
+    const differ = new Map([[r.id, [at("2026-01-01T00:00:00Z", first), at("2026-01-15T00:00:00Z", second)]]]);
+    assert.equal(
+      priceEdits(plan({ rows: [r], legs: legs("2026-02-01T00:00:00Z"), uploadFiles: differ }).plan).length,
+      1,
+    );
+  }
   // A file made after the leg does not count, nor one in the same instant
   const later = new Map([[r.id, [at("2026-02-01T00:00:00Z", 2.5)]]]);
   assert.equal(priceEdits(plan({ rows: [r], legs: legs("2026-02-01T00:00:00Z"), uploadFiles: later }).plan).length, 1);
