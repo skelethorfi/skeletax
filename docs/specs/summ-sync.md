@@ -564,6 +564,13 @@ with the entries left out:
   row in the run whose action holds a manual entry, or whose txid a manual entry
   names, are not deleted either. A manual entry names a txid in its description, its comments or its Tx Hash.
 
+- a delete of an acquisition a manual entry sells: a leg coming in, not ignored, and a manual leg going out, not ignored,
+  with the same currency and amount, up to a day after. With the acquisition gone, the entry would sell from nothing, a
+  false gain. A row replaces the acquisition if it is managed, or is categorised and has a leg in Summ (a categorised
+  row with no leg labels nothing). Otherwise the delete is held, and with a row its event. A manual entry named in
+  `deleteManualEntries` sells nothing. A disposal of part of the amount, or under another amount, is not seen; Summ's
+  zero-cost warnings show those.
+
   The user resolves the pairing in Summ, or the run, and plans again. Or the user names the entry in `deleteManualEntries`
   (below): a manual entry never goes without being named.
 

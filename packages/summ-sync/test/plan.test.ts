@@ -3004,3 +3004,106 @@ test("deleteManualEntries: a hold on an unmanaged row of its tx, or on its own I
     assert.deepEqual(p.delete, []);
   }
 });
+
+test("a delete of what a manual entry sells is held, unless something replaces the acquisition", () => {
+  const T = "2024-03-01T10:00:00.000Z";
+  const old = ownLeg({
+    legId: "buy",
+    actionId: "old",
+    side: "incoming",
+    trade: "buy",
+    currency: "ETH",
+    quantity: 0.5,
+    source: "csv-source",
+    importType: "manual-csv",
+    id: "old-file.csv:2",
+    timestamp: T,
+  });
+  const sold = (over: Partial<Leg> = {}) =>
+    ownLeg({
+      legId: "sell",
+      actionId: "man",
+      trade: "sell",
+      currency: "ETH",
+      quantity: 0.5,
+      importType: "manual",
+      source: "manual",
+      id: "hand",
+      timestamp: "2024-03-01T10:01:00.000Z",
+      ...over,
+    });
+  const heldFor = (legs: Leg[], rows: Row[] = [], config = CONFIG) => {
+    const p = plan({ rows, legs, config }).plan;
+    return { p, held: p.held.filter((h) => /sells what this delete acquires/.test(h.reason)) };
+  };
+  const { p, held } = heldFor([old, sold()]);
+  assert.deepEqual(p.delete, []);
+  assert.deepEqual(held[0].legIds, ["sell"]);
+  assert.match(held[0].reason, /false gain/);
+
+  // Not when it is ignored, another currency, another amount, before the buy, or over a day after
+  for (const over of [
+    { trade: "ignoreOut" },
+    { currency: "BTC" },
+    { quantity: 0.4 },
+    { timestamp: "2024-03-01T09:59:00.000Z" },
+    { timestamp: "2024-03-02T10:00:01.000Z" },
+  ]) {
+    assert.deepEqual(heldFor([old, sold(over)]).held, [], JSON.stringify(over));
+  }
+  // Not an import's disposal, nor a delete of a sale
+  assert.deepEqual(heldFor([old, sold({ importType: "wallet", source: "w" })]).held, []);
+  assert.deepEqual(heldFor([{ ...old, side: "outgoing", trade: "sell" }, sold()]).held, []);
+
+  // A managed row replaces it; so does a categorised row with a leg in Summ; a categorised row with none does not
+  const uploaded = row({ type: "buy", baseCurrency: "ETH", baseAmount: "0.5", quoteCurrency: "", quoteAmount: "" });
+  assert.deepEqual(heldFor([old, sold()], [uploaded]).held, []);
+  const label = btcRow({
+    type: "bridge-trade-in",
+    baseCurrency: "ETH",
+    baseAmount: "0.5",
+    feeCurrency: "",
+    feeAmount: "",
+    blockchain: "ETH",
+  });
+  assert.equal(heldFor([old, sold()], [label]).held.length, 1);
+
+  // Named to be deleted too, it no longer sells anything
+  const deleteManualEntries = [{ legId: "sell", currency: "ETH", quantity: 0.5, reason: "why" }];
+  const both = heldFor([old, sold()], [], { ...CONFIG, deleteManualEntries });
+  assert.deepEqual(both.held, []);
+  assert.deepEqual(
+    both.p.delete.map((d) => d.legIds[0]),
+    ["sell", "buy"],
+  );
+});
+
+test("a row's delete of what a manual entry sells holds the row's event", () => {
+  const r = row({
+    type: "buy",
+    baseCurrency: "ETH",
+    baseAmount: "0.5",
+    quoteCurrency: "",
+    quoteAmount: "",
+    txids: [TX1],
+    description: "new wording",
+  });
+  const old = legsOf(r).map((l) => ({ ...l, quantity: 0.6, description: "old wording" }));
+  const sell = ownLeg({
+    legId: "sell",
+    actionId: "man",
+    trade: "sell",
+    currency: "ETH",
+    quantity: 0.6,
+    importType: "manual",
+    source: "manual",
+    id: "hand",
+    timestamp: r.timestamp,
+  });
+  // The remake alone, then with the disposal
+  assert.equal(plan({ rows: [r], legs: old }).plan.delete.length, 1);
+  const p = plan({ rows: [r], legs: [...old, sell] }).plan;
+  assert.deepEqual(p.delete, []);
+  assert.deepEqual(p.upload, []);
+  assert.match(p.held.find((h) => h.id === r.id)?.reason ?? "", /sells what this delete acquires/);
+});

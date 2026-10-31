@@ -1385,6 +1385,61 @@ export function makePlan(input: PlanInput): PlanResult {
         });
     }
   }
+  // A manual disposal can sell what a delete's leg acquired: the same currency and amount, within a day after. With the
+  // acquisition gone and nothing in Summ to replace it, the disposal sells from nothing, a false gain. Each delete of
+  // such a leg is held, with the row's event, until the user resolves the entry. It misses a disposal of part of the
+  // amount: Summ's zero-cost warnings are what shows those.
+  const replacedByRow = (leg: Leg) =>
+    rows.some((r) => {
+      const inBase =
+        typeOf(r)?.side === "incoming" &&
+        sameCurrency(r.baseCurrency, leg.currency) &&
+        sameAmount(leg.quantity, Number(r.baseAmount));
+      const inQuote =
+        !!typeOf(r) &&
+        hasQuote(r, typeOf(r)) &&
+        typeOf(r).side === "outgoing" &&
+        sameCurrency(r.quoteCurrency, leg.currency) &&
+        sameAmount(leg.quantity, Number(r.quoteAmount));
+      // A managed row is uploaded; a categorised row only labels a leg, so it replaces only one Summ holds
+      return (inBase || inQuote) && (rowsById.has(r.id) || (legsOfRow.get(r.id) ?? []).length > 0);
+    });
+  const disposalsOf = (d: DeleteEntry) =>
+    d.manual
+      ? []
+      : d.legIds
+          .map((id) => input.legs.find((l) => l.legId === id) as Leg)
+          .filter((l) => l.side === "incoming" && !IGNORED.has(l.trade) && !replacedByRow(l))
+          .flatMap((l) =>
+            input.legs.filter(
+              (m) =>
+                m.importType === "manual" &&
+                !namedManual.has(m.legId) &&
+                m.side === "outgoing" &&
+                !IGNORED.has(m.trade) &&
+                sameCurrency(m.currency, l.currency) &&
+                sameAmount(m.quantity, l.quantity) &&
+                Date.parse(m.timestamp) >= Date.parse(l.timestamp) &&
+                Date.parse(m.timestamp) - Date.parse(l.timestamp) <= 86_400_000,
+            ),
+          );
+  const dependentReason = (manual: Leg[]) =>
+    `a manual entry sells what this delete acquires (${manual.map((l) => `${l.quantity} ${l.currency}, leg ${l.legId}`).join("; ")}): with nothing to replace it, it would sell from nothing, a false gain; resolve it in Summ, or name it in deleteManualEntries`;
+  for (const d of plan.delete.filter((d) => d.id !== null)) {
+    const manual = disposalsOf(d);
+    if (!manual.length) continue;
+    for (const r of eventOf.get(d.id as string) ?? [runRows.get(d.id as string) as Row]) {
+      if (!holdOf.has(r.id))
+        holdOf.set(r.id, {
+          kind: "manual-pairing",
+          filed: isFiled(r.timestamp),
+          id: r.id,
+          legIds: manual.map((l) => l.legId),
+          reason: dependentReason(manual),
+          held: [],
+        });
+    }
+  }
   const fields = (e: EditEntry) =>
     [
       ...e.changes.map((c) => `${c.leg} ${c.field} ${c.summ} -> ${c.desired}`),
@@ -1399,6 +1454,21 @@ export function makePlan(input: PlanInput): PlanResult {
     );
   plan.delete = plan.delete.filter((d) => {
     if (d.manual) return true; // Checked where it was named
+    if (d.id === null) {
+      const manual = disposalsOf(d);
+      if (manual.length) {
+        plan.held.push({
+          kind: "manual-pairing",
+          filed: d.filed,
+          id: null,
+          summId: d.summId,
+          legIds: manual.map((l) => l.legId),
+          reason: dependentReason(manual),
+          held: [`delete (${d.reason})`],
+        });
+        return false;
+      }
+    }
     const h = d.id !== null ? holdOf.get(d.id) : undefined;
     const gone = d.id === null ? holdOfLegs(d) : undefined;
     if (h) h.held.push(`delete (${d.reason})`);
