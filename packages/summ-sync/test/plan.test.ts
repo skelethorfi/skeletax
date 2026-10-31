@@ -9,7 +9,7 @@ import type { Row, RunFile } from "../src/run.ts";
 import { type Leg, legsOf as legsOfDetail, writeSnapshot } from "../src/snapshot.ts";
 import type { Override } from "../src/state.ts";
 import { mergeTables, readOverrides } from "../src/state.ts";
-import { priceLines, renderPlan, uploadedPrices, uploadFiles, writePlan } from "../src/write-plan.ts";
+import { priceLines, renderPlan, uploadedPrices, uploadFiles, uploadPriceFiles, writePlan } from "../src/write-plan.ts";
 import { categorisedTxids } from "../src/pull.ts";
 import { summType } from "../src/summ-types.ts";
 
@@ -1955,6 +1955,48 @@ test("price: an uploaded leg's price comes from the plan's upload file", () => {
   assert.equal(priceEdits(plan({ rows: [r], legs }).plan).length, 1);
 });
 
+test("price: an upload holds its file's price though Summ does not mark it, by the leg's creation time", () => {
+  const r = priced();
+  const at = (time: string, price: number | null) => ({ planTime: Date.parse(time), price });
+  const legs = (createdAt: string) => pricedLegs(r).map((l) => ({ ...l, createdAt }));
+  const files = new Map([[r.id, [at("2026-01-01T00:00:00Z", 2.5), at("2026-03-01T00:00:00Z", 2.6)]]]);
+  // Uploaded from the first file: the row's price is the same, so nothing to do
+  assert.deepEqual(priceEdits(plan({ rows: [r], legs: legs("2026-02-01T00:00:00Z"), uploadFiles: files }).plan), []);
+  // Made before any file with a price: it holds Summ's market price
+  assert.equal(priceEdits(plan({ rows: [r], legs: legs("2025-12-01T00:00:00Z"), uploadFiles: files }).plan).length, 1);
+  // Uploaded from a file with no price
+  const blank = new Map([[r.id, [at("2026-01-01T00:00:00Z", null)]]]);
+  assert.equal(priceEdits(plan({ rows: [r], legs: legs("2026-02-01T00:00:00Z"), uploadFiles: blank }).plan).length, 1);
+  // Files that disagree: any can be the one uploaded, so it is edited once
+  const added = new Map([[r.id, [at("2026-01-01T00:00:00Z", null), at("2026-01-15T00:00:00Z", 2.5)]]]);
+  assert.equal(priceEdits(plan({ rows: [r], legs: legs("2026-02-01T00:00:00Z"), uploadFiles: added }).plan).length, 1);
+  for (const [first, second] of [
+    [2.5, 2.6],
+    [2.5, null],
+  ] as const) {
+    const differ = new Map([[r.id, [at("2026-01-01T00:00:00Z", first), at("2026-01-15T00:00:00Z", second)]]]);
+    assert.equal(
+      priceEdits(plan({ rows: [r], legs: legs("2026-02-01T00:00:00Z"), uploadFiles: differ }).plan).length,
+      1,
+    );
+  }
+  // A file made after the leg does not count, nor one in the same instant
+  const later = new Map([[r.id, [at("2026-02-01T00:00:00Z", 2.5)]]]);
+  assert.equal(priceEdits(plan({ rows: [r], legs: legs("2026-02-01T00:00:00Z"), uploadFiles: later }).plan).length, 1);
+  // A user's price edit is still theirs
+  const edited = plan({
+    rows: [r],
+    legs: legs("2026-02-01T00:00:00Z"),
+    uploadFiles: files,
+    history: priceHistory(USER_PRICE),
+  }).plan;
+  assert.deepEqual(priceEdits(edited), []);
+  assert.deepEqual(
+    edited.overridden.map((o) => o.kind),
+    ["captured"],
+  );
+});
+
 test("price: the USD mark an undo left behind is not trusted, and the undone edit is no drift", () => {
   const r = priced();
   const legs = pricedLegs(r, { priceValueCurrency: "USD" });
@@ -2172,6 +2214,22 @@ test("price: uploadedPrices reads the newest plan's upload file, and a blank pri
       ["b", 2.75],
     ],
   );
+});
+
+test("price: uploadPriceFiles lists each plan's price by the folder's time, and skips a folder with no time", () => {
+  const dir = mkdtempSync(join(tmpdir(), "summ-sync-"));
+  const header = "ID (Optional),Reference Price Per Unit (Optional),Reference Price Currency (Optional)";
+  const write = (plan: string, lines: string[]) => {
+    mkdirSync(join(dir, "plans", plan, "upload"), { recursive: true });
+    writeFileSync(join(dir, "plans", plan, "upload", "f.csv"), [header, ...lines].join("\n") + "\n");
+  };
+  write("2026-01-01T00-00-00", ["a,1.5,USD"]);
+  write("2026-01-02T03-04-05-note", ["a,,"]);
+  write("hand-made", ["a,9,USD"]);
+  assert.deepEqual(uploadPriceFiles(dir).get("a"), [
+    { planTime: Date.parse("2026-01-01T00:00:00Z"), price: 1.5 },
+    { planTime: Date.parse("2026-01-02T03:04:05Z"), price: null },
+  ]);
 });
 
 test("price: plan.md lists price edits apart, the rate furthest from the median at the head", () => {
@@ -2616,6 +2674,19 @@ test("import price: price alone is planned once categorised, and nothing once it
     history: new Map([["l1", [USER_PRICE]]]),
   });
   assert.ok(empty(after), JSON.stringify(after, null, 1));
+});
+
+test("import price: Summ's own import leg is not an upload, whatever a plan's file says", () => {
+  const r = swapRow({ feeCurrency: "", feeAmount: "" });
+  const leg = {
+    ...ownLeg({ quantity: 0.01, trade: "bridgeTradeOut", price: 90000 }),
+    createdAt: "2026-02-01T00:00:00Z",
+  };
+  const uploadFiles = new Map([[r.id, [{ planTime: Date.parse("2026-01-01T00:00:00Z"), price: 60000 }]]]);
+  assert.deepEqual(
+    plan({ rows: [r], legs: [leg], uploadFiles }).plan.categorise[0].changes.map((c) => c.field),
+    ["price"],
+  );
 });
 
 test("import price: other categorised rows, and rows with no price, stay at market", () => {

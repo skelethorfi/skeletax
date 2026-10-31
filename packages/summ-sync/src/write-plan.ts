@@ -17,6 +17,7 @@ import {
   makePlan,
   parseScope,
   type Plan,
+  type UploadedFile,
   type ValueMatch,
 } from "./plan.ts";
 import { parseCsvLine, readRun, type Row, type RunFile } from "./run.ts";
@@ -193,6 +194,22 @@ export function renderPlan(plan: Plan, snapshot: string, run: string, legs: Map<
   return lines.join("\n");
 }
 
+/** The rows of one upload file, each with its USD price, or null with none. */
+function priceColumns(file: string): { id: string; price: number | null }[] {
+  const [header, ...lines] = readFileSync(file, "utf8").split(/\r?\n/).filter(Boolean);
+  const names = parseCsvLine(header);
+  const [id, price, currency] = [
+    "ID (Optional)",
+    "Reference Price Per Unit (Optional)",
+    "Reference Price Currency (Optional)",
+  ].map((c) => names.indexOf(c));
+  if (id < 0 || price < 0 || currency < 0) return [];
+  return lines.map(parseCsvLine).map((values) => ({
+    id: values[id],
+    price: values[price] && values[currency] === "USD" ? Number(values[price]) : null,
+  }));
+}
+
 /** The USD price of each row in the newest upload file holding it: a plan's file is what the user uploaded. */
 export function uploadedPrices(stateDir: string): Map<string, number> {
   const prices = new Map<string, number>();
@@ -202,22 +219,32 @@ export function uploadedPrices(stateDir: string): Map<string, number> {
     const dir = join(plans, name, "upload");
     if (!existsSync(dir)) continue;
     for (const file of readdirSync(dir).filter((f) => f.endsWith(".csv"))) {
-      const [header, ...lines] = readFileSync(join(dir, file), "utf8").split(/\r?\n/).filter(Boolean);
-      const names = parseCsvLine(header);
-      const [id, price, currency] = [
-        "ID (Optional)",
-        "Reference Price Per Unit (Optional)",
-        "Reference Price Currency (Optional)",
-      ].map((c) => names.indexOf(c));
-      if (id < 0 || price < 0 || currency < 0) continue;
-      for (const line of lines) {
-        const values = parseCsvLine(line);
-        if (values[price] && values[currency] === "USD") prices.set(values[id], Number(values[price]));
-        else prices.delete(values[id]);
+      for (const { id, price } of priceColumns(join(dir, file))) {
+        if (price !== null) prices.set(id, price);
+        else prices.delete(id);
       }
     }
   }
   return prices;
+}
+
+/** Each row's price in every plan's upload file, oldest first. A plan is timed by its folder's name. */
+export function uploadPriceFiles(stateDir: string): Map<string, UploadedFile[]> {
+  const files = new Map<string, UploadedFile[]>();
+  const plans = join(stateDir, "plans");
+  if (!existsSync(plans)) return files;
+  for (const name of readdirSync(plans).sort()) {
+    const stamp = /^(\d{4}-\d\d-\d\dT\d\d)-(\d\d)-(\d\d)/.exec(name);
+    const dir = join(plans, name, "upload");
+    if (!stamp || !existsSync(dir)) continue;
+    const planTime = Date.parse(`${stamp[1]}:${stamp[2]}:${stamp[3]}Z`);
+    for (const file of readdirSync(dir).filter((f) => f.endsWith(".csv"))) {
+      for (const { id, price } of priceColumns(join(dir, file))) {
+        files.set(id, [...(files.get(id) ?? []), { planTime, price }]);
+      }
+    }
+  }
+  return files;
 }
 
 /** Price edits, largest first, those whose rate is furthest from the list's median at the head. */
@@ -297,6 +324,7 @@ export function writePlan(stateDir: string, runDir: string, only?: string): stri
     applyLog: readApplyLog(stateDir),
     leftLegs: readLeftLegs(stateDir),
     uploadedPrices: uploadedPrices(stateDir),
+    uploadFiles: uploadPriceFiles(stateDir),
     now,
     scope,
   });

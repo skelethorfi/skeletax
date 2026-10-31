@@ -327,6 +327,25 @@ test("a different run or range does not resume another's stopped pull", () =>
     assert.deepEqual(summ.inspected.sort(), ["a1", "a2"]);
   }));
 
+test("legsOf keeps when Summ created the leg", () => {
+  const leg = { _id: "g", id: "tx", trade: "out", currency: "BTC", quantity: "1" };
+  const legs = legsOf({
+    action: {
+      incoming: [],
+      outgoing: [
+        { ...leg, createdAt: "2026-02-01T00:00:00.000Z" },
+        { ...leg, _id: "h" },
+      ],
+      fees: [],
+    },
+    history: [],
+  } as never);
+  assert.deepEqual(
+    legs.map((l) => l.createdAt),
+    ["2026-02-01T00:00:00.000Z", undefined],
+  );
+});
+
 test("legsOf keeps a fee Summ holds on the leg itself, by its currency symbol or name", () => {
   const leg = (over: Record<string, unknown>) => ({
     _id: "g",
