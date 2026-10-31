@@ -544,7 +544,7 @@ in its action stops it.
 | held       | rows the plan leaves alone (Held below), with what it left out; a price edit held (Prices, Trades)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | nothing                                                                                                                                                            |
 | overridden | differences an override keeps (undecided ones on every plan), and overrides captured in this plan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | nothing                                                                                                                                                            |
 
-**Held.** Nothing is planned for two kinds of row, which are listed instead
+**Held.** Nothing is planned for three kinds of row, which are listed instead
 with the entries left out:
 
 - a row whose ID is in `hold` in `summ-sync.json`, or that names a txid
@@ -564,15 +564,17 @@ with the entries left out:
   row in the run whose action holds a manual entry, or whose txid a manual entry
   names, are not deleted either. A manual entry names a txid in its description, its comments or its Tx Hash.
 
-- a delete of an acquisition a manual entry sells: a leg coming in, not ignored, and a manual leg going out, not ignored,
-  with the same currency and amount, up to a day after. With the acquisition gone, the entry would sell from nothing, a
-  false gain. A row replaces the acquisition if it is managed, or is categorised and has a leg in Summ (a categorised
-  row with no leg labels nothing). Otherwise the delete is held, and with a row its event. A manual entry named in
-  `deleteManualEntries` sells nothing. A disposal of part of the amount, or under another amount, is not seen; Summ's
-  zero-cost warnings show those.
-
   The user resolves the pairing in Summ, or the run, and plans again. Or the user names the entry in `deleteManualEntries`
   (below): a manual entry never goes without being named.
+
+- a delete of an acquisition a manual entry sends on: a leg coming in, not ignored, and a manual leg going out, not
+  ignored, with the same currency and amount, up to a day after. With the acquisition gone, the entry would dispose from
+  nothing, a false gain. A row within a day replaces the acquisition if it goes ahead in this plan and is managed, or is
+  categorised and has a leg in Summ; spam, a held row and one held back replace nothing, and a row whose quote only names
+  the asset, such as a bridge's, does not acquire it. Otherwise the delete is held, with its row's event, or with no row
+  the events of rows moving what its legs hold within a day, since those would remake legs that stay. A manual entry
+  named in `deleteManualEntries` sends nothing on. A disposal of part of the amount, under another amount, or added after
+  the pull is not seen; Summ's zero-cost warnings show those.
 
 **Filed years.** An entry whose row or leg is dated before `filedBefore` is
 an amendment: listed under its own heading in each section and applied only

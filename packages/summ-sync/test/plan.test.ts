@@ -3016,7 +3016,7 @@ test("a delete of what a manual entry sells is held, unless something replaces t
     quantity: 0.5,
     source: "csv-source",
     importType: "manual-csv",
-    id: "old-file.csv:2",
+    id: "2024-03-01T10:00:00.000Z.in.0123456789ab",
     timestamp: T,
   });
   const sold = (over: Partial<Leg> = {}) =>
@@ -3034,7 +3034,7 @@ test("a delete of what a manual entry sells is held, unless something replaces t
     });
   const heldFor = (legs: Leg[], rows: Row[] = [], config = CONFIG) => {
     const p = plan({ rows, legs, config }).plan;
-    return { p, held: p.held.filter((h) => /sells what this delete acquires/.test(h.reason)) };
+    return { p, held: p.held.filter((h) => h.id === null && /sends on what this delete acquires/.test(h.reason)) };
   };
   const { p, held } = heldFor([old, sold()]);
   assert.deepEqual(p.delete, []);
@@ -3055,18 +3055,53 @@ test("a delete of what a manual entry sells is held, unless something replaces t
   assert.deepEqual(heldFor([old, sold({ importType: "wallet", source: "w" })]).held, []);
   assert.deepEqual(heldFor([{ ...old, side: "outgoing", trade: "sell" }, sold()]).held, []);
 
-  // A managed row replaces it; so does a categorised row with a leg in Summ; a categorised row with none does not
-  const uploaded = row({ type: "buy", baseCurrency: "ETH", baseAmount: "0.5", quoteCurrency: "", quoteAmount: "" });
-  assert.deepEqual(heldFor([old, sold()], [uploaded]).held, []);
-  const label = btcRow({
-    type: "bridge-trade-in",
-    baseCurrency: "ETH",
-    baseAmount: "0.5",
-    feeCurrency: "",
-    feeAmount: "",
-    blockchain: "ETH",
+  // A managed row at that time replaces it; a categorised row only with a leg in Summ
+  const managed = (over: Partial<Row> = {}) =>
+    row({
+      type: "receive",
+      baseCurrency: "ETH",
+      baseAmount: "0.5",
+      quoteCurrency: "",
+      quoteAmount: "",
+      timestamp: T,
+      ...over,
+    });
+  assert.deepEqual(heldFor([old, sold()], [managed()]).held, []);
+  const sale = managed({
+    type: "sell",
+    baseCurrency: "RUNE",
+    baseAmount: "9",
+    quoteCurrency: "ETH",
+    quoteAmount: "0.5",
   });
-  assert.equal(heldFor([old, sold()], [label]).held.length, 1);
+  assert.deepEqual(heldFor([old, sold()], [sale]).held, []);
+  const label = (over: Partial<Row> = {}) =>
+    btcRow({
+      type: "bridge-trade-in",
+      baseCurrency: "ETH",
+      baseAmount: "0.5",
+      feeCurrency: "",
+      feeAmount: "",
+      timestamp: T,
+      ...over,
+    });
+  assert.equal(heldFor([old, sold()], [label()]).held.length, 1);
+  // Not spam, one long after, one a bridge's quote names, or a held row
+  assert.equal(heldFor([old, sold()], [managed({ type: "spam" })]).held.length, 1);
+  assert.equal(heldFor([old, sold()], [managed({ timestamp: "2027-01-01T00:00:00.000Z" })]).held.length, 1);
+  const quote = managed({
+    type: "bridge-trade-out",
+    baseCurrency: "RUNE",
+    baseAmount: "9",
+    quoteCurrency: "ETH",
+    quoteAmount: "0.5",
+  });
+  assert.equal(heldFor([old, sold()], [quote]).held.length, 1);
+  const heldRow = managed();
+  assert.equal(
+    heldFor([old, sold()], [heldRow], { ...CONFIG, hold: [{ id: heldRow.id, reason: "pending" }] }).held.length,
+    1,
+  );
 
   // Named to be deleted too, it no longer sells anything
   const deleteManualEntries = [{ legId: "sell", currency: "ETH", quantity: 0.5, reason: "why" }];
@@ -3105,5 +3140,75 @@ test("a row's delete of what a manual entry sells holds the row's event", () => 
   const p = plan({ rows: [r], legs: [...old, sell] }).plan;
   assert.deepEqual(p.delete, []);
   assert.deepEqual(p.upload, []);
-  assert.match(p.held.find((h) => h.id === r.id)?.reason ?? "", /sells what this delete acquires/);
+  assert.match(p.held.find((h) => h.id === r.id)?.reason ?? "", /sends on what this delete acquires/);
+});
+
+test("a held group's other leg keeps the row that remakes it: no second disposal", () => {
+  const T = "2024-03-01T10:00:00.000Z";
+  const group = {
+    actionId: "old",
+    source: "csv-source",
+    importType: "manual-csv",
+    id: "2024-03-01T10:00:00.000Z.in.0123456789ab",
+    timestamp: T,
+  };
+  const legs = [
+    ownLeg({ ...group, legId: "buy", side: "incoming", trade: "buy", currency: "ETH", quantity: 0.5 }),
+    ownLeg({ ...group, legId: "out", side: "outgoing", trade: "sell", currency: "RUNE", quantity: 9 }),
+    ownLeg({
+      legId: "man",
+      actionId: "m",
+      trade: "sell",
+      currency: "ETH",
+      quantity: 0.5,
+      importType: "manual",
+      source: "manual",
+      id: "hand",
+      timestamp: T,
+    }),
+  ];
+  const remake = row({
+    type: "bridge-trade-out",
+    baseCurrency: "RUNE",
+    baseAmount: "9",
+    quoteCurrency: "ETH",
+    quoteAmount: "0.5",
+    timestamp: T,
+  });
+  const p = plan({ rows: [remake], legs }).plan;
+  assert.deepEqual(p.delete, []);
+  assert.deepEqual(p.upload, []);
+  assert.ok(p.held.some((h) => h.id === remake.id));
+});
+
+test("a held delete of what a manual entry sends on stays listed whatever the scope", () => {
+  const T = "2024-03-01T10:00:00.000Z";
+  const legs = [
+    ownLeg({
+      legId: "buy",
+      actionId: "old",
+      side: "incoming",
+      trade: "buy",
+      currency: "ETH",
+      quantity: 0.5,
+      source: "csv-source",
+      importType: "manual-csv",
+      id: "2024-03-01T10:00:00.000Z.in.0123456789ab",
+      timestamp: T,
+    }),
+    ownLeg({
+      legId: "man",
+      actionId: "m",
+      trade: "sell",
+      currency: "ETH",
+      quantity: 0.5,
+      importType: "manual",
+      source: "manual",
+      id: "hand",
+      timestamp: T,
+    }),
+  ];
+  const p = plan({ legs, scope: ["something-else"] }).plan;
+  assert.deepEqual(p.delete, []);
+  assert.equal(p.held[0].dependent, true);
 });

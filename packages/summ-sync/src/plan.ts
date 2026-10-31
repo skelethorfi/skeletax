@@ -195,6 +195,8 @@ export interface HeldEntry {
   reason: string;
   /** What the plan would have done, left out. */
   held: string[];
+  /** A delete held because a manual entry sends on what it acquires: shown whatever `--only` says. */
+  dependent?: boolean;
 }
 
 export interface OverriddenEntry {
@@ -1389,20 +1391,31 @@ export function makePlan(input: PlanInput): PlanResult {
   // acquisition gone and nothing in Summ to replace it, the disposal sells from nothing, a false gain. Each delete of
   // such a leg is held, with the row's event, until the user resolves the entry. It misses a disposal of part of the
   // amount: Summ's zero-cost warnings are what shows those.
+  const DAY = 86_400_000;
+  const within = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) <= DAY;
   const replacedByRow = (leg: Leg) =>
     rows.some((r) => {
+      const type = typeOf(r);
       const inBase =
-        typeOf(r)?.side === "incoming" &&
+        type.side === "incoming" &&
         sameCurrency(r.baseCurrency, leg.currency) &&
         sameAmount(leg.quantity, Number(r.baseAmount));
       const inQuote =
-        !!typeOf(r) &&
-        hasQuote(r, typeOf(r)) &&
-        typeOf(r).side === "outgoing" &&
+        hasQuote(r, type) &&
+        type.side === "outgoing" &&
         sameCurrency(r.quoteCurrency, leg.currency) &&
         sameAmount(leg.quantity, Number(r.quoteAmount));
-      // A managed row is uploaded; a categorised row only labels a leg, so it replaces only one Summ holds
-      return (inBase || inQuote) && (rowsById.has(r.id) || (legsOfRow.get(r.id) ?? []).length > 0);
+      // At that time, and going ahead in this plan: spam, a held row or one held back replaces nothing. A managed row is
+      // uploaded; a categorised row only labels a leg, so it replaces only one Summ holds
+      return (
+        (inBase || inQuote) &&
+        r.type !== "spam" &&
+        within(r.timestamp, leg.timestamp) &&
+        !holdOf.has(r.id) &&
+        !heldBack.has(r.id) &&
+        !overlapHeld.has(r.id) &&
+        (rowsById.has(r.id) || (legsOfRow.get(r.id) ?? []).length > 0)
+      );
     });
   const disposalsOf = (d: DeleteEntry) =>
     d.manual
@@ -1420,24 +1433,49 @@ export function makePlan(input: PlanInput): PlanResult {
                 sameCurrency(m.currency, l.currency) &&
                 sameAmount(m.quantity, l.quantity) &&
                 Date.parse(m.timestamp) >= Date.parse(l.timestamp) &&
-                Date.parse(m.timestamp) - Date.parse(l.timestamp) <= 86_400_000,
+                Date.parse(m.timestamp) - Date.parse(l.timestamp) <= DAY,
             ),
           );
   const dependentReason = (manual: Leg[]) =>
-    `a manual entry sells what this delete acquires (${manual.map((l) => `${l.quantity} ${l.currency}, leg ${l.legId}`).join("; ")}): with nothing to replace it, it would sell from nothing, a false gain; resolve it in Summ, or name it in deleteManualEntries`;
-  for (const d of plan.delete.filter((d) => d.id !== null)) {
-    const manual = disposalsOf(d);
-    if (!manual.length) continue;
-    for (const r of eventOf.get(d.id as string) ?? [runRows.get(d.id as string) as Row]) {
-      if (!holdOf.has(r.id))
-        holdOf.set(r.id, {
-          kind: "manual-pairing",
-          filed: isFiled(r.timestamp),
-          id: r.id,
-          legIds: manual.map((l) => l.legId),
-          reason: dependentReason(manual),
-          held: [],
-        });
+    `a manual entry sends on what this delete acquires (${manual.map((l) => `${l.quantity} ${l.currency}, leg ${l.legId}`).join("; ")}): with nothing to replace it, it would sell from nothing, a false gain; resolve it in Summ, or name it in deleteManualEntries`;
+  // Held, a group's legs stay in Summ, so the rows that remake them wait: a row with no link by txid is found by what it
+  // moves. Uploaded beside the kept legs it would count them twice
+  const remakes = (legs: Leg[]) =>
+    rows.filter((r) =>
+      legs.some(
+        (l) =>
+          typeOf(r).side === l.side &&
+          sameCurrency(r.baseCurrency, l.currency) &&
+          sameAmount(l.quantity, Number(r.baseAmount)) &&
+          within(r.timestamp, l.timestamp),
+      ),
+    );
+  const dependent = new Map<DeleteEntry, Leg[]>();
+  // Holding a row can take away what replaced another delete's acquisition, so this repeats until nothing changes
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const d of plan.delete.filter((d) => !dependent.has(d))) {
+      const manual = disposalsOf(d);
+      if (!manual.length) continue;
+      dependent.set(d, manual);
+      grew = true;
+      const rowsHeld =
+        d.id !== null
+          ? (eventOf.get(d.id) ?? [runRows.get(d.id) as Row])
+          : remakes(d.legIds.map((id) => input.legs.find((l) => l.legId === id) as Leg)).flatMap(
+              (r) => eventOf.get(r.id) ?? [r],
+            );
+      for (const r of rowsHeld) {
+        if (!holdOf.has(r.id))
+          holdOf.set(r.id, {
+            kind: "manual-pairing",
+            filed: isFiled(r.timestamp),
+            id: r.id,
+            legIds: manual.map((l) => l.legId),
+            reason: dependentReason(manual),
+            held: [],
+          });
+      }
     }
   }
   const fields = (e: EditEntry) =>
@@ -1455,7 +1493,7 @@ export function makePlan(input: PlanInput): PlanResult {
   plan.delete = plan.delete.filter((d) => {
     if (d.manual) return true; // Checked where it was named
     if (d.id === null) {
-      const manual = disposalsOf(d);
+      const manual = dependent.get(d) ?? [];
       if (manual.length) {
         plan.held.push({
           kind: "manual-pairing",
@@ -1465,6 +1503,7 @@ export function makePlan(input: PlanInput): PlanResult {
           legIds: manual.map((l) => l.legId),
           reason: dependentReason(manual),
           held: [`delete (${d.reason})`],
+          dependent: true,
         });
         return false;
       }
@@ -1772,7 +1811,11 @@ function narrow(
     r.id !== undefined ? ids.has(r.id) : [...ids].some((id) => r.detail.includes(id)),
   );
   plan.held = plan.held.filter((h) =>
-    h.id !== null ? ids.has(h.id) : legsIn(h.summId as string, h.kind === "hold" ? (h.legIds ?? []) : [], false),
+    h.dependent
+      ? true
+      : h.id !== null
+        ? ids.has(h.id)
+        : legsIn(h.summId as string, h.kind === "hold" ? (h.legIds ?? []) : [], false),
   );
   plan.overridden = plan.overridden.filter((o) => ids.has(o.override.id));
   const legEntries = [
