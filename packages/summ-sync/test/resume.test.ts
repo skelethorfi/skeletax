@@ -208,6 +208,7 @@ const MODES: { name: string; set: (s: FakeSumm) => void }[] = [
   { name: "rebuilt ids", set: () => {} },
   { name: "kept ids", set: (s) => (s.paused = true) },
   { name: "every write failing after it lands", set: (s) => (s.failAfterWrite = "all") },
+  { name: "Summ's own batches moving updatedAt", set: (s) => (s.batchEveryStep = true) },
 ];
 
 for (const mode of MODES) {
@@ -1000,4 +1001,175 @@ test("a real SIGTERM: finishes the entry, says it is waiting, writes apply-stop,
   assert.match(out.stdout, /left: leg-8,their-leg/);
   assert.equal(logOf(dir).at(-1)?.reason, "signal");
   assert.equal(existsSync(join(dir, ".lock")), false);
+});
+
+// ---- From review: each pins a guard no other test reaches
+
+test("a lost price edit, then a batch of Summ's moving updatedAt, on a leg already marked USD: sent again, not counted done", async () => {
+  const summ = new FakeSumm();
+  summ.failBeforeWrite = 1;
+  summ.add("e", [leg("e1", { trade: "income", price: 3.9, priceValueCurrency: "USD" })]);
+  const { dir, planDir } = stateFor(summ, planOf({ edit: [ed("r", [set("e1", "price", 3.9, 2.5)])] }));
+  await assert.rejects(once(summ, dir, planDir), /server gone/);
+  summ.batch();
+  const result = await once(summ, dir, planDir);
+  assert.deepEqual([result.edited, result.found, summ.writes.length], [1, 0, 2]);
+  assert.equal(summ.leg("e1")?.price, 2.5);
+});
+
+test("a made-up leg still sharing after its send landed is reported; the run goes on and completes, and so does a resume", async () => {
+  const summ = new FakeSumm();
+  summ.splits = false;
+  summ.add("a", [leg("c"), soft("made")]);
+  summ.add("b", [leg("e")]);
+  const plan = planOf({
+    edit: [ed("r2", [set("e", "trade", "withdrawal", "fee")])],
+    categorise: [ed("r", [set("c", "trade", "withdrawal", "bridgeTradeOut")], ["made"])],
+  });
+  const { dir, planDir } = stateFor(summ, plan);
+  const result = await once(summ, dir, planDir);
+  assert.match(result.skipped[0].reason, /made-up leg made still shares its action with 1 other legs/);
+  assert.equal(summ.leg("made")?.trade, "deposit");
+  const skip = logOf(dir).find((l) => l.call === "skip");
+  assert.deepEqual([skip?.entry, skip?.legId], ["categorise-0", undefined]);
+  assert.equal(logOf(dir).at(-1)?.reason, "complete");
+});
+
+test("a made-up leg gone with no ignore logged stops", async () => {
+  const summ = new FakeSumm();
+  const { dir, planDir } = stateFor(summ, planOf({ categorise: [ed("r", [], ["made"])] }));
+  await assert.rejects(
+    once(summ, dir, planDir),
+    /made-up leg made is no longer in Summ, and this plan did not ignore it/,
+  );
+});
+
+test("only Summ's sentence for this very leg means gone; any other error stops, with a delete logged too", async () => {
+  for (const message of [
+    "inspect_transaction: Transaction 'another' was not found. Use `query_summ_transactions` to find current Transaction IDs.",
+    "inspect_transaction: Transaction 'd' could not be read",
+    "inspect_transaction: no such transaction",
+    "inspect_transaction: d does not exist",
+    "inspect_transaction: account not found",
+  ]) {
+    const summ = new FakeSumm();
+    summ.failBeforeWrite = 1;
+    summ.add("x", [leg("d")]);
+    const { dir, planDir } = del1(summ);
+    await assert.rejects(once(summ, dir, planDir), /server gone/);
+    const real = summ.callTool.bind(summ);
+    summ.callTool = async () => {
+      throw new Error(message);
+    };
+    await assert.rejects(once(summ, dir, planDir), (e: Error) => e.message === message);
+    assert.equal(logOf(dir).filter((l) => l.via === "found").length, 0);
+    summ.callTool = real;
+    assert.equal((await once(summ, dir, planDir)).deleted, 1);
+  }
+});
+
+for (const [name, flags, entries] of [
+  ["delete-only", { approveDeletes: true }, { delete: [del(["d"])] }],
+  ["filed-only", { approveFiled: true }, { delete: [{ ...del(["d"]), filed: true }] }],
+] as [string, Partial<ApplyOptions>, Partial<PlanFile>][]) {
+  test(`a ${name} plan run without its flag wrote nothing: with the flag it needs no pull, and its flags then bind`, async () => {
+    const summ = new FakeSumm();
+    summ.add("x", [leg("d")]);
+    const { dir, planDir } = stateFor(summ, planOf(entries));
+    const without = { ...ALL, approveDeletes: false, approveFiled: false };
+    await once(summ, dir, planDir, without);
+    assert.equal(summ.writes.length, 0);
+    assert.equal((await once(summ, dir, planDir, without)).alreadyComplete, true);
+    const opts = { ...ALL, ...flags };
+    await once(summ, dir, planDir, opts);
+    assert.equal(summ.leg("d"), undefined);
+    assert.equal((await once(summ, dir, planDir, opts)).alreadyComplete, true);
+    await assert.rejects(once(summ, dir, planDir, without), /was applied with/);
+  });
+}
+
+test("a signal during an entry with nothing written stops before the permanent delete, or the split; a resume does it", async () => {
+  for (const legs of [[leg("d")], [leg("d"), leg("keeps", { trade: "deposit" })]]) {
+    const summ = new FakeSumm();
+    summ.add("x", legs);
+    const { dir, planDir } = del1(summ);
+    const signal = { requested: false };
+    const real = summ.callTool.bind(summ);
+    summ.callTool = async (name, args) => {
+      signal.requested = true;
+      return real(name, args);
+    };
+    const stopped = await once(summ, dir, planDir, ALL, { signal });
+    assert.equal(stopped.stopped, true);
+    assert.equal(summ.writes.length, 0);
+    assert.equal(logOf(dir).at(-1)?.reason, "signal");
+    summ.callTool = real;
+    await once(summ, dir, planDir);
+    assert.equal(summ.leg("d"), undefined);
+  }
+});
+
+test("every price of an entry gets its own after, by leg, and plan's record stands for each", async () => {
+  const summ = new FakeSumm();
+  summ.usdRate = 2;
+  summ.add("t", [leg("sell", { price: 3 }), leg("buy", { trade: "deposit", price: 5 })]);
+  const plan = planOf({ edit: [ed("r", [set("sell", "price", 3, 1), set("buy", "price", 5, 4)])] });
+  const { dir, planDir } = stateFor(summ, plan);
+  await once(summ, dir, planDir);
+  const after = (legId: string) =>
+    readApplyLog(dir)
+      .filter((e) => e.legId === legId && !e.intent)
+      .map((e) => e.after);
+  assert.deepEqual([after("sell"), after("buy")], [[2], [8]]);
+});
+
+test("an action-mate's changed price stops; a Summ-made fee with a new id and a planned made-up leg do not", async () => {
+  const start = () => {
+    const summ = new FakeSumm();
+    summ.add("a", [
+      leg("c"),
+      soft("made"),
+      leg("mate", { trade: "deposit", price: 2 }),
+      leg("fee-1", { importType: "assumed-fee", side: "fees" }),
+    ]);
+    const plan = planOf({ categorise: [ed("r", [set("c", "trade", "withdrawal", "fee")], ["made"])] });
+    return { summ, ...stateFor(summ, plan) };
+  };
+  const moved = start();
+  (moved.summ.leg("mate") as FakeLeg).price = 9;
+  await assert.rejects(once(moved.summ, moved.dir, moved.planDir), /price of leg mate is 9, was 2/);
+
+  const renewed = start();
+  (renewed.summ.leg("fee-1") as FakeLeg)._id = "fee-2";
+  (renewed.summ.leg("made") as FakeLeg).quantity = "5";
+  await once(renewed.summ, renewed.dir, renewed.planDir);
+  assert.equal(renewed.summ.leg("c")?.trade, "fee");
+});
+
+test("a leg not ignored after its split read back is not split twice in a run", async () => {
+  const summ = new FakeSumm();
+  summ.splits = false;
+  summ.add("x", [leg("d"), leg("keeps", { trade: "deposit" })]);
+  const { dir, planDir } = del1(summ);
+  const real = summ.callTool.bind(summ);
+  summ.callTool = async (name, args) => {
+    if (name === "inspect_transaction" && args.transactionId && summ.writes.length) {
+      const l = summ.leg("d") as FakeLeg;
+      l.trade = "withdrawal";
+    }
+    return real(name, args);
+  };
+  await assert.rejects(once(summ, dir, planDir), /not ignored after its split/);
+  assert.equal(summ.writes.length, 1);
+});
+
+test("a second real signal stops at once", () => {
+  const summ = new FakeSumm();
+  summ.add("d", [leg("leg-9"), leg("their-leg", { trade: "deposit" })]);
+  summ.add("e", [leg("leg-8")]);
+  const { dir, planDir } = stateFor(summ, planOf({ delete: [del(["leg-9"]), del(["leg-8"])] }));
+  const child = fileURLToPath(new URL("signal-child.ts", import.meta.url));
+  const out = spawnSync(process.execPath, [child, dir, planDir, "twice"], { encoding: "utf8" });
+  assert.equal(out.signal, "SIGTERM");
+  assert.doesNotMatch(out.stdout, /left:/);
 });

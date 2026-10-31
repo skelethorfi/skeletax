@@ -41,6 +41,8 @@ export class FakeSumm implements ToolCaller {
   failAfterWrite: number | "all" | null = null;
   /** The nth write (1 on) fails and does not land. */
   failBeforeWrite: number | null = null;
+  /** A batch of Summ's own at every step. */
+  batchEveryStep = false;
   dieAt: number | null = null;
   userEdits = new Map<number, (summ: FakeSumm) => void>();
   history = new Map<string, string[]>();
@@ -64,12 +66,18 @@ export class FakeSumm implements ToolCaller {
   tick = (_what = "") => {
     if (this.dead) throw new Died();
     this.steps++;
+    if (this.batchEveryStep) this.batch();
     this.userEdits.get(this.steps)?.(this);
     if (this.steps === this.dieAt) {
       this.dead = true;
       throw new Died();
     }
   };
+
+  /** One of Summ's own batches: every leg's updatedAt moves, with no write. */
+  batch() {
+    for (const legs of this.actions.values()) for (const l of legs) this.stamp(l);
+  }
 
   /** Dead no longer: a new process, on the same Summ. Steps go on counting. */
   restart() {
@@ -162,7 +170,10 @@ export class FakeSumm implements ToolCaller {
       this.settleSplits();
       if (args.transactionId) {
         const found = this.holder(args.transactionId as string);
-        if (!found) throw new Error(`inspect_transaction: Transaction ${String(args.transactionId)} was not found`);
+        if (!found)
+          throw new Error(
+            `inspect_transaction: Transaction '${String(args.transactionId)}' was not found. Use \`query_summ_transactions\` to find current Transaction IDs.`,
+          );
         return this.render(found[0], found[1]);
       }
       const legs = this.actions.get(args.actionId as string);

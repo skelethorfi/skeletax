@@ -613,8 +613,9 @@ since it may have been made before the error):
    `priceValueCurrency: "USD"`.
    Then each made-up leg of the row is read by its id, waiting a few seconds for Summ to
    split it off, and ignored by its action id, only when that action holds nothing else.
-   Already ignored: done. Gone: done if this plan logged its ignore, otherwise stop. Still
-   sharing, or no longer a made-up leg: stop. An undo handle cannot be relied on to back
+   Already ignored: done. Gone: done if this plan logged its ignore, otherwise stop. No
+   longer a made-up leg: stop. Still sharing: reported with a `skip` line, left as it is, and the
+   run goes on, since its entry's own write stands; the next plan reports it while it lasts. An undo handle cannot be relied on to back
    out of this: once Summ re-pairs the categorised leg with another (e.g. an uploaded
    bridge-trade-in), the edit's handle is stale.
 5. Only when every entry is done: add the plan's adoptions and captures to the tables
@@ -626,9 +627,9 @@ since it may have been made before the error):
    local price read back, `after`; its value is in USD).
 
 **Reads.** Every look-up is `inspect_transaction` by `transactionId` (the leg's `_id`), which
-returns the action holding the leg now, whatever its id has become, with no search lag. A
-tool error saying the transaction is not found means the leg is gone. Any other failure is a
-failed read: the run stops, and that says nothing of the leg.
+returns the action holding the leg now, whatever its id has become, with no search lag. Only
+Summ's own error for that very leg, `Transaction '<id>' was not found`, means the leg is gone.
+Any other failure is a failed read: the run stops, and that says nothing of the leg.
 
 **Classifying.** Every entry, on every run, by a fresh read of its legs:
 
@@ -685,9 +686,13 @@ fails. A failed write is never retried in the same run: the next run classifies 
 
 - First start (no `apply-start` for this plan): the plan's snapshot is the latest, and the log has
   no write since its `takenAt`.
-- Resume: the same snapshot is still the latest, `planSha` (the hash of `plan.json`) and the flags
-  (`--approve-deletes`, `--approve-filed`) equal the logged `apply-start`, and every write line since
-  `takenAt` belongs to this plan's runs (its `plan`, and a `run` one of its `apply-start` lines has).
+- Resume: the same snapshot is still the latest, `planSha` (the hash of `plan.json`) equals the logged
+  `apply-start`, and every write line since `takenAt` belongs to this plan's runs (its `plan`, and a `run`
+  one of its `apply-start` lines has).
+- Flags (`--approve-deletes`, `--approve-filed`) bind once the plan has a write line: other flags are then
+  refused, on a complete plan too. A plan that has written nothing can run with other flags, so one run
+  without its flag needs no new pull.
+- Complete: a plan that completed under these flags reports it and does nothing, whatever the snapshot.
 
 A write line is any line but `skip`, `found`, `apply-start`, `apply-stop` and `torn-line`. So a failed read,
 which logs only `apply-stop`, blocks nothing, and a failed write, which logs an `error` line, counts. An
@@ -695,8 +700,9 @@ which logs only `apply-stop`, blocks nothing, and a failed write, which logs an 
 
 **Stops.** `apply-stop` carries a `reason`: `complete`, `signal`, `conflict`, `bad-result`, `read-back`,
 `write-failed` or `error`, with what was found. A hard kill leaves none; the next run needs none.
-The first SIGINT or SIGTERM says it is waiting, finishes the current entry's steps (split, delete and
-ignore), writes `apply-stop` and exits 130. A second stops at once, which is as safe as a crash.
+The first SIGINT or SIGTERM says it is waiting, finishes the steps of an entry this run has begun to write
+(split, delete and ignore), writes `apply-stop` and exits 130. A delete entry with no split yet in this run
+stops before its split or its permanent delete. A second stops at once, which is as safe as a crash.
 
 What a resume cannot tell: a user's edit in the moment between the read and the write is overwritten
 (the read and the write are not atomic; the pre-image and the change history keep it). A crash during a USD

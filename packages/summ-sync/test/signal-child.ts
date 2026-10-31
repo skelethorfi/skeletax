@@ -16,6 +16,10 @@ const client = Object.assign(summ, {
     if (name === "edit_transaction") {
       process.kill(process.pid, "SIGTERM");
       await new Promise((r) => setTimeout(r, 50));
+      if (process.argv[4] === "twice") {
+        process.kill(process.pid, "SIGTERM");
+        await new Promise((r) => setTimeout(r, 500));
+      }
     }
     return real(name, args);
   },

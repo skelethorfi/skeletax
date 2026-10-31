@@ -248,15 +248,12 @@ test("a made-up leg already on its own is ignored without an edit", async () => 
   assert.equal(summ.leg("made-up")?.trade, "ignoreIn");
 });
 
-test("a made-up leg still in an action with other legs stops the run, and is not ignored", async () => {
+test("a made-up leg still in an action with other legs is reported, not ignored, and the run goes on", async () => {
   const summ = new FakeSumm();
   summ.splits = false;
   summ.add("a", [{ _id: "leg-1", trade: "withdrawal", quantity: "1" }, { ...MADE_UP }]);
-  await stops(
-    summ,
-    planFile({ categorise: [edit({ ignore: ["made-up"] })] }),
-    /still shares its action with 1 other legs/,
-  );
+  const { result } = await run(summ, planFile({ categorise: [edit({ ignore: ["made-up"] })] }));
+  assert.match(result.skipped[0].reason, /still shares its action with 1 other legs/);
   assert.equal(
     summ.calls.some((c) => c.name === "bulk_edit_transactions"),
     false,
