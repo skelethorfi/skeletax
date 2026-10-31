@@ -125,6 +125,7 @@ export function getAggregatorOutbound(
     action.type !== ActionTypeEnum.Swap ||
     txType === "loanOpen" ||
     txType === "loanRepayment" ||
+    action.in?.[0]?.coins[0]?.asset === "THOR.TOR" ||
     !tail ||
     !out?.txID ||
     !asset ||

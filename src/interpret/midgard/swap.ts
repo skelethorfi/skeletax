@@ -119,14 +119,14 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
   };
 }
 
-// The token as Midgard would name it. A symbol that would read as another currency (UNI-V2 as UNI, LUNA as LUNC)
-// stops the action rather than record the wrong asset.
+// The token as Midgard would name it. A symbol that would read as another currency (UNI-V2 as UNI, LUNA as LUNC), or that a CSV
+// or a Summ view can't hold (A/B reads as a synth), stops the action rather than record the wrong asset.
 function deliveredAsset(bundle: RawBundle): Asset {
   const { chain, token } = bundle.tokenPayout!;
   const symbol = token!.symbol.toUpperCase();
   const notation = `${chain}.${symbol}-${token!.contract.toUpperCase()}`;
 
-  if (parseMidgardAsset(notation).currency !== symbol) {
+  if (/[/\s\p{Cc}]/u.test(symbol) || parseMidgardAsset(notation).currency !== symbol) {
     throw new Error(`swap: token symbol "${token!.symbol}" (${token!.contract}) does not fit asset notation`);
   }
 

@@ -40,6 +40,12 @@ describe("findTokenTransfer", () => {
     assert.equal(findTokenTransfer([log(token, WALLET, 5n)], WALLET, "ffff"), undefined);
   });
 
+  test("skips an NFT's transfer, and a zero amount is no payout", () => {
+    const nft = { ...log(token, WALLET, 5n), topics: [...log(token, WALLET, 5n).topics, padded(WALLET)], data: "0x" };
+    assert.equal(findTokenTransfer([nft], WALLET, "2a6f"), undefined);
+    assert.equal(findTokenTransfer([log(token, WALLET, 0n)], WALLET, "2a6f"), undefined);
+  });
+
   test("stops when two tokens fit the memo's tail", () => {
     const other = "0x1111111111111111111111111111111111112a6f";
     assert.throws(() => findTokenTransfer([log(token, WALLET, 5n), log(other, WALLET, 5n)], WALLET, "2a6f"));
@@ -70,6 +76,18 @@ describe("getAggregatorOutbound", () => {
       to: WALLET,
       tail: "2a6F",
     });
+  });
+
+  test("not a loan", () => {
+    const memo = `=:ETH.ETH:${WALLET}:1:t:15:f2:2a6F:4`;
+    const loan = (txType: string, asset = "THOR.RUNE") => ({
+      ...swap(memo),
+      in: [{ coins: [{ asset }] }],
+      metadata: { swap: { memo, txType } },
+    });
+    assert.equal(getAggregatorOutbound(loan("loanOpen")), undefined);
+    assert.equal(getAggregatorOutbound(loan("loanRepayment")), undefined);
+    assert.equal(getAggregatorOutbound(loan("noOp", "THOR.TOR")), undefined);
   });
 
   test("not a plain memo, nor another chain", () => {
@@ -123,6 +141,7 @@ describe("a swap paid through an aggregator", () => {
     assert.equal((runCase(withSymbol("snx")) as any[])[1].baseCurrency, "SNX");
     assert.throws(() => runCase(withSymbol("UNI-V2")), /does not fit/);
     assert.throws(() => runCase(withSymbol("LUNA")), /does not fit/);
+    assert.throws(() => runCase(withSymbol("A/B")), /does not fit/);
   });
 });
 
@@ -174,8 +193,24 @@ describe("getTokenPayout", () => {
 
   test("stops on a reverted tx or a receipt with no logs, so nothing is stored", async (t) => {
     t.after(() => mock.restoreAll());
-    await assert.rejects(fetchWith({ status: "0x0", logs: [] }));
-    await assert.rejects(fetchWith({ status: "0x1" }));
+    await assert.rejects(fetchWith({ status: "0x0", logs: [] }), /not a successful tx/);
+    await assert.rejects(fetchWith({ status: "0x1" }), /not a successful tx/);
+  });
+
+  test("names the token when it answers nothing or an error", async (t) => {
+    t.after(() => mock.restoreAll());
+    const reply = (result: unknown, error?: object) => async (_url: string, body: any) => ({
+      data:
+        body.method === "eth_getTransactionReceipt"
+          ? { result: { transactionHash: "0xab", status: "0x1", logs: [log(token, WALLET, 5n)] } }
+          : { result, error },
+    });
+    const run = () => new EvmReceipts(store, { ETH: "https://rpc.test" }).getTokenPayout("ETH", "AB", WALLET, "2a6f");
+    mock.method(http, "post", reply("0x"));
+    await assert.rejects(run(), new RegExp(`${token}: no symbol`));
+    mock.restoreAll();
+    mock.method(http, "post", reply(undefined, { code: 3, message: "execution reverted" }));
+    await assert.rejects(run(), new RegExp(`${token} symbol`));
   });
 
   test("a replay of a run from before this source keeps the pool asset", async () => {

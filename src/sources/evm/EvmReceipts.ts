@@ -25,8 +25,8 @@ export interface EvmReceipt {
 }
 
 // What an aggregator outbound delivered (docs/specs/activity.md, Aggregator payouts): the memo's final token
-// that the tx transferred to the wallet. No token when it delivered none: the aggregator's swap failed, and
-// the wallet got the pool asset. `amount` is in the token's base units.
+// that the tx transferred to the wallet. No token when no such transfer shows: usually the aggregator's swap
+// failed and the wallet got the pool asset. `amount` is in the token's base units.
 export interface EvmTokenPayout {
   chain: string;
   transactionHash: string;
@@ -169,7 +169,13 @@ export class EvmReceipts {
     }
 
     const call = async (data: string, name: string) => {
-      const answer = await this.rpc(chain, url, "eth_call", [{ to: transfer.contract, data }, "latest"], name);
+      const answer = await this.rpc(
+        chain,
+        url,
+        "eth_call",
+        [{ to: transfer.contract, data }, "latest"],
+        `token ${transfer.contract} ${name}`,
+      );
 
       if (!answer || answer === "0x") {
         throw new Error(`${chain} token ${transfer.contract}: no ${name}`);
