@@ -20,9 +20,9 @@ plan before you apply it.
 3. `pull <state dir> <run dir>`, then `plan <state dir> <run dir>`. Read `plan.md`.
 4. `apply <state dir> <plan dir>` (`--dry-run` first; `--approve-deletes` if the
    plan deletes). It deletes and edits, and holds back categorisation while the
-   plan has uploads.
+   plan has uploads. Read what each delete removes and leaves in `plan.md`.
 5. Upload the files in `<plan dir>/upload/` to Summ, under the account named
-   in `managedSources`. They hold only the rows Summ lacks.
+   in `managedSources`, once apply lists them. They hold only the rows Summ lacks.
 6. `pull`, `plan`, `apply` again: it categorises Summ's own legs, now that
    Summ can pair them with the uploaded rows, and ignores the receives Summ
    made up to pair a send as a transfer.
@@ -31,7 +31,8 @@ plan before you apply it.
    until it runs, gains, cost bases and reports show the old figures.
 8. `pull` and `plan`: what is left is under Report, for you to resolve.
 
-Filed years go in a separate apply with `--approve-filed`.
+Filed years go in a separate apply with `--approve-filed`. A change there also moves
+the cost bases of later disposals, in later years and the current one.
 
 ## Usage
 
@@ -91,6 +92,12 @@ Filed years go in a separate apply with `--approve-filed`.
   reports what it found. So after any stop, run the same command again: it goes
   on from where it stopped, or refuses, and then you pull and plan. Every write's
   result is checked and read back. Ctrl-C finishes the current entry and exits 130.
+  A delete compares a fresh read with the values in `plan.md`, and stops on any
+  difference, on a leg in the action the plan does not name, or on a manual entry
+  in the action or naming the row's txid. A plan from an older version, whose
+  deletes hold no values, is refused: pull and plan again.
+  Apply lists no upload while a row in those files still has a delete to come:
+  uploaded beside its old version it would count twice. It says what to do instead.
   When every entry is done it adds the plan's adoptions and captured overrides
   to `adopted.csv` and `overrides.json` and lists the upload files; a finished plan
   reports that and does nothing. `<state dir>/.lock` keeps a second apply out. It

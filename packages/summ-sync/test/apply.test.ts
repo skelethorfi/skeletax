@@ -14,7 +14,7 @@ import {
   type ToolCaller,
   undoHandle,
 } from "../src/apply.ts";
-import { type FakeLeg, FakeSumm } from "./fake-summ.ts";
+import { type FakeLeg, FakeSumm, named } from "./fake-summ.ts";
 import type { DeleteEntry, EditEntry } from "../src/plan.ts";
 import { readApplyLog } from "../src/state.ts";
 
@@ -78,7 +78,7 @@ async function stops(summ: FakeSumm, plan: PlanFile, pattern: RegExp, opts: Part
   await assert.rejects(
     applyPlan(
       summ,
-      plan,
+      named(summ, plan),
       { ...OPTS, ...opts },
       (l) => log.push(l),
       () => {},
@@ -96,7 +96,7 @@ async function run(summ: FakeSumm, plan: PlanFile, opts: Partial<ApplyOptions> =
   const planDir = join(state, "plans", "p");
   const result = await applyPlan(
     summ,
-    plan,
+    named(summ, plan),
     { ...OPTS, ...opts },
     (l) => log.push(l),
     () => {},
@@ -665,8 +665,8 @@ for (const { name, summ: makeSumm, plan: planOf, pre } of WRITE_STEPS) {
   for (const landed of [false, true]) {
     for (const [n, file] of pre.entries()) {
       test(`${name}: a ${landed ? "lost answer" : "failure"} at write ${n + 1} leaves its pre-image and intent on disk`, async () => {
-        const { dir, planDir } = applyDir(planFile({ snapshot: SNAP, ...planOf() }));
         const summ = makeSumm();
+        const { dir, planDir } = applyDir(named(summ, planFile({ snapshot: SNAP, ...planOf() })));
         const real = summ.callTool.bind(summ);
         let writes = 0;
         // The state the failing write was given, read when it is called: on disk by then, or the order is wrong
@@ -701,8 +701,8 @@ for (const { name, summ: makeSumm, plan: planOf, pre } of WRITE_STEPS) {
   }
 
   test(`${name}: every write line carries entry and pre, an intent comes before its call and a result after`, async () => {
-    const { dir, planDir } = applyDir(planFile({ snapshot: SNAP, ...planOf() }));
     const summ = Object.assign(makeSumm(), { connect: async () => {} });
+    const { dir, planDir } = applyDir(named(summ, planFile({ snapshot: SNAP, ...planOf() })));
     await runApply(summ, dir, planDir, { ...OPTS, approveDeletes: true }, 0);
     const lines = logLines(dir);
     assert.equal(summ.calls.filter((c) => WRITES.includes(c.name)).length, pre.length);
@@ -770,7 +770,7 @@ test("two edits of an action whose id stays each save the state before them", as
 
 test("a delete's pre-image is read now, whatever the action store holds under that id; the store is left alone", async () => {
   const summ = withLegs({ d: [{ _id: "leg-9", trade: "withdrawal", quantity: "1.5" }] });
-  const { dir, planDir } = applyDir(planFile({ snapshot: SNAP, delete: [del()] }));
+  const { dir, planDir } = applyDir(named(summ, planFile({ snapshot: SNAP, delete: [del()] })));
   const stale = join(dir, "actions", "d.json");
   mkdirSync(join(dir, "actions"));
   writeFileSync(stale, '{"action":{"_id":"d","incoming":[{"quantity":"9"}]},"history":[]}\n');
@@ -796,14 +796,15 @@ test("the second action of a split is read again after the first was written to"
   summ.callTool = async (name, args) => {
     const text = await real(name, args);
     // Something moves the other action's leg while the first is written to
-    if (name === "edit_transaction" && args.actionId === "d") (summ.actions.get("e") as FakeLeg[])[0].quantity = "7";
+    if (name === "edit_transaction" && args.actionId === "d")
+      (summ.actions.get("e") as FakeLeg[])[0].updatedAt = "2026-07-07T00:00:00.000Z";
     return text;
   };
   const { log, planDir } = await run(summ, planFile({ delete: [del({ legIds: ["leg-9", "leg-8"], otherLegs: 2 })] }), {
     approveDeletes: true,
   });
   const second = log.find((l) => String(l.pre).endsWith("delete-0.split-1.json"));
-  assert.equal(preOf(planDir, second).actions[0].action.incoming[0].quantity, "7");
+  assert.equal(preOf(planDir, second).actions[0].action.incoming[0].updatedAt, "2026-07-07T00:00:00.000Z");
 });
 
 test("a pre-image never replaces one already there: the new read goes beside it, and the line names it", async () => {
@@ -824,7 +825,8 @@ const WALLET = "2024-01-01_2024-12-31_THOR_w_a.csv";
 
 async function deleteLine(over: Partial<DeleteEntry>, files: { run?: string[]; upload?: string[] }) {
   const runDir = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
-  const { dir, planDir } = applyDir(planFile({ snapshot: SNAP, run: runDir, delete: [del(over)] }));
+  const summ = withLegs({ d: [{ _id: "leg-9", trade: "withdrawal", quantity: "1" }] });
+  const { dir, planDir } = applyDir(named(summ, planFile({ snapshot: SNAP, run: runDir, delete: [del(over)] })));
   if (files.run) {
     mkdirSync(join(runDir, "csv"));
     writeFileSync(join(runDir, "csv", WALLET), [HEADER, ...files.run].join("\n") + "\n");
@@ -834,7 +836,6 @@ async function deleteLine(over: Partial<DeleteEntry>, files: { run?: string[]; u
     mkdirSync(join(planDir, "upload"));
     writeFileSync(join(planDir, "upload", WALLET), [HEADER, ...files.upload].join("\n") + "\n");
   }
-  const summ = withLegs({ d: [{ _id: "leg-9", trade: "withdrawal", quantity: "1" }] });
   await runApply(Object.assign(summ, { connect: async () => {} }), dir, planDir, { ...OPTS, approveDeletes: true }, 0);
   return JSON.parse(readFileSync(join(planDir, "pre", "delete-0.delete.json"), "utf8"));
 }

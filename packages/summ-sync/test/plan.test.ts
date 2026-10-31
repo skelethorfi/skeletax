@@ -2657,3 +2657,32 @@ test("an older leg with no currency source reads as none, and legsOf reads the s
   assert.equal(detail({ symbol: "X" }), undefined);
   assert.equal(detail(undefined), undefined);
 });
+
+test("a delete names its legs' values, the legs beside them, and its row's txids; an edit its row's txids", () => {
+  const r = row();
+  const legs = legsOf(row({ feeCurrency: "RUNE", feeAmount: "0.02" }));
+  const fee = legs.find((l) => l.side === "fees") as Leg;
+  const other = legs.find((l) => l !== fee) as Leg;
+  const d = plan({ rows: [r], legs }).plan.delete[0];
+  assert.deepEqual(
+    d.legs?.map((l) => [l.legId, l.currency, l.quantity, l.trade, l.source, l.importType, l.timestamp]),
+    [[fee.legId, fee.currency, fee.quantity, fee.trade, fee.source, fee.importType, fee.timestamp]],
+  );
+  assert.deepEqual(
+    d.others?.map((l) => l.legId),
+    [other.legId],
+  );
+  assert.deepEqual(d.txids, r.txids);
+});
+
+test("legs with no row whose txid a manual entry names are held, as apply would stop on them", () => {
+  const gone = legsOf(row());
+  const named = { ...gone[0], description: `${TX1}` };
+  const manual = ownLeg({ importType: "manual", source: "manual", id: "x-manual", comments: [`see ${TX1}`] });
+  const { plan: p } = plan({ rows: [], legs: [named, manual] });
+  assert.deepEqual(p.delete, []);
+  assert.deepEqual(
+    p.held.map((h) => h.kind),
+    ["manual-pairing"],
+  );
+});
