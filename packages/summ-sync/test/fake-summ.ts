@@ -26,6 +26,9 @@ export interface FakeLeg {
   blockchain?: string;
   description?: string;
   source?: string;
+  feeQuantity?: number;
+  feeCurrency?: string;
+  comments?: { comment: string }[];
 }
 
 /** The plan as a pull of this Summ would have named its deletes: the values of their legs, and the legs beside them. */
@@ -73,6 +76,9 @@ export class FakeSumm implements ToolCaller {
   steps = 0;
   /** In place of the list of manual entries: an answer it cannot read. */
   manualListText: string | null = null;
+  /** Lists give at most this many per page. */
+  pageSize = 250;
+
   dead = false;
   /** Local currency per USD: Summ converts a price given in USD at its own rate. */
   usdRate = 1;
@@ -184,11 +190,16 @@ export class FakeSumm implements ToolCaller {
               ) ?? []),
     });
     if (name === "query_summ_transactions" && (args.filter as { type: string }).type === "importType") {
-      const hits = [...this.actions].filter(([, legs]) => legs.some((l) => l.importType === "manual"));
       if (this.manualListText !== null) return this.manualListText;
+      const hits = [...this.actions].filter(([, legs]) => legs.some((l) => l.importType === "manual"));
+      if (!hits.length)
+        return "# Transactions (Page 1 of 1, 0 returned, 0 total)\n\nNo transactions found matching your filters.";
+      const size = Math.min(args.count as number, this.pageSize);
+      const page = args.page as number;
+      const shown = hits.slice((page - 1) * size, page * size);
       return [
-        `# Transactions (Page 1 of 1, ${hits.length} returned, ${hits.length} total)`,
-        ...hits.map(([actionId], i) => `## ${i + 1}. Send\n- **Action ID**: \`${actionId}\`\n`),
+        `# Transactions (Page ${page} of ${Math.ceil(hits.length / size)}, ${shown.length} returned, ${hits.length} total)`,
+        ...shown.map(([actionId], i) => `## ${i + 1}. Send\n- **Action ID**: \`${actionId}\`\n`),
       ].join("\n");
     }
     if (name === "query_summ_transactions") {

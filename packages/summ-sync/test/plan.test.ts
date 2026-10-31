@@ -2686,3 +2686,11 @@ test("legs with no row whose txid a manual entry names are held, as apply would 
     ["manual-pairing"],
   );
 });
+
+test("a manual entry linked only by its Tx Hash holds the row's event", () => {
+  const r = row({ description: "changed" });
+  const manual = ownLeg({ importType: "manual", source: "manual", id: `0x${TX1}` });
+  const { plan: p } = plan({ rows: [{ ...r, txids: [TX1] }], legs: [manual] });
+  assert.deepEqual([p.upload, p.report.map((x) => x.kind)], [[], ["manual-entry"]]);
+  assert.equal(p.held[0].kind, "manual-pairing");
+});

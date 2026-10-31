@@ -94,10 +94,12 @@ the cost bases of later disposals, in later years and the current one.
   result is checked and read back. Ctrl-C finishes the current entry and exits 130.
   A delete compares a fresh read with the values in `plan.md`, and stops on any
   difference, on a leg in the action the plan does not name, or on a manual entry
-  in the action or naming the row's txid. A plan from an older version, whose
+  in the action or naming the row's txid (`plan.md` marks a delete with no txid to
+  look for). A plan from an older version, whose
   deletes hold no values, is refused: pull and plan again.
-  Apply lists no upload while a row in those files still has a delete to come:
-  uploaded beside its old version it would count twice. It says what to do instead.
+  Apply lists no upload while any of the plan's deletes is not made: a row uploaded
+  beside an old version would count twice. It says what to do instead.
+
   When every entry is done it adds the plan's adoptions and captured overrides
   to `adopted.csv` and `overrides.json` and lists the upload files; a finished plan
   reports that and does nothing. `<state dir>/.lock` keeps a second apply out. It
@@ -112,6 +114,7 @@ the cost bases of later disposals, in later years and the current one.
   the plan's upload files have it, and shows what Summ held. It needs `login --write`. Afterwards, upload the
   files, then pull and plan again; recalculate in Summ before reading any
   figures.
+
 - `prune` removes the snapshots older than `--older-than` days (default
   30; never the latest), with their details files, and the stored actions no remaining snapshot lists
   (except those the apply log names; a snapshot whose plan has pre-images stays too), once they are committed (keep the state dir in git; git keeps the removed files). If

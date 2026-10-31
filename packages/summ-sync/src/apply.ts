@@ -17,7 +17,8 @@
 //      write back by the ids the result names. A write that fails or disagrees stops the run, and is never retried in
 //      it: the next run classifies the leg
 //   6. only when every entry is done: the legs the plan adopted and the overrides it captured are added to adopted.csv
-//      and overrides.json, and the upload files are listed, unless a row in them waits on a delete not made
+//      and overrides.json, and the upload files are listed, unless a delete is not made
+
 //
 // Filed-year entries are applied only with --approve-filed, and then only they: a separate apply.
 
@@ -95,8 +96,9 @@ export interface ApplyResult {
   /** What a dry run would stop at; in any run, a made-up leg left in place and reported. */
   skipped: { id: string | null; reason: string }[];
   uploads: { file: string; rows: number }[];
-  /** Rows of the upload files whose old version is still in Summ: nothing is to be uploaded while there are any. */
-  uploadsWait?: string[];
+  /** Deletes not made: nothing is to be uploaded while there are any. */
+  uploadsWait?: number;
+
   /** A signal stopped it between entries. */
   stopped?: boolean;
   /** The plan had already finished: nothing was done. */
@@ -262,10 +264,10 @@ const MATE_FIELDS = ["trade", "currency", "quantity", "timestamp", "from", "to",
 // A leg to delete, and a named other leg: what says which leg it is, which a split leaves as it is
 const IDENTITY_FIELDS = ["id", "currency", "quantity", "timestamp", "source", "importType"] as const;
 // And a leg to delete until its split: what a hand edit could have set, and a delete would lose
-const CONTENT_FIELDS = ["from", "to", "blockchain", "description", "price"] as const;
+const CONTENT_FIELDS = ["from", "to", "blockchain", "description", "price", "feeQuantity", "feeCurrency"] as const;
 const MANUAL_PAGE = 250;
-// Summ's wording for an empty list is not on record: only these read as empty, anything else stops
-const NOTHING_LISTED = /no (transactions|actions|results)|\b0 returned/i;
+// Summ's empty list, and nothing else, reads as empty
+const NOTHING_LISTED = /\(Page 1 of 1, 0 returned, 0 total\)\s+No transactions found matching your filters\./;
 
 /** Every action holding a manual entry, as read now. A filter Summ does not honour stops, as does any other answer. */
 async function manualEntries(client: ToolCaller): Promise<Leg[]> {
@@ -279,14 +281,17 @@ async function manualEntries(client: ToolCaller): Promise<Leg[]> {
       filter: { type: "importType", value: ["manual"] },
     });
     const listed = parseActions(text);
-    if (!listed.length) {
-      if (NOTHING_LISTED.test(text)) break;
+    if (!listed.length && page === 1 && NOTHING_LISTED.test(text)) return [];
+    if (!listed.length)
       throw new ApplyStop("bad-result", `the list of manual entries reads: ${JSON.stringify(text.slice(0, 200))}`);
-    }
     ids.push(...listed.map((a) => a["Action ID"] as string));
     const header = parsePageHeader(text);
-    if (header.page >= header.pages) break;
+    if (header.page < header.pages) continue;
+    if (new Set(ids).size !== header.total)
+      throw new ApplyStop("bad-result", `the list of manual entries gave ${ids.length} actions of ${header.total}`);
+    break;
   }
+
   const manual: Leg[] = [];
   for (const actionId of ids) {
     const legs = legsOf(parseDetail(await client.callTool("inspect_transaction", { actionId })));
@@ -309,6 +314,8 @@ export async function applyPlan(
   dirs: ApplyDirs | null = null,
   context: ApplyContext = {},
 ): Promise<ApplyResult> {
+  // The manual entries as read since this run's last write
+  let manualList: Leg[] | null = null;
   const edited = new Set<string>();
   const result: ApplyResult = { deleted: 0, split: 0, edited: 0, found: 0, heldBack: 0, skipped: [], uploads: [] };
   // This plan's lines, earlier runs' and this run's: what classifying a leg asks of the log
@@ -366,6 +373,7 @@ export async function applyPlan(
     args: Record<string, unknown>,
     tag: Record<string, unknown>,
   ): Promise<string> => {
+    manualList = null;
     try {
       return await client.callTool(tool, args);
     } catch (e) {
@@ -436,7 +444,9 @@ export async function applyPlan(
 
   /** What a fresh read of the entry's legs and their actions shows that the plan did not name, or null. */
   function deleteDiffers(key: string, entry: DeleteEntry, found: Found[]): string | null {
-    const logged = (legId: string) => journal.some((l) => l.entry === key && l.kind === "split" && l.legId === legId);
+    const splitLines = (legId: string) =>
+      journal.filter((l) => l.entry === key && l.kind === "split" && l.legId === legId);
+
     const seen = found.flatMap((f) => f.legs);
     const problems: string[] = [];
     const differ = (legId: string, field: string, was: unknown, now: unknown) =>
@@ -450,12 +460,17 @@ export async function applyPlan(
     for (const was of entry.legs as LegValues[]) {
       const now = seen.find((l) => l.legId === was.legId) as Leg;
       compare(was, now, IDENTITY_FIELDS);
-      if (logged(was.legId)) {
-        // Its split may or may not have landed. A fee leg moves to outgoing when ignored
-        if (now.trade !== was.trade && !isIgnored(now)) differ(was.legId, "trade", was.trade, now.trade);
-        if (now.side !== was.side && !isIgnored(now)) differ(was.legId, "side", was.side, now.side);
-      } else compare(was, now, ["side", "trade", ...CONTENT_FIELDS]);
+      // Ignored by this plan's split, which also moves a fee leg to outgoing. An intent alone, as after a crash, excuses
+      // only that: what else a split may change is excused only once its result shows it landed
+      const lines = isIgnored(now) ? splitLines(was.legId) : [];
+      if (!lines.length) compare(was, now, ["side", "trade"]);
+      if (!lines.some((l) => !l.intent)) {
+        compare(was, now, CONTENT_FIELDS);
+        if (JSON.stringify(was.comments) !== JSON.stringify(now.comments))
+          differ(was.legId, "comments", was.comments, now.comments);
+      }
     }
+
     // A split by this plan in one of these actions changes what Summ makes of the legs left: types, and who stays
     const splitNearby = plan.delete.some((d, i) => {
       if (!d.actionIds.some((a) => entry.actionIds.includes(a))) return false;
@@ -488,10 +503,11 @@ export async function applyPlan(
     return problems.length ? problems.join("; ") : null;
   }
 
-  /** A manual entry that now names one of these txids, or null. The list is `manual`, or read now. */
+  /** A manual entry that now names one of these txids, or null. The list is `manual`, or read since this run's last write. */
+
   async function namedByManual(txids: string[], manual?: Leg[]): Promise<string | null> {
     if (!txids.length) return null;
-    const naming = (manual ?? (await manualEntries(client))).filter((l) =>
+    const naming = (manual ?? (manualList ??= await manualEntries(client))).filter((l) =>
       txidsNamedBy(l).some((t) => txids.includes(t)),
     );
     return naming.length
@@ -694,14 +710,15 @@ export async function applyPlan(
     if (problem) throw new ApplyStop("bad-result", `${key}: ${problem}`, key);
   }
 
-  // Read once for all the edits of a run: an edit can be undone, a delete reads its own each time
+  // Read once for all the edits of a run: an edit can be undone, and the sync never writes to a manual entry
   let manualNow: Leg[] | null = null;
 
   // ---- Edits, then categorisation: the same call on a managed row's legs or on Summ's own leg
   async function applyEdit(kind: "edit" | "categorise", entry: EditEntry) {
     const key = `${kind}-${plan[kind].indexOf(entry)}`;
     if (entry.txids?.length) {
-      manualNow ??= await manualEntries(client);
+      manualNow ??= manualList ?? (await manualEntries(client));
+
       const named = await namedByManual(entry.txids, manualNow);
       if (named) return conflict(key, entry.id, named);
     }
@@ -1061,10 +1078,9 @@ export async function applyPlan(
     if (stopping()) return result;
     await applyEdit(kind, entry);
   }
-  const stoppedAt = new Set(result.skipped.flatMap((s) => (s.id ? [s.id] : [])));
-  // Approved, a run that got here made every delete; a dry run makes none, so only one it would stop at counts
-  const waiting = uploadsWaiting(plan, opts).filter((id) => !opts.approveDeletes || stoppedAt.has(id));
-  if (waiting.length) result.uploadsWait = waiting;
+  // A live run with the flag that got here made every delete; any other made none
+  const waiting = opts.approveDeletes && !opts.dryRun ? 0 : deletesBeforeUploads(plan, opts);
+  if (waiting) result.uploadsWait = waiting;
   else result.uploads = listUploads(plan, opts);
   return result;
 }
@@ -1084,26 +1100,28 @@ function listUploads(plan: PlanFile, opts: ApplyOptions): { file: string; rows: 
   }));
 }
 
-/** The rows of this apply's upload files that are also to be deleted first: uploaded beside their old version, Summ
- * would hold both, and count the disposal or income twice. */
-export function uploadsWaiting(plan: PlanFile, opts: Flags): string[] {
-  const rows = new Set(selected(plan.upload, { ...opts, dryRun: false }).flatMap((u) => u.ids));
-  return [
-    ...new Set(
-      selected(plan.delete, { ...opts, dryRun: false }).flatMap((d) => (d.id !== null && rows.has(d.id) ? [d.id] : [])),
-    ),
-  ];
+/** How many deletes come before this apply's uploads: a row uploaded beside an old version still in Summ would count
+ * twice, and not only under the same ID. Simple and strict: no list until every delete is made. */
+export function deletesBeforeUploads(plan: PlanFile, opts: Flags): number {
+  const select = { ...opts, dryRun: false };
+  return selected(plan.upload, select).length ? selected(plan.delete, select).length : 0;
 }
 
-function printWaiting(rows: string[], approved: boolean): void {
+function printWaiting(deletes: number, approved: boolean): void {
   console.log(
-    `Do not upload yet: ${rows.length} rows of the upload files (${rows.join(", ")}) are to be deleted first, and uploaded beside their old version they would count twice.`,
+    `Do not upload yet: this plan has ${deletes} deletes, not all known to be made, and a row uploaded beside an old version still in Summ would count twice.`,
   );
   console.log(
     approved
-      ? "Run apply again, or if it refuses or stops on the same entry, resolve what it reports, then pull and plan again."
+      ? "Run apply again, or if it refuses or stops on the same entry, resolve what it reports, then pull and plan again. Upload only when apply lists the files."
       : "Run apply again with --approve-deletes, or if it refuses, pull and plan again. Upload only when apply lists the files.",
   );
+}
+
+/** A dry run with the flag has made no delete: what a live run would then list. */
+function printAfterDeletes(deletes: number, uploads: { file: string; rows: number }[]): void {
+  console.log(`Do not upload on this dry run: a live run makes its ${deletes} deletes first, and only then lists:`);
+  for (const u of uploads) console.log(`  ${u.file}: ${u.rows} rows`);
 }
 
 function printUploads(dir: string, uploads: { file: string; rows: number }[]): void {
@@ -1155,9 +1173,9 @@ export async function runApply(
     const state = startState(stateDir, plan, planName, sha, flags);
     if (state === "complete") {
       console.log(`${planName} is already complete: nothing to do.`);
-      const uploadsWait = opts.approveDeletes ? [] : uploadsWaiting(plan, opts);
-      const uploads = uploadsWait.length ? [] : listUploads(plan, opts);
-      if (uploadsWait.length) printWaiting(uploadsWait, false);
+      const uploadsWait = opts.approveDeletes ? 0 : deletesBeforeUploads(plan, opts);
+      const uploads = uploadsWait ? [] : listUploads(plan, opts);
+      if (uploadsWait) printWaiting(uploadsWait, false);
       else if (uploads.length) printUploads(dir, uploads);
       return {
         deleted: 0,
@@ -1167,7 +1185,8 @@ export async function runApply(
         heldBack: 0,
         skipped: [],
         uploads,
-        ...(uploadsWait.length ? { uploadsWait } : {}),
+        ...(uploadsWait ? { uploadsWait } : {}),
+
         alreadyComplete: true,
       };
     }
@@ -1220,8 +1239,8 @@ export async function runApply(
         console.log(
           "Stopped. Nothing more was written. Check what it reports, then run apply again, or pull and plan.",
         );
-        const waiting = uploadsWaiting(plan, opts);
-        if (waiting.length) printWaiting(waiting, opts.approveDeletes);
+        const waiting = deletesBeforeUploads(plan, opts);
+        if (waiting) printWaiting(waiting, opts.approveDeletes);
       }
       throw e;
     }
@@ -1229,15 +1248,17 @@ export async function runApply(
     if (result.stopped) {
       log({ call: "apply-stop", reason: "signal" });
       console.log("Stopped by a signal. Run apply again to go on from here.");
-      const waiting = uploadsWaiting(plan, opts);
-      if (waiting.length) printWaiting(waiting, opts.approveDeletes);
+      const waiting = deletesBeforeUploads(plan, opts);
+      if (waiting) printWaiting(waiting, opts.approveDeletes);
     } else {
       if (!opts.dryRun) log({ call: "apply-stop", reason: "complete" });
       console.log(
         `\nDeleted ${result.deleted} (${result.split} split edits first), edited ${result.edited}, already done ${result.found}, held back ${result.heldBack}, ${opts.dryRun ? "would stop at or report" : "reported"} ${result.skipped.length}`,
       );
       for (const r of result.skipped) console.log(`  ${r.id ?? "(no row)"}: ${r.reason}`);
-      if (result.uploadsWait) printWaiting(result.uploadsWait, opts.approveDeletes);
+      if (result.uploadsWait && opts.dryRun && opts.approveDeletes)
+        printAfterDeletes(result.uploadsWait, listUploads(plan, opts));
+      else if (result.uploadsWait) printWaiting(result.uploadsWait, opts.approveDeletes);
       else if (result.uploads.length) printUploads(dir, result.uploads);
       else
         console.log(

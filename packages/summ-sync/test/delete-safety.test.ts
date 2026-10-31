@@ -136,6 +136,8 @@ for (const [field, over, shown] of [
   ["ID", { id: "row-other" }, /id of leg d/],
   ["price", { price: 9 }, /price of leg d/],
   ["description", { description: "by hand" }, /description of leg d/],
+  ["fee on the leg", { feeQuantity: 2 }, /feeQuantity of leg d/],
+  ["comments", { comments: [{ comment: "by hand" }] }, /comments of leg d/],
 ] as const) {
   test(`a delete's leg whose ${field} changed after the pull stops, with nothing written`, async () => {
     await stopsUnwritten([leg("d")], (summ) => Object.assign(summ.leg("d") as FakeLeg, over), shown);
@@ -362,7 +364,7 @@ test("an old plan's delete with no values is refused, dry run too, and says to p
 const upload: UploadEntry = { file: "f.csv", filed: false, ids: ["row-d"] };
 const remake = () => del({ id: "row-d", reason: "description changed" });
 const LISTS = /Upload these files/;
-const WAITS = /Do not upload yet: 1 rows of the upload files \(row-d\)/;
+const WAITS = /Do not upload yet: this plan has 1 deletes/;
 
 async function remade(legs: FakeLeg[] = [leg("d")]): Promise<{ summ: FakeSumm; dir: string; planDir: string }> {
   const summ = new FakeSumm();
@@ -421,14 +423,22 @@ test("a stop at the remade row's split, and a signal before its delete: no uploa
   assert.match(printed.join("\n"), WAITS);
 });
 
-test("a dry run lists no upload when it would stop at the remade row's delete, and does when it would not", async () => {
+test("a dry run never tells to upload while a delete is to come; it says what a live run would then list", async () => {
   const { summ, dir, planDir } = await remade();
-  const clean = await apply(summ, dir, planDir, { ...ALL, dryRun: true });
-  assert.match(clean.printed, LISTS);
-  Object.assign(summ.leg("d") as FakeLeg, { quantity: "2" });
-  const stops = await apply(summ, dir, planDir, { ...ALL, dryRun: true });
-  assert.doesNotMatch(stops.printed, LISTS);
-  assert.match(stops.printed, WAITS);
+  const { result, printed } = await apply(summ, dir, planDir, { ...ALL, dryRun: true });
+  assert.doesNotMatch(printed, LISTS);
+  assert.match(printed, /a live run makes its 1 deletes first, and only then lists:\n {2}f.csv: 1 rows/);
+  assert.deepEqual(result?.uploads, []);
+  const unflagged = await apply(summ, dir, planDir, { ...ALL, approveDeletes: false, dryRun: true });
+  assert.doesNotMatch(unflagged.printed, LISTS);
+  assert.match(unflagged.printed, WAITS);
+});
+
+test("a dry run with uploads and no delete lists them as ever", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [leg("d")]);
+  const { dir, planDir } = stateFor(summ, planOf({ upload: [upload] }));
+  assert.match((await apply(summ, dir, planDir, { ...ALL, dryRun: true })).printed, LISTS);
 });
 
 test("a crash at every step of a remade row never lists the upload before the delete is made", async () => {
@@ -451,12 +461,40 @@ test("a crash at every step of a remade row never lists the upload before the de
   assert.fail("never got through");
 });
 
-test("a delete with no row beside an upload holds nothing back", async () => {
+test("any delete not made holds the uploads back, with no row and under another ID too; made, they are listed", async () => {
   const summ = new FakeSumm();
   summ.add("a", [leg("d")]);
   const plan = named(summ, planOf({ delete: [del()], upload: [{ file: "f.csv", filed: false, ids: ["row-new"] }] }));
   const { dir, planDir } = stateFor(summ, plan);
-  assert.match((await apply(summ, dir, planDir, { ...ALL, approveDeletes: false })).printed, LISTS);
+  const waits = await apply(summ, dir, planDir, { ...ALL, approveDeletes: false });
+  assert.doesNotMatch(waits.printed, LISTS);
+  assert.match(waits.printed, WAITS);
+  assert.match((await apply(summ, dir, planDir)).printed, LISTS);
+});
+
+test("a made-up leg's skipped ignore, with its delete made, does not hold the uploads back", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [leg("d"), leg("soft", { importType: "soft-transfer", side: "incoming", trade: "deposit" })]);
+  summ.add("b", [partner()]);
+  const plan = named(summ, planOf({ delete: [remake()], upload: [upload] }));
+  const { dir, planDir } = stateFor(summ, plan);
+  const real = summ.callTool.bind(summ);
+  summ.callTool = async (name, args) => {
+    const text = await real(name, args);
+    // Summ pairs the made-up leg with another once the delete is made
+    if ((args.operation as { type?: string } | undefined)?.type === "delete") {
+      const [id, legs] = summ.holder("soft") as [string, FakeLeg[]];
+      summ.actions.delete(id);
+      (summ.holder("partner") as [string, FakeLeg[]])[1].push(...legs);
+    }
+    return text;
+  };
+  const { result, printed, stop } = await apply(summ, dir, planDir);
+  assert.equal(stop, undefined);
+  assert.equal(result?.deleted, 1);
+  assert.equal(result?.skipped.length, 1);
+  assert.doesNotMatch(printed, /Do not upload/);
+  assert.match(printed, LISTS);
 });
 
 // ---- What the plan shows
@@ -472,10 +510,148 @@ test("plan.md shows each leg's values, the other legs' too, and what a filed-yea
   const md = renderPlan(plan, SNAP, "run");
   assert.match(
     md,
-    /\| deleted \| `d` \| outgoing \| withdrawal \| AAA \| 1 \| 2024-03-01T00:00:00.000Z \| csv-source \| manual-csv \|/,
+    /deleted; no txid \| `d` \| outgoing \| withdrawal \| AAA \| 1 \| – \| 2024-03-01T00:00:00.000Z \| csv-source \| manual-csv \|/,
   );
-  assert.match(md, /\| stays \| `partner` \| incoming \| deposit \| CCC \| 3 \| .* \| w \| wallet \|/);
+  assert.match(md, /\| stays \| `partner` \| incoming \| deposit \| CCC \| 3 \| – \| .* \| w \| wallet \|/);
+
   assert.match(md, /stays, ignored: Summ made it up \| `soft`/);
-  assert.match(md, /moves the cost bases of later disposals/);
+  assert.match(md, /also moves the cost bases of later disposals/);
+  assert.match(md, /could not apply/);
+
   assert.doesNotMatch(renderPlan(planOf({ delete: [] }), SNAP, "run"), /cost bases/);
+});
+
+test("plan.md shows the fee on a leg and its comments, a txid checked, and a partner another entry deletes", () => {
+  const summ = new FakeSumm();
+  summ.add("a", [
+    leg("d", { feeQuantity: 2, feeCurrency: "FFF", comments: [{ comment: "a note" }] }),
+    leg("e"),
+    leg("made", { importType: "assumed-fee", side: "fees", trade: "fee" }),
+  ]);
+  const plan = named(
+    summ,
+    planOf({ delete: [del({ id: "row-d", txids: [TXID] }), del({ summId: "row-e", legIds: ["e"] })] }),
+  );
+  const md = renderPlan(plan, SNAP, "run");
+  assert.match(md, /\| deleted \| `d` .* \| 2 FFF \| .* \| a note \|/);
+  assert.match(md, /deleted by row-e \| `e`/);
+  assert.match(md, /deleted by row-d \| `d`/);
+  assert.match(md, /Summ-made, its id does not last \| `made`/);
+  assert.doesNotMatch(md, /\| stays \| `[de]`/);
+});
+
+test("a manual entry linked only by its Tx Hash, 0x-prefixed or upper case, stops; so does an upper-case txid in text", async () => {
+  for (const over of [
+    { id: `0x${TXID}` },
+    { id: TXID.toUpperCase() },
+    { description: TXID.toUpperCase() },
+    { comments: [{ comment: `see ${TXID.toUpperCase()}` }] },
+  ]) {
+    const summ = new FakeSumm();
+    summ.add("a", [leg("d")]);
+    const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [del({ id: "row-d", txids: [TXID] })] })));
+    summ.add("m", [leg("hand", { importType: "manual", source: "manual", id: "x-manual", ...over })]);
+    assert.match(String((await apply(summ, dir, planDir)).stop?.message), /names the row's txid/);
+    assert.deepEqual(writesOf(summ), []);
+  }
+});
+
+test("a manual entry's other hashes name no row", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [leg("d")]);
+  summ.add("m", [leg("hand", { importType: "manual", source: "manual", id: "uuid-manual" })]);
+  const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [del({ id: "row-d", txids: [TXID] })] })));
+  assert.equal((await apply(summ, dir, planDir)).result?.deleted, 1);
+});
+
+test("the list of manual entries is read to its last page, and a total it does not reach stops", async () => {
+  const summ = new FakeSumm();
+  summ.pageSize = 1;
+  summ.add("a", [leg("d")]);
+  const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [del({ id: "row-d", txids: [TXID] })] })));
+  summ.add("m1", [leg("first", { importType: "manual", id: "x-manual" })]);
+  summ.add("m2", [leg("last", { importType: "manual", id: "y-manual", description: TXID })]);
+  assert.match(String((await apply(summ, dir, planDir)).stop?.message), /manual entry last/);
+  summ.manualListText = "(Page 1 of 1, 1 returned, 3 total)\n## 1. Send\n- **Action ID**: `m1`\n";
+  assert.match(String((await apply(summ, dir, planDir)).stop?.message), /gave 1 actions of 3/);
+  assert.deepEqual(writesOf(summ), []);
+});
+
+test("only Summ's own empty answer reads as empty", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [leg("d")]);
+  const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [del({ txids: [TXID] })] })));
+  for (const text of ["No results", "No transactions found", "(Page 1 of 1, 0 returned, 5 total)"]) {
+    summ.manualListText = text;
+    assert.match(String((await apply(summ, dir, planDir)).stop?.message), /list of manual entries reads/);
+  }
+  assert.deepEqual(writesOf(summ), []);
+});
+
+test("after a landed split, a leg no longer ignored is compared in full: its trade and its side", async () => {
+  for (const [over, pattern] of [
+    [{ trade: "sell" }, /trade of leg d is "sell"/],
+    [{ trade: "withdrawal", side: "incoming" }, /side of leg d is "incoming"/],
+    [{ trade: "withdrawal", price: 9 }, /price of leg d/],
+  ] as const) {
+    const summ = new FakeSumm();
+    summ.add("a", [leg("d"), partner()]);
+    const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [del()] })));
+    const real = summ.callTool.bind(summ);
+    // After the split's read-back, which goes by action id: the next look-up of the leg sees this
+    summ.callTool = async (name, args) => {
+      if (name === "inspect_transaction" && args.transactionId === "d" && summ.leg("d")?.trade === "ignoreOut")
+        Object.assign(summ.leg("d") as FakeLeg, over);
+      return real(name, args);
+    };
+    assert.match(String((await apply(summ, dir, planDir)).stop?.message), pattern);
+    assert.deepEqual(writesOf(summ), [["edit", "d"]]);
+  }
+});
+
+test("a split with only its intent logged excuses the ignore, not a hand edit; with its result it excuses both", async () => {
+  const landed = async (lost: boolean) => {
+    const summ = new FakeSumm();
+    summ.add("a", [leg("d"), partner()]);
+    const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [del()] })));
+    if (lost) summ.failAfterWrite = 1;
+    const real = summ.callTool.bind(summ);
+    let priced = false;
+    summ.callTool = async (name, args) => {
+      if (name === "inspect_transaction" && (summ.leg("d") as FakeLeg | undefined)?.trade === "ignoreOut" && !priced) {
+        priced = true;
+        (summ.leg("d") as FakeLeg).price = 9;
+      }
+      return real(name, args);
+    };
+    const first = await apply(summ, dir, planDir);
+    summ.failAfterWrite = null;
+    return lost ? apply(summ, dir, planDir) : first;
+  };
+  assert.match(String((await landed(true)).stop?.message), /price of leg d/);
+  assert.equal((await landed(false)).result?.deleted, 1);
+});
+
+test("a Summ-made fee may renew its id beside a delete; a named one may go", async () => {
+  const fee = (id: string) => leg(id, { importType: "assumed-fee", side: "fees", trade: "fee" });
+  const summ = new FakeSumm();
+  summ.add("a", [leg("d"), fee("fee-old")]);
+  const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [del()] })));
+  summ.add("a", [leg("d"), fee("fee-new")]);
+  const { stop, result } = await apply(summ, dir, planDir);
+  assert.equal(stop, undefined);
+  assert.equal(result?.deleted, 1);
+});
+
+test("the manual list is read again after a write of the run, and not before one", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [leg("d"), partner()]);
+  summ.add("m", [leg("hand", { importType: "manual", id: "x-manual" })]);
+  const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [del({ txids: [TXID] })] })));
+  await apply(summ, dir, planDir, { ...ALL, dryRun: true });
+  const lists = () => summ.calls.filter((c) => c.name === "query_summ_transactions").length;
+  assert.equal(lists(), 1);
+  summ.calls.length = 0;
+  await apply(summ, dir, planDir);
+  assert.equal(lists(), 2, "before the split, and after it before the delete");
 });

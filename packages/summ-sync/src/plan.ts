@@ -79,6 +79,10 @@ export interface LegValues {
   blockchain: string;
   description: string;
   price: number | null;
+  /** The fee Summ keeps on the leg itself: it goes with the leg. */
+  feeQuantity: number | null;
+  feeCurrency: string | null;
+  comments: string[];
 }
 
 export const legValues = (l: Leg): LegValues => ({
@@ -96,11 +100,17 @@ export const legValues = (l: Leg): LegValues => ({
   blockchain: l.blockchain,
   description: l.description,
   price: l.price ?? null,
+  feeQuantity: l.feeQuantity ?? null,
+  feeCurrency: l.feeCurrency ?? null,
+  comments: l.comments,
 });
 
-/** The txids a manual entry names, in its description or comments. */
+/** The txids a manual entry names: in its description or comments, or as its Tx Hash. */
 export const txidsNamedBy = (l: Leg): string[] => [
-  ...new Set([...[l.description, ...l.comments].join(" ").matchAll(/[0-9a-fA-F]{64}/g)].map((m) => m[0].toLowerCase())),
+  ...new Set([
+    ...[...[l.description, ...l.comments].join(" ").matchAll(/[0-9a-fA-F]{64}/g)].map((m) => m[0].toLowerCase()),
+    ...(/^[0-9a-f]{64}$/.test(normaliseTxid(l.id)) ? [normaliseTxid(l.id)] : []),
+  ]),
 ];
 
 export interface DeleteEntry {
@@ -1398,16 +1408,15 @@ export function makePlan(input: PlanInput): PlanResult {
   const txidRows = new Map<string, string>();
   for (const row of rows) for (const t of row.txids) txidRows.set(t, row.id);
   for (const leg of input.legs.filter((l) => l.importType === "manual")) {
-    const text = [leg.description, ...leg.comments].join(" ");
-    for (const m of text.matchAll(/[0-9a-fA-F]{64}/g)) {
-      const id = txidRows.get(m[0].toLowerCase());
+    for (const txid of txidsNamedBy(leg)) {
+      const id = txidRows.get(txid);
       if (id)
         plan.report.push({
           kind: "manual-entry",
           filed: isFiled(leg.timestamp),
           id,
           legIds: [leg.legId],
-          txids: [m[0].toLowerCase()],
+          txids: [txid],
           detail: "a manual entry names the row's txid",
         });
     }
