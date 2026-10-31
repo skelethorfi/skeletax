@@ -2,7 +2,7 @@
 //
 //   <state dir>/snapshots/<time>.json            one pull: its counts and an entry per listed action
 //   <state dir>/snapshots/<time>.details.jsonl   the action details that pull read (version 2)
-//   <state dir>/actions/<action id>.json         details pulls before version 2 read, and actions apply saved
+//   <state dir>/actions/<action id>.json         details pulls before version 2 read, and actions older applies saved
 //
 // A snapshot is read as legs: each incoming, outgoing and fee leg of every action it needs the detail of, plus
 // the tx hashes of every listed action.
@@ -145,18 +145,6 @@ export const actionFile = (stateDir: string, actionId: string): string => join(s
 export function readAction(stateDir: string, actionId: string): ActionDetail | null {
   const file = actionFile(stateDir, actionId);
   return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
-}
-
-/** Writes an action to the store unless it holds the id already (or `replace`); returns the file. */
-export function storeAction(stateDir: string, detail: ActionDetail, replace = false): string {
-  const file = actionFile(stateDir, detail.action._id);
-  if (replace || !existsSync(file)) {
-    // Through a temporary file, so a pull that stops never leaves half a file under the id
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(`${file}.tmp`, JSON.stringify(detail, null, 2) + "\n");
-    renameSync(`${file}.tmp`, file);
-  }
-  return file;
 }
 
 /** The snapshot names (their times), oldest first. */

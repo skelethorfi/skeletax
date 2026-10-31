@@ -1,10 +1,10 @@
 // prune: removes snapshot files older than `days` (never the latest), and action store files that no remaining
-// snapshot lists and no delete in apply-log.jsonl saved, but only files git holds as committed (spec:
-// docs/specs/summ-sync.md, State dir).
+// snapshot lists, but only files git holds as committed, and no action a delete named or `saved` file (spec:
+// docs/specs/summ-sync.md, State dir). Plans, and so pre-images, are never removed.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { readSnapshotFile, snapshotNames } from "./snapshot.ts";
 
 function git(stateDir: string, args: string[]): string[] {
@@ -23,17 +23,31 @@ function git(stateDir: string, args: string[]): string[] {
   }
 }
 
-/** The actions apply saved before deleting them: kept, as the record of what Summ held. */
-function savedByApply(stateDir: string): Set<string> {
+/**
+ * What rollback needs and prune must keep: the actions the log names (deleted, or saved before a delete or a split),
+ * and the snapshot of each plan with pre-images. A plan whose file is gone cannot say which, so prune stops.
+ */
+function keptForRollback(stateDir: string): { actions: Set<string>; snapshots: Set<string> } {
+  const actions = new Set<string>();
+  const snapshots = new Set<string>();
   const file = join(stateDir, "apply-log.jsonl");
-  if (!existsSync(file)) return new Set();
+  if (!existsSync(file)) return { actions, snapshots };
   const lines = readFileSync(file, "utf8")
     .split("\n")
     .filter(Boolean)
     .map((l) => JSON.parse(l));
-  return new Set(
-    lines.filter((l) => l.operation === "delete" && Array.isArray(l.actionIds)).flatMap((l) => l.actionIds as string[]),
-  );
+  for (const l of lines) {
+    if (l.operation === "delete" && Array.isArray(l.actionIds)) for (const id of l.actionIds) actions.add(id);
+    // One file on a split's lines, a list on a delete's
+    for (const saved of [l.saved ?? []].flat() as string[]) actions.add(basename(saved, ".json"));
+  }
+  const planDirs = new Set(lines.filter((l) => l.pre).map((l) => dirname(dirname(l.pre as string))));
+  for (const dir of planDirs) {
+    const plan = join(stateDir, dir, "plan.json");
+    if (!existsSync(plan)) throw new Error(`apply-log.jsonl has pre-images of ${dir}, but ${plan} is gone`);
+    snapshots.add(JSON.parse(readFileSync(plan, "utf8")).snapshot);
+  }
+  return { actions, snapshots };
 }
 
 export interface PruneResult {
@@ -51,9 +65,10 @@ export function prune(stateDir: string, days = 30, now = Date.now()): PruneResul
   const names = snapshotNames(stateDir);
   if (names.length === 0) throw new Error(`No snapshot in ${join(stateDir, "snapshots")}: nothing to prune against`);
   const cutoff = now - days * 86_400_000;
-  const old = names.slice(0, -1).filter((n) => snapshotTime(n) < cutoff);
+  const { actions: saved, snapshots } = keptForRollback(stateDir);
+  const old = names.slice(0, -1).filter((n) => snapshotTime(n) < cutoff && !snapshots.has(n));
   const kept = names.filter((n) => !old.includes(n));
-  const listed = new Set(savedByApply(stateDir));
+  const listed = new Set(saved);
   for (const id of kept.flatMap((n) =>
     readSnapshotFile(join(stateDir, "snapshots", `${n}.json`)).actions.map((a) => a.id),
   ))

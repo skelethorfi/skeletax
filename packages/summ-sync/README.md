@@ -85,18 +85,18 @@ Filed years go in a separate apply with `--approve-filed`.
   to `adopted.csv` and `overrides.json` and lists the upload files. It
   applies the current years' entries, or with `--approve-filed` only the
   filed years'. `--dry-run` does the look-ups and checks with read tools
-  only and writes nothing. Every write goes to `<state dir>/apply-log.jsonl`
-  with its undo handle (`undo_edit`; deletes have none). Before a delete,
-  it saves each action as it inspected it (full JSON and change history) to
-  the action store, `<state dir>/actions/<action id>.json`. Summ cannot undo a delete
+  only and writes nothing. Before every write it saves the action as just read
+  (full JSON and change history) to `<plan dir>/pre/<entry>.<step>.json` and logs its
+  intent to `<state dir>/apply-log.jsonl`; after it logs the result and undo handle
+  (`undo_edit`; deletes have none). Summ cannot undo a delete
   and the MCP cannot recreate an uploaded row, so to bring a row back,
-  upload its CSV line again (from the run that wrote it); the saved file
-  shows what Summ held. It needs `login --write`. Afterwards, upload the
+  upload its CSV line again; a delete's pre-image holds that line when the run or
+  the plan's upload files have it, and shows what Summ held. It needs `login --write`. Afterwards, upload the
   files, then pull and plan again; recalculate in Summ before reading any
   figures.
 - `prune` removes the snapshots older than `--older-than` days (default
   30; never the latest), with their details files, and the stored actions no remaining snapshot lists
-  (except those apply saved before a delete), once they are committed (keep the state dir in git; git keeps the removed files). If
+  (except those the apply log names; a snapshot whose plan has pre-images stays too), once they are committed (keep the state dir in git; git keeps the removed files). If
   any is not committed, it removes nothing and lists them.
 - `tools` lists the server's tools.
 

@@ -2,7 +2,8 @@
 //
 //   adopted.csv       Leg,ID: a leg uploaded with an old <file>:<n> ID, and the row it was adopted to
 //   overrides.json    values the user set in Summ, kept over the run's (spec: Drift and overrides)
-//   apply-log.jsonl   one line per call apply made; an edit's lines carry {legId, field, value, ...}
+//   apply-log.jsonl   apply's journal (journal.ts); an edit's lines carry {legId, field, value, ...}, one before
+//                     the call (intent) and one after it
 //
 // plan only lists what it adopted and captured; apply adds those to the first two tables (mergeTables), so a
 // plan that is never applied changes nothing later plans assume.
@@ -39,7 +40,7 @@ export interface AppliedEdit {
   value: Value;
   /** A price edit: the local price Summ showed after it, which says whether the edit still stands; null unconfirmed. */
   after?: number | null;
-  /** A price edit's line written before the call, so each edit has exactly one. */
+  /** The line written before the call, so each edit of a field has exactly one. */
   intent?: boolean;
 }
 
