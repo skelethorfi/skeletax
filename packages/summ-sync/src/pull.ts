@@ -174,7 +174,10 @@ export async function pull(
   const earlier = resumable(stateDir, want, now);
   const startedAt = earlier?.header.startedAt ?? new Date(now).toISOString();
   const stamp = (time: string) => time.slice(0, 19).replace(/:/g, "-");
-  const name = earlier?.name ?? stamp(startedAt);
+  // A pull started in the second another finished must not take over its file
+  let name = earlier?.name ?? stamp(startedAt);
+  for (let t = Date.parse(startedAt); !earlier && existsSync(join(stateDir, "snapshots", `${name}.details.jsonl`));)
+    name = stamp(new Date((t += 1000)).toISOString());
   let details = detailsFile(join(stateDir, "snapshots", `${name}.json`));
   if (!earlier) appendFileSync(details, JSON.stringify({ startedAt, ...want }) + "\n");
   else if (!readFileSync(details, "utf8").endsWith("\n")) appendFileSync(details, "\n");
@@ -256,7 +259,9 @@ export async function pull(
     }
     // Named by its finish, so the latest snapshot is always the last one to finish
     const finished = clock();
-    const file = join(stateDir, "snapshots", `${stamp(finished)}.json`);
+    let file = join(stateDir, "snapshots", `${stamp(finished)}.json`);
+    for (let t = Date.parse(finished); existsSync(file);)
+      file = join(stateDir, "snapshots", `${stamp(new Date((t += 1000)).toISOString())}.json`);
     if (detailsFile(file) !== details) renameSync(details, detailsFile(file));
     details = detailsFile(file);
     writeSnapshot(file, {

@@ -257,6 +257,19 @@ test("a resumed pull that finishes last is the latest snapshot, though it starte
     assert.equal(readSnapshotFile(resumed).takenAt, new Date(T0).toISOString());
   }));
 
+test("a pull started in the second another finished keeps to its own file", () =>
+  quiet(async () => {
+    const stateDir = stateDirOf();
+    const summ = fakeSumm(["a1"]);
+    const first = await pull(stateDir, undefined, { client: summ.client, now: T0 });
+    summ.inspected.length = 0;
+    const second = await pull(stateDir, undefined, { client: summ.client, now: T0 });
+    assert.deepEqual(summ.inspected, ["a1"]);
+    assert.notEqual(first, second);
+    assert.deepEqual([...readSnapshot(first).history.keys()], ["a1"]);
+    assert.deepEqual([...readSnapshot(second).history.keys()], ["a1"]);
+  }));
+
 test("rangeOf covers the run's periods with a day's margin", () => {
   const range = rangeOf(
     [{ period: { from: "2023-07-01", to: "2024-06-30" } }, { period: { from: "2022-07-01", to: "2023-06-30" } }],

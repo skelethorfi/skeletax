@@ -2201,3 +2201,56 @@ test("plan refuses wider changes from a snapshot of part of the history", () => 
   writeFileSync(file.replace(".json", ".details.jsonl"), "{}\n");
   assert.throws(() => writePlan(state, run), /Pull with --all/);
 });
+
+test("a partial snapshot refuses deletes and filed-year edits, and notes its limit on an edit it allows", () => {
+  const header =
+    "Timestamp (UTC),Type,Base Currency,Base Amount,Quote Currency (Optional),Quote Amount (Optional),Fee Currency (Optional),Fee Amount (Optional),From (Optional),To (Optional),Blockchain (Optional),ID (Optional),Description (Optional)";
+  const id = "2023-08-01T00:00:00.000Z.out.aaaaaaaaaaaa";
+  const leg = (legId: string, legRowId: string, quantity: number) => ({
+    _id: legId,
+    id: legRowId,
+    trade: "withdrawal",
+    currency: "RUNE",
+    quantity,
+    timestamp: "2023-08-01T00:00:00.000Z",
+    from: "a",
+    to: "b",
+    description: "x",
+    source: "csv-source",
+    importType: "manual-csv",
+  });
+  const setup = (legs: unknown[], config: Record<string, unknown> = {}) => {
+    const state = mkdtempSync(join(tmpdir(), "summ-sync-"));
+    writeFileSync(join(state, "summ-sync.json"), JSON.stringify({ managedSources: ["csv-source"], ...config }));
+    const run = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
+    mkdirSync(join(run, "csv"));
+    writeFileSync(
+      join(run, "csv", "2023-07-01_2024-06-30_THOR_abc_Wallet.csv"),
+      `${header}\n2023-08-01T00:00:00.000Z,send,RUNE,1,,,,,a,b,THORChain,${id},x\n`,
+    );
+    const file = join(state, "snapshots", "2026-01-01T00-00-00.json");
+    writeSnapshot(file, {
+      version: 2,
+      takenAt: "",
+      total: 1,
+      run: resolve(run),
+      range: { from: "2023-07-01", to: "2024-06-30", after: 0, before: 1 },
+      managedSources: ["csv-source"],
+      managedChains: DEFAULTS.managedChains,
+      actions: [{ id: "a1", txHash: id, category: "send", tags: [], detail: true }],
+    });
+    const detail = { a: "a1", at: "", action: { _id: "a1", outgoing: legs }, history: [] };
+    writeFileSync(file.replace(".json", ".details.jsonl"), `{}\n${JSON.stringify(detail)}\n`);
+    return { state, run };
+  };
+  // A leg with no row in the run, beside the row's own leg: a delete
+  const deleting = setup([leg("l1", id, 1), leg("l2", "2023-08-02T00:00:00.000Z.out.bbbbbbbbbbbb", 2)]);
+  assert.throws(() => writePlan(deleting.state, deleting.run), /1 deletes.*Pull with --all/);
+  // The row's amount differs: an edit, in a filed year
+  const filed = setup([leg("l1", id, 2)], { filedBefore: "2024-07-01" });
+  assert.throws(() => writePlan(filed.state, filed.run), /edits in filed years.*Pull with --all/);
+  // The same edit in a current year passes, and says what the snapshot covers
+  const allowed = setup([leg("l1", id, 2)]);
+  const dir = writePlan(allowed.state, allowed.run);
+  assert.match(readFileSync(join(dir, "plan.md"), "utf8"), /covers only 2023-07-01 to 2024-06-30/);
+});
