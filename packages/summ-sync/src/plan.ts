@@ -5,7 +5,7 @@ import type { Config, Hold } from "./config.ts";
 import { before, inPeriod } from "./dates.ts";
 import { parseCsvLine, periodsOf, type Row, type RunFile } from "./run.ts";
 import { type Leg, normaliseTxid } from "./snapshot.ts";
-import type { AppliedEdit, LegRole, Override, Value } from "./state.ts";
+import type { AppliedEdit, LegRole, Override, Value, LeftLeg } from "./state.ts";
 import { type SummType, summBlockchain, summType } from "./summ-types.ts";
 
 export interface PlanInput {
@@ -18,6 +18,8 @@ export interface PlanInput {
   adopted: Map<string, string>;
   overrides: Override[];
   applyLog: AppliedEdit[];
+  /** Made-up legs an apply left in place (readLeftLegs). */
+  leftLegs?: LeftLeg[];
   /** The USD price of each row in the newest upload file holding it (plans/<time>/upload). */
   uploadedPrices?: Map<string, number>;
   now: string;
@@ -79,7 +81,8 @@ export interface ReportEntry {
     | "manual-entry"
     | "other-source"
     | "foreign-pair"
-    | "price-blank";
+    | "price-blank"
+    | "made-up-left";
   filed: boolean;
   id?: string;
   legIds?: string[];
@@ -1003,6 +1006,19 @@ export function makePlan(input: PlanInput): PlanResult {
         ...(ignore.length ? { ignore } : {}),
       });
     }
+  }
+
+  // Made-up legs an apply left in place: counted on their own until ignored. A leg gone, or ignored, is no longer one
+  for (const left of input.leftLegs ?? []) {
+    const leg = input.legs.find((l) => l.legId === left.legId);
+    if (!leg || IGNORED.has(leg.trade)) continue;
+    plan.report.push({
+      kind: "made-up-left",
+      filed: isFiled(leg.timestamp),
+      ...(left.id === null ? {} : { id: left.id }),
+      legIds: [left.legId],
+      detail: `Summ made this leg up to pair a transfer, so it counts on its own, and apply could not ignore it (plan ${left.plan}): ${left.reason}`,
+    });
   }
 
   // ---- Held: nothing is planned for a row the config holds (a decision pending outside the sync), nor for the rows

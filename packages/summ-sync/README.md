@@ -79,10 +79,15 @@ Filed years go in a separate apply with `--approve-filed`.
   the plan does not carry; `plan.md` notes each, and each entry that
   matches nothing. Use it to apply one stage at a time.
 - `apply` carries out a plan made from the latest snapshot: deletes (only
-  with `--approve-deletes`), then edits and categorisation, each checked
-  against Summ's current value first (categorisation waits while the plan
-  has uploads); then it adds the plan's adoptions and captured overrides
-  to `adopted.csv` and `overrides.json` and lists the upload files. It
+  with `--approve-deletes`), then edits and categorisation (categorisation
+  waits while the plan has uploads). Every entry is classified by a fresh read
+  on every run: not yet done, done, or anything else, which stops the run and
+  reports what it found. So after any stop, run the same command again: it goes
+  on from where it stopped, or refuses, and then you pull and plan. Every write's
+  result is checked and read back. Ctrl-C finishes the current entry and exits 130.
+  When every entry is done it adds the plan's adoptions and captured overrides
+  to `adopted.csv` and `overrides.json` and lists the upload files; a finished plan
+  reports that and does nothing. `<state dir>/.lock` keeps a second apply out. It
   applies the current years' entries, or with `--approve-filed` only the
   filed years'. `--dry-run` does the look-ups and checks with read tools
   only and writes nothing. Before every write it saves the action as just read

@@ -3,13 +3,14 @@
 //   adopted.csv       Leg,ID: a leg uploaded with an old <file>:<n> ID, and the row it was adopted to
 //   overrides.json    values the user set in Summ, kept over the run's (spec: Drift and overrides)
 //   apply-log.jsonl   apply's journal (journal.ts); an edit's lines carry {legId, field, value, ...}, one before
-//                     the call (intent) and one after it
+//                     the call (intent) and one after it; a price found landed on a resume has a `via: found` line
 //
 // plan only lists what it adopted and captured; apply adds those to the first two tables (mergeTables), so a
 // plan that is never applied changes nothing later plans assume.
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { readLogLines } from "./journal.ts";
 
 export type Value = string | number | null;
 
@@ -81,13 +82,26 @@ export function writeOverrides(stateDir: string, overrides: Override[]): void {
 }
 
 export function readApplyLog(stateDir: string): AppliedEdit[] {
-  const file = join(stateDir, "apply-log.jsonl");
-  if (!existsSync(file)) return [];
-  return readFileSync(file, "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line))
-    .filter((e) => typeof e.legId === "string" && typeof e.field === "string");
+  return readLogLines<AppliedEdit>(stateDir).filter((e) => typeof e.legId === "string" && typeof e.field === "string");
+}
+
+/** A made-up leg an apply could not ignore, and left counted. */
+export interface LeftLeg {
+  legId: string;
+  /** The row of the entry that left it, null when the run had none. */
+  id: string | null;
+  plan: string;
+  reason: string;
+}
+
+/** The log's made-up legs left in place, the latest line of each. Any other skip line, an old log's too, names none. */
+export function readLeftLegs(stateDir: string): LeftLeg[] {
+  const left = new Map<string, LeftLeg>();
+  for (const l of readLogLines<Partial<LeftLeg> & { call?: string; leftLeg?: unknown }>(stateDir)) {
+    if (l.call !== "skip" || typeof l.leftLeg !== "string") continue;
+    left.set(l.leftLeg, { legId: l.leftLeg, id: l.id ?? null, plan: String(l.plan), reason: String(l.reason) });
+  }
+  return [...left.values()];
 }
 
 /**

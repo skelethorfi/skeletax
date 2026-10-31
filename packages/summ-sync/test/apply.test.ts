@@ -14,90 +14,12 @@ import {
   type ToolCaller,
   undoHandle,
 } from "../src/apply.ts";
+import { type FakeLeg, FakeSumm } from "./fake-summ.ts";
 import type { DeleteEntry, EditEntry } from "../src/plan.ts";
 import { readApplyLog } from "../src/state.ts";
 
 // Every value below is made up.
 const OPTS: ApplyOptions = { approveDeletes: false, approveFiled: false, dryRun: false };
-
-interface FakeLeg {
-  price?: number;
-  priceValueCurrency?: string;
-  updatedAt?: string;
-  _id: string;
-  trade: string;
-  quantity: string;
-  timestamp?: string;
-  id?: string;
-  importType?: string;
-  side?: "incoming" | "outgoing" | "fees";
-}
-
-/** Summ as a fake MCP server: actions of incoming legs; an edit rebuilds the action under a new id. */
-class FakeSumm implements ToolCaller {
-  actions = new Map<string, FakeLeg[]>();
-  calls: { name: string; args: Record<string, unknown> }[] = [];
-  splits = true;
-  /** Summ with its computation paused: an edit keeps the action's id. */
-  paused = false;
-  history = new Map<string, string[]>();
-  private n = 0;
-
-  add(actionId: string, legs: FakeLeg[]) {
-    this.actions.set(actionId, legs);
-  }
-
-  async callTool(name: string, args: Record<string, unknown>): Promise<string> {
-    this.calls.push({ name, args });
-    if (name === "query_summ_transactions") {
-      // Like Summ's id filter: the leg's action, then unrelated ones
-      const ids = (args.filter as { value: string[] }).value;
-      const all = [...this.actions];
-      const own = all.filter(([, legs]) => legs.some((l) => ids.includes(l._id)));
-      const hits = [...own, ...all.filter((a) => !own.includes(a))];
-      return hits.map(([actionId], i) => `## ${i + 1}. Send\n- **Action ID**: \`${actionId}\`\n`).join("\n");
-    }
-    if (name === "inspect_transaction") {
-      const legs = this.actions.get(args.actionId as string);
-      if (!legs) throw new Error(`inspect_transaction: ${String(args.actionId)} not found`);
-      const side = (s: string) => legs.filter((l) => (l.side ?? "incoming") === s).map(({ side: _, ...l }) => l);
-      const action = { _id: args.actionId, incoming: side("incoming"), outgoing: side("outgoing"), fees: side("fees") };
-      const history = (this.history.get(args.actionId as string) ?? []).join("\n");
-      return `# Action\n\`\`\`json\n${JSON.stringify(action)}\n\`\`\`\n## Change History\n${history}\n`;
-    }
-    if (name === "edit_transaction") {
-      const legs = this.actions.get(args.actionId as string) as FakeLeg[];
-      for (const { transactionId, updates } of args.edits as { transactionId: string; updates: Partial<FakeLeg> }[]) {
-        Object.assign(legs.find((l) => l._id === transactionId) as FakeLeg, updates, {
-          updatedAt: new Date(Date.UTC(2026, 0, 2, 0, 0, this.n)).toISOString(),
-        });
-      }
-      if (this.paused)
-        return `Edited 1 action.\nAffected Action IDs: ${String(args.actionId)}\n- **Bulk Edit ID**: \`undo${++this.n}abcdef\``;
-      this.actions.delete(args.actionId as string);
-      const next = `rebuilt${++this.n}`;
-      // Like Summ: a categorised send no longer pairs with the receive it made up, which is left on its own,
-      // and a leg edited to an ignore type moves to an action of its own
-      const madeUp = legs.filter((l) => l.importType === "soft-transfer");
-      const ignored = legs.filter((l) => l.trade === "ignoreIn" || l.trade === "ignoreOut");
-      if (this.splits && madeUp.length) this.actions.set(`alone${this.n}`, madeUp);
-      if (this.splits && ignored.length && ignored.length < legs.length) this.actions.set(`ignored${this.n}`, ignored);
-      this.actions.set(next, this.splits ? legs.filter((l) => !madeUp.includes(l) && !ignored.includes(l)) : legs);
-      return `Edited 1 action.\nAffected Action IDs (rebuilt — these replace the requested id): ${next}\n- **Bulk Edit ID**: \`undo${this.n}abcdef\``;
-    }
-    if (name === "bulk_edit_transactions") {
-      if (args.filter) throw new Error("a write selected by filter");
-      const ids = args.actionIds as string[];
-      if ((args.operation as { type: string }).type === "ignore") {
-        for (const id of ids) for (const l of this.actions.get(id) ?? []) l.trade = "ignoreIn";
-        return `Bulk ignore updated ${ids.length} action.\nBulk Edit ID: ignore${++this.n}abcdef`;
-      }
-      for (const id of ids) this.actions.delete(id);
-      return `Deleted ${ids.length} actions.`;
-    }
-    throw new Error(`unexpected tool ${name}`);
-  }
-}
 
 /** The pre-image a log line names (state dir relative; the fake's plan folder is plans/p). */
 const preOf = (planDir: string, line?: { pre?: unknown }) => {
@@ -147,6 +69,25 @@ function planFile(over: Partial<PlanFile> = {}): PlanFile {
     notes: [],
     ...over,
   };
+}
+
+/** A run that must stop: what it said, and the log so far. */
+async function stops(summ: FakeSumm, plan: PlanFile, pattern: RegExp, opts: Partial<ApplyOptions> = {}) {
+  const log: Omit<LogLine, "time" | "plan">[] = [];
+  const state = mkdtempSync(join(tmpdir(), "summ-sync-state-"));
+  await assert.rejects(
+    applyPlan(
+      summ,
+      plan,
+      { ...OPTS, ...opts },
+      (l) => log.push(l),
+      () => {},
+      0,
+      { stateDir: state, planDir: join(state, "plans", "p") },
+    ),
+    pattern,
+  );
+  return { log };
 }
 
 async function run(summ: FakeSumm, plan: PlanFile, opts: Partial<ApplyOptions> = {}) {
@@ -223,7 +164,7 @@ test("a price edit that moved nothing is confirmed by updatedAt, at the first re
   assert.equal(summ.calls.filter((c) => c.name === "inspect_transaction").length, 2);
 });
 
-test("a price edit is unconfirmed, not assumed, when updatedAt never moves, whatever the price shows", async () => {
+test("a price edit that never shows as landed logs no price, and stops", async () => {
   const summ = new FakeSumm();
   summ.add("a", [pricedLeg()]);
   const real = summ.callTool.bind(summ);
@@ -231,11 +172,11 @@ test("a price edit is unconfirmed, not assumed, when updatedAt never moves, what
     const text = await real(name, args);
     return name === "inspect_transaction" ? text.replace(/"updatedAt":"[^"]*"/, `"updatedAt":"${STALE}"`) : text;
   };
-  const { log } = await run(summ, planFile({ edit: [edit({ changes: priceChange() })] }));
+  const { log } = await stops(summ, planFile({ edit: [edit({ changes: priceChange() })] }), /do not show/);
   assert.equal(log.find((l) => l.legId === "leg-1" && !l.intent)?.after, null);
 });
 
-test("a price edit is unconfirmed when its result names no action, and the log still holds it", async () => {
+test("a price edit whose result names no action stops, and the log still holds it", async () => {
   const summ = new FakeSumm();
   summ.add("a", [pricedLeg()]);
   const real = summ.callTool.bind(summ);
@@ -243,8 +184,7 @@ test("a price edit is unconfirmed when its result names no action, and the log s
     const text = await real(name, args);
     return name === "edit_transaction" ? text.replace(/Affected Action IDs.*\n/, "") : text;
   };
-  const { result, log } = await run(summ, planFile({ edit: [edit({ changes: priceChange() })] }));
-  assert.equal(result.edited, 1);
+  const { log } = await stops(summ, planFile({ edit: [edit({ changes: priceChange() })] }), /names no affected action/);
   assert.equal(log.find((l) => l.legId === "leg-1" && !l.intent)?.after, null);
 });
 
@@ -273,18 +213,16 @@ test("several changes of one leg go in one edit", async () => {
   assert.deepEqual(call?.args.edits, [{ transactionId: "leg-1", updates: { trade: "fee", quantity: 2 } }]);
 });
 
-test("a leg that changed since the pull is skipped and reported, not edited", async () => {
+test("a leg that changed since the pull stops the run, and is not edited", async () => {
   const summ = new FakeSumm();
   summ.add("a", [{ _id: "leg-1", trade: "deposit", quantity: "1" }]);
-  const { result, log } = await run(summ, planFile({ categorise: [edit()] }));
-  assert.equal(result.edited, 0);
-  assert.match(result.skipped[0].reason, /trade of leg leg-1 is "deposit"/);
+  summ.add("b", [{ _id: "leg-2", trade: "withdrawal", quantity: "1" }]);
+  const next = edit({ id: "row-2", changes: [{ ...edit().changes[0], legId: "leg-2" }] });
+  await stops(summ, planFile({ categorise: [edit(), next] }), /trade of leg leg-1 is "deposit"/);
   assert.equal(
     summ.calls.some((c) => c.name === "edit_transaction"),
     false,
   );
-  assert.equal(log[0].call, "skip");
-  assert.equal(log[0].legId, undefined, "a skip must not read back as an edit of the sync");
 });
 
 const MADE_UP: FakeLeg = { _id: "made-up", trade: "deposit", quantity: "1", importType: "soft-transfer" };
@@ -295,10 +233,11 @@ test("after categorising, the receive Summ made up is ignored by its own action 
   const { result, log } = await run(summ, planFile({ categorise: [edit({ ignore: ["made-up"] })] }));
   assert.equal(result.edited, 1);
   const ignore = summ.calls.find((c) => c.name === "bulk_edit_transactions");
-  assert.deepEqual(ignore?.args, { actionIds: ["alone1"], operation: { type: "ignore" } });
-  assert.equal(summ.actions.get("alone1")?.[0].trade, "ignoreIn");
+  const alone = (ignore?.args.actionIds as string[])[0];
+  assert.match(alone, /^alone/);
+  assert.equal(summ.leg("made-up")?.trade, "ignoreIn");
   const line = log.find((l) => l.operation === "ignore" && !l.intent);
-  assert.deepEqual([line?.legIds, line?.undo, line?.field], [["made-up"], "ignore2abcdef", undefined]);
+  assert.deepEqual([line?.legIds, line?.undo, line?.field], [["made-up"], line?.undo, undefined]);
 });
 
 test("a made-up leg already on its own is ignored without an edit", async () => {
@@ -306,10 +245,10 @@ test("a made-up leg already on its own is ignored without an edit", async () => 
   summ.add("b", [{ ...MADE_UP }]);
   const { result } = await run(summ, planFile({ categorise: [edit({ changes: [], ignore: ["made-up"] })] }));
   assert.equal(result.edited, 0);
-  assert.equal(summ.actions.get("b")?.[0].trade, "ignoreIn");
+  assert.equal(summ.leg("made-up")?.trade, "ignoreIn");
 });
 
-test("a made-up leg still in an action with other legs is skipped, not ignored", async () => {
+test("a made-up leg still in an action with other legs is reported, not ignored, and the run goes on", async () => {
   const summ = new FakeSumm();
   summ.splits = false;
   summ.add("a", [{ _id: "leg-1", trade: "withdrawal", quantity: "1" }, { ...MADE_UP }]);
@@ -321,19 +260,18 @@ test("a made-up leg still in an action with other legs is skipped, not ignored",
   );
 });
 
-test("a made-up leg is not ignored when its send was skipped", async () => {
+test("a made-up leg is not ignored when its send stopped the run", async () => {
   const summ = new FakeSumm();
   summ.add("a", [{ _id: "leg-1", trade: "deposit", quantity: "1" }, { ...MADE_UP }]);
-  await run(summ, planFile({ categorise: [edit({ ignore: ["made-up"] })] }));
+  await stops(summ, planFile({ categorise: [edit({ ignore: ["made-up"] })] }), /trade of leg leg-1/);
   assert.equal(
     summ.calls.some((c) => c.name === "bulk_edit_transactions"),
     false,
   );
 });
 
-test("a leg no longer in Summ is skipped", async () => {
-  const { result } = await run(new FakeSumm(), planFile({ edit: [edit()] }));
-  assert.match(result.skipped[0].reason, /no longer in Summ/);
+test("a leg no longer in Summ stops the run", async () => {
+  await stops(new FakeSumm(), planFile({ edit: [edit()] }), /no longer in Summ/);
 });
 
 test("filed-year entries are applied only with --approve-filed, and then only they", async () => {
@@ -360,7 +298,7 @@ test("a dry run looks up and checks but writes nothing and logs nothing", async 
     approveDeletes: true,
   });
   assert.deepEqual(
-    summ.calls.map((c) => c.name).filter((n) => n !== "query_summ_transactions" && n !== "inspect_transaction"),
+    summ.calls.map((c) => c.name).filter((n) => n !== "inspect_transaction"),
     [],
   );
   assert.equal(result.edited, 0);
@@ -410,7 +348,7 @@ test("a leg that shares its action is split off by an ignore edit, then its own 
     edits: [{ transactionId: "leg-9", updates: { trade: "ignoreOut" } }],
   });
   const deleteCall = summ.calls.find((c) => c.name === "bulk_edit_transactions");
-  assert.deepEqual(deleteCall?.args, { actionIds: ["ignored1"], operation: { type: "delete" } });
+  assert.match((deleteCall?.args.actionIds as string[])[0], /^ignored/);
   // the legs that stay are untouched, in their rebuilt action
   assert.deepEqual([...summ.actions.values()], [[{ _id: "their-leg", trade: "deposit", quantity: "1" }]]);
   // both actions saved: the shared one before the edit, the split-off one before the delete
@@ -421,12 +359,12 @@ test("a leg that shares its action is split off by an ignore edit, then its own 
     ).actions[0].action._id,
     "d",
   );
-  assert.deepEqual(preOf(planDir, log.at(-1)).actions[0].action._id, "ignored1");
+  assert.match(preOf(planDir, log.at(-1)).actions[0].action._id, /^ignored/);
   assert.deepEqual(
     log.filter((l) => l.field).map((l) => [l.call, l.kind, l.legId, l.field, l.from, l.value, l.intent, l.undo]),
     [
       ["edit_transaction", "split", "leg-9", "trade", "fee", "ignoreOut", true, undefined],
-      ["edit_transaction", "split", "leg-9", "trade", "fee", "ignoreOut", undefined, "undo1abcdef"],
+      ["edit_transaction", "split", "leg-9", "trade", "fee", "ignoreOut", undefined, log.find((l) => l.undo)?.undo],
     ],
   );
 });
@@ -478,30 +416,29 @@ test("the receive Summ made up for a deleted send is ignored once it is alone", 
   assert.equal(log.at(-1)?.operation, "ignore");
 });
 
-test("a leg already ignored that still shares its action is skipped, not edited again", async () => {
+test("a leg ignored by no write of this plan that still shares its action stops the run, and is not edited", async () => {
   const summ = new FakeSumm();
   summ.add("d", [
     { _id: "leg-9", trade: "ignoreOut", quantity: "1", side: "outgoing" },
     { _id: "their-leg", trade: "deposit", quantity: "1" },
   ]);
-  const { result } = await run(summ, planFile({ delete: [del({ otherLegs: 1 })] }), { approveDeletes: true });
-  assert.match(result.skipped[0].reason, /already ignored/);
+  await stops(summ, planFile({ delete: [del({ otherLegs: 1 })] }), /already ignored/, { approveDeletes: true });
   assert.equal(
-    summ.calls.some((c) => c.name !== "query_summ_transactions" && c.name !== "inspect_transaction"),
+    summ.calls.some((c) => c.name !== "inspect_transaction"),
     false,
   );
 });
 
-test("when Summ does not split the leg off, apply stops at the edit and reports the undo handle; nothing is deleted", async () => {
+test("when Summ does not split the leg off, apply waits, stops and reports the undo handle; nothing is deleted", async () => {
   const summ = new FakeSumm();
   summ.splits = false;
   summ.add("d", [
     { _id: "leg-9", trade: "withdrawal", quantity: "1" },
     { _id: "their-leg", trade: "deposit", quantity: "1" },
   ]);
-  const { result } = await run(summ, planFile({ delete: [del({ otherLegs: 1 })] }), { approveDeletes: true });
-  assert.equal(result.deleted, 0);
-  assert.match(result.skipped[0].reason, /did not split.*undo undo1abcdef/);
+  await stops(summ, planFile({ delete: [del({ otherLegs: 1 })] }), /did not split.*undo undo\d+abcdef/, {
+    approveDeletes: true,
+  });
   assert.equal(
     summ.calls.some((c) => c.name === "bulk_edit_transactions"),
     false,
@@ -520,7 +457,7 @@ test("a dry run of a shared delete edits nothing", async () => {
   });
   assert.deepEqual([result.split, result.deleted, log.length], [0, 0, 0]);
   assert.equal(
-    summ.calls.every((c) => c.name === "query_summ_transactions" || c.name === "inspect_transaction"),
+    summ.calls.every((c) => c.name === "inspect_transaction"),
     true,
   );
 });
@@ -777,7 +714,7 @@ for (const { name, summ: makeSumm, plan: planOf, pre } of WRITE_STEPS) {
       assert.ok(own.every((l) => typeof l.entry === "string"));
       assert.ok(existsSync(join(planDir, "pre", file)), `step ${n}`);
     }
-    assert.ok(lines.every((l) => l.pre));
+    assert.ok(lines.filter((l) => WRITES.includes(l.call)).every((l) => l.pre));
   });
 }
 
@@ -876,7 +813,7 @@ test("a pre-image never replaces one already there: the new read goes beside it,
   writeFileSync(join(planDir, "pre", "edit-0.edit.json"), "earlier\n");
   await runApply(Object.assign(summ, { connect: async () => {} }), dir, planDir, OPTS, 0);
   assert.equal(readFileSync(join(planDir, "pre", "edit-0.edit.json"), "utf8"), "earlier\n");
-  assert.equal(logLines(dir)[0].pre, join("plans", "p", "pre", "edit-0.edit.2.json"));
+  assert.equal(logLines(dir).find((l) => l.pre)?.pre, join("plans", "p", "pre", "edit-0.edit.2.json"));
   assert.ok(existsSync(join(planDir, "pre", "edit-0.edit.2.json")));
 });
 

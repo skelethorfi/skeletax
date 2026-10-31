@@ -12,7 +12,7 @@ import { extraDirsOf, loadConfig } from "./config.ts";
 import { type Change, makePlan, type EditEntry, parseScope, type Plan } from "./plan.ts";
 import { parseCsvLine, readRun, type Row, type RunFile } from "./run.ts";
 import { latestSnapshot, type PullRange, readSnapshot, readSnapshotFile } from "./snapshot.ts";
-import { readAdopted, readApplyLog, readOverrides } from "./state.ts";
+import { readAdopted, readApplyLog, readLeftLegs, readOverrides } from "./state.ts";
 
 const show = (v: unknown) => (v === null || v === "" || v === undefined ? "–" : String(v));
 const cell = (v: unknown) => show(v).replaceAll("|", "\\|");
@@ -235,6 +235,7 @@ export function writePlan(stateDir: string, runDir: string, only?: string): stri
     adopted: readAdopted(stateDir),
     overrides: readOverrides(stateDir),
     applyLog: readApplyLog(stateDir),
+    leftLegs: readLeftLegs(stateDir),
     uploadedPrices: uploadedPrices(stateDir),
     now,
     scope,

@@ -55,6 +55,11 @@ export function parsePageHeader(markdown: string): PageHeader {
   return { page, pages, returned, total };
 }
 
+/** Summ's answer to inspect_transaction for a transaction id it does not hold, for this very id. Any other failure, a
+ * gateway's 404 too, is a failed read, which says nothing of the leg. */
+export const isLegAbsent = (message: string, legId: string): boolean =>
+  message.startsWith(`inspect_transaction: Transaction '${legId}' was not found`);
+
 /**
  * inspect_transaction: the action's JSON (the first ```json block) and the
  * "## Change History" lines ("<date> · <who> · <what changed>").

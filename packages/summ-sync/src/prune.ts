@@ -5,6 +5,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { readLogLines } from "./journal.ts";
 import { readSnapshotFile, snapshotNames } from "./snapshot.ts";
 
 function git(stateDir: string, args: string[]): string[] {
@@ -30,12 +31,9 @@ function git(stateDir: string, args: string[]): string[] {
 function keptForRollback(stateDir: string): { actions: Set<string>; snapshots: Set<string> } {
   const actions = new Set<string>();
   const snapshots = new Set<string>();
-  const file = join(stateDir, "apply-log.jsonl");
-  if (!existsSync(file)) return { actions, snapshots };
-  const lines = readFileSync(file, "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((l) => JSON.parse(l));
+  const lines = readLogLines<{ operation?: string; actionIds?: string[]; saved?: string | string[]; pre?: string }>(
+    stateDir,
+  );
   for (const l of lines) {
     if (l.operation === "delete" && Array.isArray(l.actionIds)) for (const id of l.actionIds) actions.add(id);
     // One file on a split's lines, a list on a delete's

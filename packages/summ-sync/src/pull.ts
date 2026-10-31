@@ -10,9 +10,11 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { nextDay, startOfDay } from "./dates.ts";
+import { isWriteLine, readLogLines } from "./journal.ts";
 import { McpClient } from "./mcp.ts";
 import { matchesOwnLegs } from "./plan.ts";
-import { type ListedAction, parseActions, parseDetail, parsePageHeader } from "./parse.ts";
+import { isLegAbsent, type ListedAction, parseActions, parseDetail, parsePageHeader } from "./parse.ts";
+import { readLeftLegs } from "./state.ts";
 import { type Config, extraDirsOf, loadConfig } from "./config.ts";
 import { periodsOf, readRun, type Row, type RunFile } from "./run.ts";
 import {
@@ -111,13 +113,8 @@ interface Header {
 
 /** The time of the last write apply logged, or 0. */
 function lastWrite(stateDir: string): number {
-  const file = join(stateDir, "apply-log.jsonl");
-  if (!existsSync(file)) return 0;
-  const times = readFileSync(file, "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((l) => JSON.parse(l) as { call?: string; time?: string })
-    .filter((l) => l.call !== "skip" && l.time)
+  const times = readLogLines<{ call?: string; time?: string }>(stateDir)
+    .filter((l) => isWriteLine(l) && l.time)
     .map((l) => Date.parse(l.time as string));
   return times.length ? Math.max(...times) : 0;
 }
@@ -214,6 +211,15 @@ export async function pull(
       }
     }
     if (txids) for (const id of actionsWithTxids(actions, txids)) needed.add(id);
+    // A made-up leg an apply left in place can be outside all of those: plan must see whether it is still there
+    for (const { legId } of readLeftLegs(stateDir)) {
+      const text = await client.callTool("inspect_transaction", { transactionId: legId }).catch((e: Error) => {
+        if (isLegAbsent(e.message, legId)) return null;
+        throw e;
+      });
+      const id = text === null ? null : parseDetail(text).action._id;
+      if (id !== null && listed.has(id)) needed.add(id);
+    }
 
     const todo = [...needed].filter((id) => !read.has(id));
     console.log(`  ${needed.size} details needed, ${todo.length} to read`);

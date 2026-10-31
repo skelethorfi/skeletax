@@ -2286,3 +2286,25 @@ test("a partial snapshot refuses deletes and filed-year edits, and notes its lim
   const dir = writePlan(allowed.state, allowed.run);
   assert.match(readFileSync(join(dir, "plan.md"), "utf8"), /covers only 2023-07-01 to 2024-06-30/);
 });
+
+test("a made-up leg an apply left in place is reported while it is in Summ and not ignored, with or without a row", () => {
+  const left = { legId: "made", id: null, plan: "p1", reason: "still shares its action" };
+  const leg = (trade: string) => ({
+    ...legsOf(row())[0],
+    legId: "made",
+    trade,
+    source: "other",
+    importType: "soft-transfer",
+  });
+  const report = (over: Partial<PlanInput>) => plan(over).plan.report.filter((r) => r.kind === "made-up-left");
+  const held = report({ legs: [leg("deposit")], leftLegs: [left] });
+  assert.deepEqual(
+    held.map((r) => [r.id, r.legIds]),
+    [[undefined, ["made"]]],
+  );
+  assert.match(held[0].detail, /plan p1.*still shares its action/);
+  assert.equal(report({ legs: [leg("deposit")], leftLegs: [{ ...left, id: "row-1" }] })[0].id, "row-1");
+  assert.deepEqual(report({ legs: [leg("ignoreIn")], leftLegs: [left] }), []);
+  assert.deepEqual(report({ legs: [], leftLegs: [left] }), []);
+  assert.deepEqual(report({ legs: [leg("deposit")] }), []);
+});
