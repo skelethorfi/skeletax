@@ -119,9 +119,10 @@ export function renderPlan(plan: Plan, snapshot: string, run: string, legs: Map<
       "| --- | --- | --- | --- | --- |",
       ...changeLines(es),
     ]),
-    ...section("Edit: reference prices (Summ converts the USD price at its own rate)", withPrices, (es) =>
-      [...priceLines(es, legs), ...matchLines(es)],
-    ),
+    ...section("Edit: reference prices (Summ converts the USD price at its own rate)", withPrices, (es) => [
+      ...priceLines(es, legs),
+      ...matchLines(es),
+    ]),
     ...section("Upload (files in upload/, uploaded by you)", plan.upload, (es) =>
       es.map((e) => `- ${e.file}: ${e.ids.length} rows${uploadNote(plan, e.file)}`),
     ),
@@ -130,14 +131,18 @@ export function renderPlan(plan: Plan, snapshot: string, run: string, legs: Map<
       "| --- | --- | --- | --- | --- |",
       ...changeLines(es),
     ]),
-    ...section("Held (nothing planned: held in summ-sync.json, or the user's manual pairing; a price edit awaiting a test)", plan.held, (es) => [
-      "| Kind | Row | Reason | Left out |",
-      "| --- | --- | --- | --- |",
-      ...es.map(
-        (e) =>
-          `| ${e.kind} | ${show(e.id ?? e.summId)} | ${cell(e.reason)} | ${cell(e.held.join("; ") || "nothing to do")} |`,
-      ),
-    ]),
+    ...section(
+      "Held (nothing planned: held in summ-sync.json, or the user's manual pairing; a price edit awaiting a test)",
+      plan.held,
+      (es) => [
+        "| Kind | Row | Reason | Left out |",
+        "| --- | --- | --- | --- |",
+        ...es.map(
+          (e) =>
+            `| ${e.kind} | ${show(e.id ?? e.summId)} | ${cell(e.reason)} | ${cell(e.held.join("; ") || "nothing to do")} |`,
+        ),
+      ],
+    ),
     ...section("Report (for you to resolve)", plan.report, (es) => [
       "| Kind | Row | Legs | Detail |",
       "| --- | --- | --- | --- |",
@@ -197,6 +202,7 @@ export function priceLines(entries: EditEntry[], legs: Map<string, number>): str
         return { e, c, rate, value: (legs.get(c.legId) ?? 0) * Number(c.summ ?? 0) };
       }),
   );
+  if (!rows.length) return [];
   const rates = rows.flatMap((r) => (r.rate === null ? [] : [r.rate])).sort((a, b) => a - b);
   const median = rates[Math.floor(rates.length / 2)] ?? 0;
   const line = (r: (typeof rows)[number]) =>

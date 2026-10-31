@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { DEFAULTS, type Config } from "../src/config.ts";
 import { ADOPT_WINDOW, makePlan, parseScope, type PlanInput } from "../src/plan.ts";
 import type { Row, RunFile } from "../src/run.ts";
-import { type Leg, writeSnapshot } from "../src/snapshot.ts";
+import { type Leg, legsOf as legsOfDetail, writeSnapshot } from "../src/snapshot.ts";
 import type { Override } from "../src/state.ts";
 import { mergeTables, readOverrides } from "../src/state.ts";
 import { priceLines, renderPlan, uploadedPrices, uploadFiles, writePlan } from "../src/write-plan.ts";
@@ -2307,4 +2307,258 @@ test("a made-up leg an apply left in place is reported while it is in Summ and n
   assert.deepEqual(report({ legs: [leg("ignoreIn")], leftLegs: [left] }), []);
   assert.deepEqual(report({ legs: [], leftLegs: [left] }), []);
   assert.deepEqual(report({ legs: [leg("deposit")] }), []);
+});
+
+// ---- A price edit must not part a sell's sides (spec: Prices)
+const sellRow = (over: Partial<Row> = {}) =>
+  priced({
+    type: "sell",
+    description: "sold",
+    baseAmount: "10",
+    quoteCurrency: "SYN",
+    quoteAmount: "4",
+    ...over,
+  });
+const sellLegs = (r: Row, source = "unknown", buy: Partial<Leg> = {}, sell: Partial<Leg> = {}) => {
+  const [base, quote] = legsOf(r, { price: 3, ...sell });
+  return [base, { ...quote, price: 7.5, currencySource: source, ...buy }];
+};
+const standing = (legs: Leg[], usd = 2.5, after = 3) => priceLine(legs[0].legId, usd, after);
+
+test("trade price: a quote Summ cannot price gives one entry for both legs", () => {
+  const r = sellRow();
+  const legs = sellLegs(r);
+  const { edit, held } = plan({ rows: [r], legs }).plan;
+  assert.deepEqual(held, []);
+  assert.equal(edit.length, 1);
+  assert.deepEqual(edit[0].changes, [{ leg: "base", legId: legs[0].legId, field: "price", summ: 3, desired: 2.5 }]);
+  assert.deepEqual(edit[0].match, { legId: legs[1].legId, baseLegId: legs[0].legId, summ: 7.5, desired: null });
+
+  const md = renderPlan(plan({ rows: [r], legs }).plan, "snap", "run");
+  const prices = md.slice(md.indexOf("## Edit: reference prices"), md.indexOf("## Upload"));
+  assert.match(
+    prices,
+    new RegExp(
+      `\\| ${r.id} \\| \`${legs[0].legId}\` \\| US\\$2\\.5 \\| \`${legs[1].legId}\` \\| 7\\.5 \\| sell value / buy amount \\(local\\) \\|`,
+    ),
+  );
+});
+
+test("trade price: a quote with a market price, or with no evidence, holds the price edit and lists why", () => {
+  for (const source of ["coingecko", ""]) {
+    const r = sellRow();
+    const legs = sellLegs(r, source);
+    const { edit, held } = plan({ rows: [r], legs }).plan;
+    assert.deepEqual(edit, []);
+    assert.equal(held.length, 1);
+    assert.equal(held[0].kind, "price");
+    assert.deepEqual(held[0].legIds, [legs[0].legId, legs[1].legId]);
+    assert.match(held[0].reason, /awaiting a test of what upload produces/);
+  }
+  // A change other than the price still goes ahead; a price with nothing to do holds nothing
+  const r = sellRow();
+  const moved = sellLegs(r, "coingecko", {}, { from: "elsewhere" });
+  const { edit } = plan({ rows: [r], legs: moved }).plan;
+  assert.deepEqual(
+    edit[0].changes.map((c) => c.field),
+    ["from"],
+  );
+  const stands = sellLegs(r, "coingecko", { price: 1 });
+  const quiet = plan({ rows: [r], legs: stands, applyLog: standing(stands) }).plan;
+  assert.deepEqual([quiet.edit, quiet.held], [[], []]);
+  // A row held whole lists the price with the rest, once
+  const whole = plan({
+    rows: [r],
+    legs: sellLegs(r, "coingecko"),
+    config: { ...CONFIG, hold: [{ id: r.id, reason: "x" }] },
+  }).plan;
+  assert.equal(whole.held.length, 1);
+  assert.match(whole.held[0].held.join(), /price of the base leg/);
+});
+
+test("trade price: a row repaired by hand plans nothing, by value, whatever its history says", () => {
+  const r = sellRow();
+  const legs = sellLegs(r, "unknown", { price: 7.5 + 1e-13 });
+  const history = priceHistory(USER_PRICE, USER_PRICE);
+  const { plan: p } = plan({ rows: [r], legs, applyLog: standing(legs), history });
+  assert.ok(empty(p), JSON.stringify(p, null, 1));
+});
+
+test("trade price: a sell standing with its buy parted plans the buy alone, at the known price", () => {
+  const r = sellRow();
+  const legs = sellLegs(r, "unknown", { price: 7 });
+  const history = priceHistory(USER_PRICE);
+  const { plan: p } = plan({ rows: [r], legs, applyLog: standing(legs), history });
+  assert.deepEqual(p.edit[0].changes, []);
+  assert.deepEqual(p.edit[0].match, { legId: legs[1].legId, baseLegId: legs[0].legId, summ: 7, desired: 7.5 });
+  assert.match(renderPlan(p, "snap", "run"), /keeps its price .* 7\.5 \(local\)/);
+});
+
+test("trade price: a moved reference price takes both legs, a repaired buy following its sell", () => {
+  const r = sellRow({ referencePrice: "2.6" });
+  const legs = sellLegs(r);
+  const history = priceHistory(USER_PRICE, USER_PRICE);
+  const { edit, overridden } = plan({ rows: [r], legs, applyLog: standing(legs), history }).plan;
+  assert.equal(edit[0].changes[0].desired, 2.6);
+  assert.equal(edit[0].match?.desired, null);
+  assert.deepEqual(overridden, []);
+});
+
+test("trade price: an amount edited in the same entry gives the buy's price from the new amount", () => {
+  const r = sellRow({ quoteAmount: "5" });
+  const legs = sellLegs(r, "unknown", { quantity: 4, price: 7.5 });
+  const { edit } = plan({ rows: [r], legs, applyLog: standing(legs) }).plan;
+  assert.deepEqual(
+    edit[0].changes.map((c) => c.field),
+    ["quantity"],
+  );
+  assert.equal(edit[0].match?.desired, 6);
+});
+
+test("trade price: a user's price on the buy is kept as an override, and the sell's edit goes on", () => {
+  const r = sellRow();
+  // More Price lines in the action's history than the sync's edits: the sell stands, the buy parted
+  const legs = sellLegs(r, "unknown", { price: 7 });
+  const history = priceHistory(USER_PRICE, USER_PRICE);
+  const first = plan({ rows: [r], legs, applyLog: standing(legs), history }).plan;
+  assert.deepEqual(first.edit, []);
+  const captured = first.overridden.map((o) => o.override);
+  assert.deepEqual(
+    captured.map((o) => [o.leg, o.field, o.summ, o.retainUserEdit, o.run]),
+    [["quote", "price", 7, "undecided", 7.5]],
+  );
+
+  // The buy no longer shows the sync's own `after`
+  const own = [...standing(legs), ...priceLine(legs[1].legId, 7.5, 7.5)];
+  const edited = plan({ rows: [r], legs, applyLog: own }).plan;
+  assert.deepEqual(edited.edit, []);
+  assert.equal(edited.overridden[0].override.leg, "quote");
+
+  const quote = (retainUserEdit: Override["retainUserEdit"], summ = 7): Override => ({
+    ...priceOverride(r, retainUserEdit, summ),
+    leg: "quote",
+    run: 7.5,
+  });
+  // undecided and yes hold, undecided listed; a moved reference price still edits the sell alone
+  const held = plan({ rows: [r], legs, applyLog: standing(legs), history, overrides: [quote("undecided")] }).plan;
+  assert.deepEqual([held.edit, held.overridden.map((o) => o.kind)], [[], ["undecided"]]);
+  const moved = sellRow({ referencePrice: "2.6" });
+  const yes = plan({ rows: [moved], legs: sellLegs(moved, "unknown", { price: 7 }), overrides: [quote("yes")] }).plan;
+  assert.equal(yes.edit[0].match, undefined);
+  assert.equal(yes.edit[0].changes[0].field, "price");
+  // no sets it back
+  const no = plan({ rows: [r], legs, applyLog: standing(legs), history, overrides: [quote("no")] }).plan;
+  assert.equal(no.edit[0].match?.desired, 7.5);
+  // A value other than the one decided on is captured again
+  const again = plan({ rows: [r], legs, applyLog: standing(legs), history, overrides: [quote("yes", 6)] }).plan;
+  assert.deepEqual([again.edit, again.overridden[0].kind], [[], "captured"]);
+});
+
+test("trade price: a sell's own override leaves the buy alone too", () => {
+  const r = sellRow();
+  const legs = sellLegs(r);
+  const { edit } = plan({ rows: [r], legs, overrides: [priceOverride(r, "yes", 3)] }).plan;
+  assert.deepEqual(edit, []);
+});
+
+test("trade price: a row with no reference price, or a quote with no amount, leaves the buy alone", () => {
+  const r = sellRow({ referencePrice: "", referencePriceCurrency: "" });
+  assert.deepEqual(plan({ rows: [r], legs: sellLegs(r, "unknown", { price: 1 }) }).plan.edit, []);
+  const zero = sellRow({ quoteAmount: "0" });
+  const { edit } = plan({ rows: [zero], legs: sellLegs(zero, "unknown", { quantity: 0 }) }).plan;
+  assert.equal(edit[0].match, undefined);
+});
+
+test("trade price: a row with no quote leg, as each managed side of a swap is, keeps its own price alone", () => {
+  const out = priced({ type: "lost" });
+  const legs = pricedLegs(out);
+  const { edit } = plan({ rows: [out], legs }).plan;
+  assert.equal(edit[0].match, undefined);
+  assert.equal(priceEdits(plan({ rows: [out], legs }).plan).length, 1);
+});
+
+const swapRow = (over: Partial<Row> = {}) =>
+  btcRow({
+    type: "bridge-trade-out",
+    referencePrice: "60000",
+    referencePriceCurrency: "USD",
+    ...over,
+  });
+
+test("import price: a swap's leg takes the row's USD price, in one edit with its category; never amount or fee", () => {
+  const r = swapRow({ baseAmount: "0.01", feeAmount: "0.0002" });
+  const leg = ownLeg({ quantity: 0.01, price: 90000 });
+  const fee = ownLeg({ side: "fees", trade: "fee", quantity: 0.0001, price: 90000, id: TX1 });
+  const { categorise, edit } = plan({ rows: [r], legs: [leg, fee] }).plan;
+  assert.deepEqual(edit, []);
+  assert.equal(categorise.length, 1);
+  assert.deepEqual(
+    categorise[0].changes.map((c) => [c.legId, c.field, c.desired]),
+    [
+      [leg.legId, "trade", "bridgeTradeOut"],
+      [leg.legId, "price", 60000],
+    ],
+  );
+  const md = renderPlan(plan({ rows: [r], legs: [leg, fee] }).plan, "snap", "run");
+  assert.match(md, new RegExp(`\\| ${r.id} \\(Summ's import\\) \\| \`${leg.legId}\``));
+  const part = md.slice(md.indexOf("## Categorise"), md.indexOf("## Held"));
+  assert.match(part, /\| trade \|/);
+  assert.doesNotMatch(part, /\| price \|/);
+});
+
+test("import price: price alone is planned once categorised, and nothing once it stands", () => {
+  const r = swapRow({ feeCurrency: "", feeAmount: "" });
+  const leg = ownLeg({ quantity: 0.01, trade: "bridgeTradeOut", price: 90000 });
+  const { categorise } = plan({ rows: [r], legs: [leg] }).plan;
+  assert.deepEqual(
+    categorise[0].changes.map((c) => c.field),
+    ["price"],
+  );
+  const { plan: after } = plan({
+    rows: [r],
+    legs: [{ ...leg, price: 91000 }],
+    applyLog: priceLine(leg.legId, 60000, 91000),
+    history: new Map([["l1", [USER_PRICE]]]),
+  });
+  assert.ok(empty(after), JSON.stringify(after, null, 1));
+});
+
+test("import price: other categorised rows, and rows with no price, stay at market", () => {
+  for (const type of ["send", "add-liquidity", "bridge-in", "bridge-out"]) {
+    const r = swapRow({ type, feeCurrency: "", feeAmount: "" });
+    const leg = ownLeg({ quantity: 0.01, trade: (summType(type) as { trade: string }).trade, price: 90000 });
+    assert.deepEqual(plan({ rows: [r], legs: [leg] }).plan.categorise, [], type);
+  }
+  const blank = swapRow({ referencePrice: "", referencePriceCurrency: "", feeCurrency: "", feeAmount: "" });
+  const leg = ownLeg({ quantity: 0.01, trade: "bridgeTradeOut", price: 90000 });
+  assert.deepEqual(plan({ rows: [blank], legs: [leg] }).plan.categorise, []);
+});
+
+test("import price: a user's price is captured and kept; a filed row is an amendment; a held row is held", () => {
+  const r = swapRow({ feeCurrency: "", feeAmount: "" });
+  const leg = ownLeg({ quantity: 0.01, trade: "bridgeTradeOut", price: 90000 });
+  const drift = plan({ rows: [r], legs: [leg], history: new Map([["l1", [USER_PRICE]]]) }).plan;
+  assert.deepEqual(drift.categorise, []);
+  assert.deepEqual(
+    drift.overridden.map((o) => [o.kind, o.override.field, o.override.leg]),
+    [["captured", "price", "base"]],
+  );
+  const kept = plan({ rows: [r], legs: [leg], overrides: [priceOverride(r, "yes", 90000)] }).plan;
+  assert.deepEqual(kept.categorise, []);
+  const filed = plan({ rows: [r], legs: [leg], config: { ...CONFIG, filedBefore: "2024-07-01" } }).plan;
+  assert.equal(filed.categorise[0].filed, true);
+  const held = plan({ rows: [r], legs: [leg], config: { ...CONFIG, hold: [{ id: r.id, reason: "x" }] } }).plan;
+  assert.deepEqual(held.categorise, []);
+  assert.match(held.held[0].held.join(), /price 90000 -> 60000/);
+});
+
+test("an older leg with no currency source reads as none, and legsOf reads the source Summ gives", () => {
+  const detail = (identifier: unknown) =>
+    legsOfDetail({
+      action: { _id: "a", incoming: [{ _id: "l", quantity: 1, currencyIdentifier: identifier }] },
+      history: [],
+    })[0].currencySource;
+  assert.equal(detail({ symbol: "X", source: "unknown" }), "unknown");
+  assert.equal(detail({ symbol: "X" }), undefined);
+  assert.equal(detail(undefined), undefined);
 });

@@ -853,7 +853,9 @@ export async function applyPlan(
       return true;
     }
     if (!atPlan)
-      return stop(`price of leg ${m.legId} is ${JSON.stringify(held)}, the plan expected ${m.summ} and sets ${desired}`);
+      return stop(
+        `price of leg ${m.legId} is ${JSON.stringify(held)}, the plan expected ${m.summ} and sets ${desired}`,
+      );
     const changedMates = matesChanged(m.legId, now.legs);
     if (changedMates) return stop(`the other legs of its action changed since the pull: ${changedMates}`);
     if (!write) {

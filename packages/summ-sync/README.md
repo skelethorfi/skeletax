@@ -78,9 +78,15 @@ Filed years go in a separate apply with `--approve-filed`.
   for another plan, and so does a categorisation whose event has an upload
   the plan does not carry; `plan.md` notes each, and each entry that
   matches nothing. Use it to apply one stage at a time.
+  Reference prices: a sell whose quote Summ cannot price is one entry with
+  what each leg gets, so both sides hold the same value; a sell whose quote
+  has a market price is listed as held; the leg of Summ's own import of a
+  swap takes its row's USD price, never a change of its amount or fee.
 - `apply` carries out a plan made from the latest snapshot: deletes (only
   with `--approve-deletes`), then edits and categorisation (categorisation
-  waits while the plan has uploads). Every entry is classified by a fresh read
+  waits while the plan has uploads). A two-leg price entry makes two edits,
+  the sell, then the buy from the value read back; a stop between them
+  goes on by doing the buy. Every entry is classified by a fresh read
   on every run: not yet done, done, or anything else, which stops the run and
   reports what it found. So after any stop, run the same command again: it goes
   on from where it stopped, or refuses, and then you pull and plan. Every write's

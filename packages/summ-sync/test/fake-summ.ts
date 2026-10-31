@@ -17,6 +17,12 @@ export interface FakeLeg {
   id?: string;
   importType?: string;
   side?: "incoming" | "outgoing" | "fees";
+  currencyIdentifier?: { symbol?: string; source?: string };
+  from?: string;
+  to?: string;
+  blockchain?: string;
+  description?: string;
+  source?: string;
 }
 
 export class Died extends Error {
