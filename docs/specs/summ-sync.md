@@ -413,7 +413,7 @@ The USD price a leg holds is:
 3. otherwise none.
 
 **Plan.** For a managed base leg, and an import's leg matched to a categorised row
-of a swap (`bridge-trade-in`, `bridge-trade-out`, `buy`, `sell`), not a held row, not
+of a swap (`bridge-trade-in`, `bridge-trade-out`), not a held row, not
 a fee or quote leg:
 
 | Run's reference price | Recorded price | Plan                                                                               |
@@ -488,7 +488,9 @@ sell paying its fee in the asset sold holds the fee in its quantity, and Summ va
 bought at the net amount, so the sold amount is the base quantity less a fee leg of that
 currency. The edit adds no USD mark and leaves one the leg already has, which says nothing:
 proceeds and cost base go by `price`. `match.desired` is that price when the base leg
-has no edit to wait for, and otherwise null.
+has no edit to wait for, and otherwise null. A sell paying its fee in the asset bought is not covered: Summ
+values it as the price times what was bought plus the fee, and the sync would read it as parted; such a row
+with an unknown quote or a standing price needs this added first.
 
 A row's quote leg is compared with its base leg by value, price × the amount above, after any
 quantity edit in the entry, within `1e-9` of the value: float noise, as an upload's two
