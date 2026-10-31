@@ -10,6 +10,7 @@
 //   4. edits and categorisation; then the receive Summ made up to pair a categorised send as a transfer is ignored,
 //      once it is alone. Categorisation waits while the plan has uploads: Summ pairs a categorised leg with the
 //      uploaded other side of the swap only when that side is already there
+//      A sell whose quote Summ cannot price takes a second edit: the quote leg, to the base leg's value as read back
 //   5. each write: read fresh, save that as a pre-image (<plan dir>/pre/<entry>.<step>.json), log an intent, call, log
 //      the result and undo handle in <state dir>/apply-log.jsonl (journal.ts), check the result's count, read the
 //      write back by the ids the result names. A write that fails or disagrees stops the run, and is never retried in
@@ -23,7 +24,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { type ActionDetail, isLegAbsent, parseDetail } from "./parse.ts";
-import { type Change, type DeleteEntry, type EditEntry, type Plan, same } from "./plan.ts";
+import { type Change, type DeleteEntry, type EditEntry, type Plan, same, sameValue, type ValueMatch } from "./plan.ts";
 import {
   appendLogLine,
   isWriteLine,
@@ -559,6 +560,7 @@ export async function applyPlan(
   async function applyEdit(kind: "edit" | "categorise", entry: EditEntry) {
     const key = `${kind}-${plan[kind].indexOf(entry)}`;
     if (entry.changes.length && !(await editLegs(kind, key, entry))) return;
+    if (entry.match && !(await matchValue(kind, key, entry, entry.match))) return;
     for (const [n, legId] of (entry.ignore ?? []).entries())
       await ignoreMadeUp(key, `ignore-${n}`, entry.id, legId, entry.changes.length > 0);
   }
@@ -659,7 +661,11 @@ export async function applyPlan(
   // The legs this apply may itself change or move: their own entries check them. A Summ-made fee has no lasting id
   const ours = new Set([
     ...(opts.approveDeletes ? deletes : []).flatMap((e) => e.legIds),
-    ...edits.flatMap(([, e]) => [...e.changes.map((c) => c.legId), ...(e.ignore ?? [])]),
+    ...edits.flatMap(([, e]) => [
+      ...e.changes.map((c) => c.legId),
+      ...(e.match ? [e.match.legId] : []),
+      ...(e.ignore ?? []),
+    ]),
   ]);
   const baseline = new Map((context.baseline ?? []).map((l) => [l.legId, l]));
   const mates = (legs: Leg[]) => legs.filter((l) => !ours.has(l.legId) && l.importType !== "assumed-fee");
@@ -794,6 +800,87 @@ export async function applyPlan(
       throw new ApplyStop("bad-result", `${key}: the result names no affected action`, key);
     if (!seen) throw new ApplyStop("read-back", `${key}: the actions the edit names do not show ${summary}`, key);
     say(`  ${kind} ${entry.id}: ${summary}${undo ? ` (undo ${undo})` : ""}`);
+    return true;
+  }
+
+  /**
+   * The quote leg of a sell whose quote Summ cannot price, once the base leg is settled: Summ converts USD at its own
+   * rate, so its local value is known only from a read. Already at that value: done. At the plan's price: edited, by
+   * local price. Anything else stops. So a stop between the two edits resumes by doing this one.
+   */
+  async function matchValue(kind: string, key: string, entry: EditEntry, m: ValueMatch): Promise<boolean> {
+    const stop = (reason: string) => {
+      conflict(key, entry.id, reason);
+      return false;
+    };
+    if (edited.has(entry.actionId)) await sleep(settleMs);
+    const now = await lookUp(client, m.legId);
+    if (!now) return stop(`leg ${m.legId} is no longer in Summ`);
+    const quote = now.legs.find((l) => l.legId === m.legId) as Leg;
+    const base = now.legs.find((l) => l.legId === m.baseLegId);
+    if (!base) return stop(`leg ${m.baseLegId} is no longer in the action of leg ${m.legId}`);
+    const held = quote.price ?? null;
+    const atPlan = same("price", held, m.summ);
+    // A dry run has not made the base's edit, so its value says nothing yet
+    if (!write && entry.changes.some((c) => c.field === "price")) {
+      if (!atPlan) return stop(`price of leg ${m.legId} is ${JSON.stringify(held)}, the plan expected ${m.summ}`);
+      say(`  would ${kind} ${entry.id}: quote price ${m.summ} -> the base leg's value`);
+      return true;
+    }
+    const value = (base.price ?? 0) * base.quantity;
+    if (!(value > 0) || !(quote.quantity > 0))
+      return stop(`legs ${m.baseLegId} and ${m.legId} give no price: value ${value}, amount ${quote.quantity}`);
+    const desired = value / quote.quantity;
+    if (m.desired !== null && !sameValue(desired, m.desired))
+      return stop(`the value of leg ${m.baseLegId} moved: it gives ${desired}, the plan ${m.desired}`);
+    const line = {
+      call: "edit_transaction",
+      kind,
+      entry: key,
+      id: entry.id,
+      legId: m.legId,
+      field: "price",
+      from: m.summ,
+      value: desired,
+      // In local currency: a base leg's line holds USD
+      local: true,
+    };
+    if (sameValue(held ?? 0, desired)) {
+      if (!entry.changes.length) found(key, entry.id, { legIds: [m.legId] });
+      // A write of this plan that lost its answer: recorded as the sync's, as a price found done is
+      if (journal.some((l) => l.legId === m.legId && l.field === "price" && l.intent))
+        write?.({ ...line, call: "found", via: "found", value: held, after: held });
+      return true;
+    }
+    if (!atPlan)
+      return stop(`price of leg ${m.legId} is ${JSON.stringify(held)}, the plan expected ${m.summ} and sets ${desired}`);
+    const changedMates = matesChanged(m.legId, now.legs);
+    if (changedMates) return stop(`the other legs of its action changed since the pull: ${changedMates}`);
+    if (!write) {
+      say(`  would ${kind} ${entry.id}: quote price ${m.summ} -> ${desired}`);
+      return true;
+    }
+    const tag = { pre: savePre(key, "match", entry.id, [now.detail]), actionId: now.actionId };
+    write({ ...line, ...tag, intent: true });
+    const text = await callWrite(
+      write,
+      key,
+      "edit_transaction",
+      { actionId: now.actionId, edits: [{ transactionId: m.legId, updates: { price: desired } }] },
+      { kind, entry: key, id: entry.id, ...tag },
+    );
+    result.edited++;
+    const undo = undoHandle(text);
+    write({ call: "edit_transaction", kind, entry: key, id: entry.id, ...tag, undo, result: text });
+    edited.add(entry.actionId);
+    const problem = countProblem(text, PATCHED, 1);
+    const seen = problem ? null : await readBack(text, [m.legId], (l) => sameValue(l.price ?? 0, desired));
+    write({ ...line, ...tag, undo, after: seen?.get(m.legId)?.price ?? null });
+    if (problem) throw new ApplyStop("bad-result", `${key}: ${problem}`, key);
+    if (!affectedActions(text).length)
+      throw new ApplyStop("bad-result", `${key}: the result names no affected action`, key);
+    if (!seen) throw new ApplyStop("read-back", `${key}: the actions the edit names do not show ${desired}`, key);
+    say(`  ${kind} ${entry.id}: quote price ${m.summ} -> ${desired}${undo ? ` (undo ${undo})` : ""}`);
     return true;
   }
 

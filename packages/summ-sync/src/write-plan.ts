@@ -9,13 +9,31 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { extraDirsOf, loadConfig } from "./config.ts";
-import { type Change, makePlan, type EditEntry, parseScope, type Plan } from "./plan.ts";
+import { type Change, makePlan, type EditEntry, parseScope, type Plan, type ValueMatch } from "./plan.ts";
 import { parseCsvLine, readRun, type Row, type RunFile } from "./run.ts";
 import { latestSnapshot, type PullRange, readSnapshot, readSnapshotFile } from "./snapshot.ts";
 import { readAdopted, readApplyLog, readLeftLegs, readOverrides } from "./state.ts";
 
 const show = (v: unknown) => (v === null || v === "" || v === undefined ? "–" : String(v));
 const cell = (v: unknown) => show(v).replaceAll("|", "\\|");
+
+/** A two-leg price edit, as one entry: what each leg gets. */
+function matchLines(entries: EditEntry[]): string[] {
+  const two = entries.filter((e) => e.match);
+  if (!two.length) return [];
+  return [
+    "",
+    "Sells whose quote Summ cannot price, each one entry in two edits: the sell, then the buy from the sell's value as Summ then shows it, so both sides hold the same value:",
+    "",
+    "| Row | Sell leg | Sell gets | Buy leg | Buy holds | Buy gets |",
+    "| --- | --- | --- | --- | --- | --- |",
+    ...two.map((e) => {
+      const m = e.match as ValueMatch;
+      const price = e.changes.find((c) => c.field === "price" && c.legId === m.baseLegId);
+      return `| ${e.id} | \`${m.baseLegId}\` | ${price ? `US$${price.desired}` : "keeps its price"} | \`${m.legId}\` | ${show(m.summ)} | ${m.desired === null ? "sell value / buy amount (local)" : `${m.desired} (local)`} |`;
+    }),
+  ];
+}
 
 function changeLines(entries: EditEntry[]): string[] {
   return entries.flatMap((e) => [
@@ -53,10 +71,17 @@ function uploadNote(plan: Plan, file: string): string {
 }
 
 export function renderPlan(plan: Plan, snapshot: string, run: string, legs: Map<string, number> = new Map()): string {
-  const withoutPrices = plan.edit
-    .map((e) => ({ ...e, changes: e.changes.filter((c) => c.field !== "price") }))
-    .filter((e) => e.changes.length);
-  const withPrices = plan.edit.filter((e) => e.changes.some((c) => c.field === "price"));
+  const hasPrice = (e: EditEntry) => e.changes.some((c) => c.field === "price");
+  const unpriced = (es: EditEntry[]) =>
+    es
+      .map((e) => ({ ...e, changes: e.changes.filter((c) => c.field !== "price") }))
+      .filter((e) => e.changes.length || e.ignore?.length);
+  const withoutPrices = unpriced(plan.edit);
+  const withPrices = [
+    ...plan.edit.filter((e) => hasPrice(e) || e.match),
+    // An import's leg: categorised in the same edit, and listed with the prices
+    ...plan.categorise.filter(hasPrice).map((e) => ({ ...e, id: `${e.id} (Summ's import)` })),
+  ];
   const lines = [
     "# Summ sync plan",
     "",
@@ -95,17 +120,17 @@ export function renderPlan(plan: Plan, snapshot: string, run: string, legs: Map<
       ...changeLines(es),
     ]),
     ...section("Edit: reference prices (Summ converts the USD price at its own rate)", withPrices, (es) =>
-      priceLines(es, legs),
+      [...priceLines(es, legs), ...matchLines(es)],
     ),
     ...section("Upload (files in upload/, uploaded by you)", plan.upload, (es) =>
       es.map((e) => `- ${e.file}: ${e.ids.length} rows${uploadNote(plan, e.file)}`),
     ),
-    ...section("Categorise", plan.categorise, (es) => [
+    ...section("Categorise", unpriced(plan.categorise), (es) => [
       "| Row | Leg | Field | Summ | Desired |",
       "| --- | --- | --- | --- | --- |",
       ...changeLines(es),
     ]),
-    ...section("Held (nothing planned: held in summ-sync.json, or the user's manual pairing)", plan.held, (es) => [
+    ...section("Held (nothing planned: held in summ-sync.json, or the user's manual pairing; a price edit awaiting a test)", plan.held, (es) => [
       "| Kind | Row | Reason | Left out |",
       "| --- | --- | --- | --- |",
       ...es.map(
