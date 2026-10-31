@@ -125,7 +125,8 @@ With a run dir the pull covers the run's periods with a day's margin each side
 the whole history. A leg dated outside the range is not in the snapshot, so a row
 could look missing, or a tx's other copy go unseen. So a plan from a partial snapshot
 may hold only edits of managed rows in current years. Uploads, deletes,
-categorisations and filed-year edits make plan refuse, and ask for `pull --all`; and
+categorisations and filed-year edits make plan refuse, and ask for `pull --all`, except a categorise
+entry in a current year that changes only an import leg's price, with nothing to ignore, since it rests only on a leg the snapshot holds; and
 `plan.md` says its reports can miss or misstate a tx with legs outside the range.
 
 Plan refuses a snapshot pulled for another run or none, or under other
@@ -464,17 +465,17 @@ it bought. Summ values each leg apart: an upload of a sell gives the two sides o
 when it has no market price for the quote, and an edit of one leg leaves the other where
 it was.
 
-| The row                                                                              | Plan                                                                                                          |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| One row with a quote leg (a sell), its quote without a market price                  | one entry, two edits: the base leg's USD price, then the quote leg, so both sides hold the same value         |
-| One row with a quote leg, its quote with a market price                              | the price edit is held (`held`, kind `price`), awaiting a test of what upload produces. Its other edits go on |
-| Two rows of a swap, both managed                                                     | each its own price, from its own pool; the gap between them is what the swap cost                             |
-| A managed row and the import's leg of its other side, or two imports' legs of a swap | the import's leg takes its categorised row's USD price, in one edit with its category if that differs too     |
+| The row                                                                              | Plan                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One row with a quote leg (a sell), its quote without a market price                  | one entry, two edits: the base leg's USD price, then the quote leg, so both sides hold the same value                                                                                                     |
+| One row with a quote leg, its quote with a market price                              | the price edit is held (`held`, kind `price`), awaiting a test of what upload produces, and so is a row whose price stands with its sides parted, so that none stays parted unseen. Its other edits go on |
+| Two rows of a swap, both managed                                                     | each its own price, from its own pool; the gap between them is what the swap cost                                                                                                                         |
+| A managed row and the import's leg of its other side, or two imports' legs of a swap | the import's leg takes its categorised row's USD price, in one edit with its category if that differs too                                                                                                 |
 
 Other categorised rows keep Summ's market price, and so does an import's fee leg. An
 import's amount and fee are never edited. Its leg follows the same recorded price and
 override rules as a managed leg, and is planned under categorise, so it waits as a
-categorisation does while the plan has uploads, and a partial snapshot refuses it.
+categorisation does while the plan has uploads. A partial snapshot allows it only as above (State dir, Pull).
 
 A quote has no market price when Summ's action says so: the quote leg's
 `currencyIdentifier.source` is `unknown`. Anything else, an older copy with no source too,
@@ -482,11 +483,14 @@ is taken as having one.
 
 **The second edit.** Summ converts USD at its own rate, so the sell's local value is known
 only once it is read back. So the entry's `match` names the quote leg, and apply edits it
-second: local price = base price × base quantity ÷ quote quantity, with no price currency,
-which leaves no USD mark, as on an upload. `match.desired` is that price when the base leg
+second: local price = base price × sold amount ÷ quote quantity, with no price currency. A
+sell paying its fee in the asset sold holds the fee in its quantity, and Summ values what it
+bought at the net amount, so the sold amount is the base quantity less a fee leg of that
+currency. The edit adds no USD mark and leaves one the leg already has, which says nothing:
+proceeds and cost base go by `price`. `match.desired` is that price when the base leg
 has no edit to wait for, and otherwise null.
 
-A row's quote leg is compared with its base leg by value, price × quantity, after any
+A row's quote leg is compared with its base leg by value, price × the amount above, after any
 quantity edit in the entry, within `1e-9` of the value: float noise, as an upload's two
 sides differ by. No recorded figure comes into it, so a row repaired by hand, whose sell
 has a standing price and whose buy holds its value, plans nothing, and neither does a

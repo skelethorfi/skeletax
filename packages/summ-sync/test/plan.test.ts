@@ -2287,6 +2287,62 @@ test("a partial snapshot refuses deletes and filed-year edits, and notes its lim
   assert.match(readFileSync(join(dir, "plan.md"), "utf8"), /covers only 2023-07-01 to 2024-06-30/);
 });
 
+test("a partial snapshot allows an import leg's price alone in a current year; any other categorise needs a whole pull", () => {
+  const txid = "1".repeat(64);
+  const header =
+    "Timestamp (UTC),Type,Base Currency,Base Amount,Quote Currency (Optional),Quote Amount (Optional),Fee Currency (Optional),Fee Amount (Optional),From (Optional),To (Optional),Blockchain (Optional),ID (Optional),Description (Optional),Reference Price Per Unit (Optional),Reference Price Currency (Optional)";
+  const id = "2023-08-01T00:00:00.000Z.out.aaaaaaaaaaaa";
+  const own = (over: Record<string, unknown>) => ({
+    _id: "l1",
+    id: txid,
+    trade: "bridgeTradeOut",
+    currency: "BTC",
+    quantity: 1,
+    price: 9,
+    timestamp: "2023-08-01T00:00:00.000Z",
+    source: "btc-wallet",
+    importType: "wallet",
+    ...over,
+  });
+  const setup = (legs: unknown[], config: Record<string, unknown> = {}) => {
+    const state = mkdtempSync(join(tmpdir(), "summ-sync-"));
+    writeFileSync(join(state, "summ-sync.json"), JSON.stringify({ managedSources: ["csv-source"], ...config }));
+    const run = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
+    mkdirSync(join(run, "csv"));
+    writeFileSync(
+      join(run, "csv", "2023-07-01_2024-06-30_BTC_abc_Wallet.csv"),
+      `${header}\n2023-08-01T00:00:00.000Z,bridge-trade-out,BTC,1,,,,,a,b,BTC,${id},${txid},5,USD\n`,
+    );
+    const file = join(state, "snapshots", "2026-01-01T00-00-00.json");
+    writeSnapshot(file, {
+      version: 2,
+      takenAt: "",
+      total: 1,
+      run: resolve(run),
+      range: { from: "2023-07-01", to: "2024-06-30", after: 0, before: 1 },
+      managedSources: ["csv-source"],
+      managedChains: DEFAULTS.managedChains,
+      actions: [{ id: "a1", txHash: txid, category: "send", tags: [], detail: true }],
+    });
+    const detail = { a: "a1", at: "", action: { _id: "a1", outgoing: legs }, history: [] };
+    writeFileSync(file.replace(".json", ".details.jsonl"), `{}\n${JSON.stringify(detail)}\n`);
+    return { state, run };
+  };
+  const allowed = setup([own({})]);
+  const planned = JSON.parse(readFileSync(join(writePlan(allowed.state, allowed.run), "plan.json"), "utf8"));
+  assert.deepEqual(
+    planned.categorise[0].changes.map((c: { field: string }) => c.field),
+    ["price"],
+  );
+  const typed = setup([own({ trade: "withdrawal" })]);
+  assert.throws(() => writePlan(typed.state, typed.run), /1 categorisations.*Pull with --all/);
+  const filed = setup([own({})], { filedBefore: "2024-07-01" });
+  assert.throws(() => writePlan(filed.state, filed.run), /1 categorisations.*Pull with --all/);
+  const made = own({ _id: "l2", trade: "deposit", importType: "soft-transfer", source: "manual", side: "incoming" });
+  const ignoring = setup([own({}), made]);
+  assert.throws(() => writePlan(ignoring.state, ignoring.run), /1 categorisations.*Pull with --all/);
+});
+
 test("a made-up leg an apply left in place is reported while it is in Summ and not ignored, with or without a row", () => {
   const left = { legId: "made", id: null, plan: "p1", reason: "still shares its action" };
   const leg = (trade: string) => ({
@@ -2363,9 +2419,15 @@ test("trade price: a quote with a market price, or with no evidence, holds the p
     edit[0].changes.map((c) => c.field),
     ["from"],
   );
-  const stands = sellLegs(r, "coingecko", { price: 1 });
-  const quiet = plan({ rows: [r], legs: stands, applyLog: standing(stands) }).plan;
+  const equal = sellLegs(r, "coingecko");
+  const quiet = plan({ rows: [r], legs: equal, applyLog: standing(equal) }).plan;
   assert.deepEqual([quiet.edit, quiet.held], [[], []]);
+  // Its price stands and its sides are parted: listed, so nothing stays parted unseen
+  const parted = sellLegs(r, "coingecko", { price: 1 });
+  const seen = plan({ rows: [r], legs: parted, applyLog: standing(parted) }).plan;
+  assert.deepEqual(seen.edit, []);
+  assert.equal(seen.held[0].kind, "price");
+  assert.match(seen.held[0].held[0], /a value other than the base leg's/);
   // A row held whole lists the price with the rest, once
   const whole = plan({
     rows: [r],
@@ -2506,6 +2568,39 @@ test("import price: a swap's leg takes the row's USD price, in one edit with its
   assert.doesNotMatch(part, /\| price \|/);
 });
 
+test("trade price: a sell's value goes by the amount net of a fee in the asset sold", () => {
+  const r = sellRow({ baseAmount: "9.5", feeCurrency: "RUNE", feeAmount: "0.5" });
+  const [base, quote, fee] = legsOf(r, { price: 3, quantity: 10 });
+  const at = (price: number, source = "unknown") => [base, { ...quote, price, currencySource: source }, fee];
+  // Equal to Summ's net value: nothing, though price x gross differs
+  const equal = at((9.5 * 3) / 4);
+  const clean = plan({ rows: [r], legs: equal, applyLog: standing(equal) }).plan;
+  assert.deepEqual([clean.edit, clean.held], [[], []]);
+  const parted = at(7.5);
+  assert.equal(
+    plan({ rows: [r], legs: parted, applyLog: standing(parted) }).plan.edit[0].match?.desired,
+    (9.5 * 3) / 4,
+  );
+  // The same on a held sell, and a fee in another currency takes nothing off
+  const known = at((9.5 * 3) / 4, "coingecko");
+  assert.deepEqual(plan({ rows: [r], legs: known, applyLog: standing(known) }).plan.held, []);
+  const other = sellRow({ feeCurrency: "BTC", feeAmount: "0.5" });
+  const [b, q, f] = legsOf(other, { price: 3 });
+  const legs = [b, { ...q, price: 7.5, currencySource: "unknown" }, f];
+  assert.deepEqual(plan({ rows: [other], legs, applyLog: standing(legs) }).plan.edit, []);
+});
+
+test("trade price: a difference beyond a float's noise is parted, however small", () => {
+  const r = sellRow();
+  const at = (price: number) => {
+    const legs = sellLegs(r, "unknown", { price });
+    return plan({ rows: [r], legs, applyLog: standing(legs) }).plan.edit.length;
+  };
+  assert.equal(at(7.5 * (1 + 1e-10)), 0);
+  assert.equal(at(7.5 * (1 + 1e-7)), 1);
+  assert.equal(at(7.5 * 1.0005), 1);
+});
+
 test("import price: price alone is planned once categorised, and nothing once it stands", () => {
   const r = swapRow({ feeCurrency: "", feeAmount: "" });
   const leg = ownLeg({ quantity: 0.01, trade: "bridgeTradeOut", price: 90000 });
@@ -2524,7 +2619,7 @@ test("import price: price alone is planned once categorised, and nothing once it
 });
 
 test("import price: other categorised rows, and rows with no price, stay at market", () => {
-  for (const type of ["send", "add-liquidity", "bridge-in", "bridge-out"]) {
+  for (const type of ["send", "add-liquidity", "bridge-in", "bridge-out", "buy", "sell"]) {
     const r = swapRow({ type, feeCurrency: "", feeAmount: "" });
     const leg = ownLeg({ quantity: 0.01, trade: (summType(type) as { trade: string }).trade, price: 90000 });
     assert.deepEqual(plan({ rows: [r], legs: [leg] }).plan.categorise, [], type);

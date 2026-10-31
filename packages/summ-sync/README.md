@@ -52,7 +52,7 @@ Filed years go in a separate apply with `--approve-filed`.
   it also reads each action whose tx hash is a txid of the run's categorised
   rows (chains not in `managedChains`), and covers only the run's periods;
   `--all` covers the whole history, which a plan needs for uploads, deletes,
-  categorising or filed years. `plan` needs a pull made with its run.
+  categorising (beyond an import leg's price alone) or filed years. `plan` needs a pull made with its run.
   Every pull reads every detail, because an action can change and keep its
   id: minutes for a year, half an hour for everything. A stopped pull goes on
   from where it stopped when run again. Its snapshot is written only once

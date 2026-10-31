@@ -24,7 +24,16 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { type ActionDetail, isLegAbsent, parseDetail } from "./parse.ts";
-import { type Change, type DeleteEntry, type EditEntry, type Plan, same, sameValue, type ValueMatch } from "./plan.ts";
+import {
+  type Change,
+  type DeleteEntry,
+  type EditEntry,
+  type Plan,
+  same,
+  sameValue,
+  soldAmount,
+  type ValueMatch,
+} from "./plan.ts";
 import {
   appendLogLine,
   isWriteLine,
@@ -691,6 +700,9 @@ export async function applyPlan(
     return moved.length ? moved.join("; ") : null;
   }
 
+  // A dry run's entries whose first edit it would make: the base leg's value is not yet what the second edit reads
+  const unmade = new Set<EditEntry>();
+
   /** True when the entry's legs now hold, or are planned to hold, the plan's values. */
   async function editLegs(kind: string, key: string, entry: EditEntry): Promise<boolean> {
     const stop = (reason: string) => {
@@ -752,6 +764,7 @@ export async function applyPlan(
       .join(", ");
     if (!write) {
       say(`  would ${kind} ${entry.id}: ${summary}`);
+      unmade.add(entry);
       return true;
     }
     const tag = {
@@ -821,13 +834,14 @@ export async function applyPlan(
     if (!base) return stop(`leg ${m.baseLegId} is no longer in the action of leg ${m.legId}`);
     const held = quote.price ?? null;
     const atPlan = same("price", held, m.summ);
-    // A dry run has not made the base's edit, so its value says nothing yet
-    if (!write && entry.changes.some((c) => c.field === "price")) {
+    if (unmade.has(entry)) {
       if (!atPlan) return stop(`price of leg ${m.legId} is ${JSON.stringify(held)}, the plan expected ${m.summ}`);
+      const changed = matesChanged(m.legId, now.legs);
+      if (changed) return stop(`the other legs of its action changed since the pull: ${changed}`);
       say(`  would ${kind} ${entry.id}: quote price ${m.summ} -> the base leg's value`);
       return true;
     }
-    const value = (base.price ?? 0) * base.quantity;
+    const value = (base.price ?? 0) * soldAmount(base, now.legs);
     if (!(value > 0) || !(quote.quantity > 0))
       return stop(`legs ${m.baseLegId} and ${m.legId} give no price: value ${value}, amount ${quote.quantity}`);
     const desired = value / quote.quantity;

@@ -249,7 +249,15 @@ export const matchesOwnLegs = (row: Row, managedChains: Set<string>) =>
 export const sameValue = (a: number, b: number) => Math.abs(a - b) <= 1e-9 * Math.max(Math.abs(a), Math.abs(b));
 
 /** The types of a swap's rows: what an import's leg may take a price from (spec: Prices). */
-const SWAP_TYPES = new Set(["bridge-trade-in", "bridge-trade-out", "buy", "sell"]);
+const SWAP_TYPES = new Set(["bridge-trade-in", "bridge-trade-out"]);
+
+/** The amount a sell's value goes by: Summ holds one paying its fee in the asset sold with the fee in its quantity, and
+ * values what it bought at the amount net of that fee. */
+export function soldAmount(base: Leg, legs: Leg[]): number {
+  if (base.side !== "outgoing") return base.quantity;
+  const fees = legs.filter((l) => l.side === "fees" && l.id === base.id && sameCurrency(l.currency, base.currency));
+  return fees.reduce((left, l) => left - l.quantity, base.quantity);
+}
 
 const hasQuote = (row: Row, type: SummType) => type.quote !== undefined && row.quoteCurrency !== "";
 const typeOf = (row: Row) => summType(row.type) as SummType;
@@ -468,14 +476,19 @@ export function makePlan(input: PlanInput): PlanResult {
     if (price === null) return { price: null };
     const change = price === "holds" ? null : price;
     if (quote.currencySource !== "unknown") {
-      if (change)
+      const parted = !sameValue((base.price ?? 0) * amounts[0], (quote.price ?? 0) * amounts[1]);
+      if (change || parted)
         priceHeld.push({
           kind: "price",
           filed: isFiled(row.timestamp),
           id: row.id,
           legIds: [base.legId, quote.legId],
           reason: `Summ has a market price for ${quote.currency}: awaiting a test of what upload produces`,
-          held: [`price of the base leg ${change.summ} -> US$${change.desired}`],
+          held: [
+            change
+              ? `price of the base leg ${change.summ} -> US$${change.desired}`
+              : "the base leg holds its price, and the quote leg a value other than the base leg's",
+          ],
         });
       return { price: null };
     }
@@ -821,7 +834,10 @@ export function makePlan(input: PlanInput): PlanResult {
     const amountOf = (leg: Leg) =>
       Number(changes.find((c) => c.legId === leg.legId && c.field === "quantity")?.desired ?? leg.quantity);
     const { price, match } = quote
-      ? tradePrice(row, base, quote, rowPrice, [amountOf(base), amountOf(quote)])
+      ? tradePrice(row, base, quote, rowPrice, [
+          soldAmount({ ...base, quantity: amountOf(base) }, fee ? [{ ...fee, quantity: amountOf(fee) }] : []),
+          amountOf(quote),
+        ])
       : { price: rowPrice === "holds" ? null : rowPrice, match: undefined };
     if (price) changes.push(price);
     if (changes.length || match)

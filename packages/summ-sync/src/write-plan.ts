@@ -273,12 +273,16 @@ export function writePlan(stateDir: string, runDir: string, only?: string): stri
   });
 
   // A leg dated outside the range is not in the snapshot, so a row could look missing, or a tx's other copy go unseen.
-  // Only an edit of a leg the plan can see, in a current year, rests on nothing it cannot see
+  // Only an edit of a leg the plan can see, in a current year, rests on nothing it cannot see: an import's leg too,
+  // when only its price changes and no made-up leg is to be ignored
   if (pulled.range) {
+    const categorising = plan.categorise.filter(
+      (e) => e.filed || e.ignore?.length || e.changes.some((c) => c.field !== "price"),
+    );
     const wider = [
       plan.upload.length ? `${plan.upload.reduce((n, u) => n + u.ids.length, 0)} uploads` : "",
       plan.delete.length ? `${plan.delete.length} deletes` : "",
-      plan.categorise.length ? `${plan.categorise.length} categorisations` : "",
+      categorising.length ? `${categorising.length} categorisations` : "",
       plan.edit.some((e) => e.filed) ? `edits in filed years` : "",
     ].filter(Boolean);
     if (wider.length)

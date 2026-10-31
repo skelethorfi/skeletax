@@ -1255,9 +1255,9 @@ function sellSumm(): FakeSumm {
   const summ = new FakeSumm();
   summ.usdRate = 1.5;
   summ.add("t", [
-    leg("sell", { trade: "sell", side: "outgoing", quantity: "10", price: 3 }),
+    leg("sell", { trade: "sell", side: "outgoing", quantity: "10", price: 3, currencyIdentifier: { symbol: "TKN" } }),
     leg("buy", { trade: "buy", side: "incoming", quantity: "4", price: 2, currencyIdentifier: UNKNOWN }),
-    leg("fee", { trade: "fee", side: "fees", quantity: "0.1", price: 9 }),
+    leg("fee", { trade: "fee", side: "fees", quantity: "0.1", price: 9, currencyIdentifier: { symbol: "GAS" } }),
   ]);
   return summ;
 }
@@ -1535,4 +1535,86 @@ test("a plan made, applied and pulled again plans nothing: sell, buy and an impo
   );
   const second = makeFrom(readApplyLog(dir), history);
   assert.deepEqual([second.edit, second.categorise, second.held, second.overridden], [[], [], [], []]);
+});
+
+test("a two-leg entry: a sell paying its fee in the asset sold gives the buy its net value", async () => {
+  const summ = sellSumm();
+  const fee = summ.leg("fee") as FakeLeg;
+  Object.assign(fee, { quantity: "2", currencyIdentifier: { symbol: "TKN" } });
+  const { dir, planDir } = stateFor(summ, planOf({ edit: [twoLegs()] }));
+  await once(summ, dir, planDir);
+  assert.equal(summ.leg("buy")?.price, (8 * USD * 1.5) / 4);
+});
+
+test("a two-leg entry stops when the buy's edit does not land, with nothing recorded as its price", async () => {
+  const summ = sellSumm();
+  const real = summ.callTool.bind(summ);
+  summ.callTool = async (name, args) => {
+    const text = await real(name, args);
+    if (name === "edit_transaction" && summ.leg("buy")?.price !== 2) (summ.leg("buy") as FakeLeg).price = 2;
+    return text;
+  };
+  const { dir, planDir } = stateFor(summ, planOf({ edit: [twoLegs()] }));
+  await assert.rejects(once(summ, dir, planDir), /do not show/);
+  assert.equal(
+    logOf(dir)
+      .filter((l) => l.legId === "buy")
+      .at(-1)?.after,
+    null,
+  );
+  assert.equal(logOf(dir).at(-1)?.reason, "read-back");
+});
+
+test("a two-leg entry's second edit stops when an action-mate changed since the pull", async () => {
+  const summ = sellSumm();
+  const entry = { ...ed("row-sell", []), match: { legId: "buy", baseLegId: "sell", summ: 2, desired: 7.5 } };
+  const { dir, planDir } = stateFor(summ, planOf({ edit: [entry] }));
+  (summ.leg("fee") as FakeLeg).price = 8;
+  await assert.rejects(once(summ, dir, planDir), /other legs of its action changed/);
+  assert.equal(writesByLeg(summ).size, 0);
+});
+
+test("a two-leg entry's buy is its own to change: a later entry in its action does not stop on it", async () => {
+  const summ = sellSumm();
+  (summ.actions.get("t") as FakeLeg[]).push(leg("other"));
+  const plan = planOf({ edit: [twoLegs(), ed("later", [set("other", "trade", "withdrawal", "fee")])] });
+  const { dir, planDir } = stateFor(summ, plan);
+  await once(summ, dir, planDir);
+  assert.equal(summ.leg("other")?.trade, "fee");
+});
+
+test("a dry run reports a two-leg entry as a live run would", async () => {
+  // Finished, then a stop on a later entry: both runs go past it
+  const summ = sellSumm();
+  summ.add("o", [leg("other")]);
+  const plan = planOf({ edit: [twoLegs(), ed("later", [set("other", "trade", "fee", "income")])] });
+  const a = stateFor(summ, plan);
+  await assert.rejects(once(summ, a.dir, a.planDir), /other/);
+  const dry = await once(summ, a.dir, a.planDir, { ...ALL, dryRun: true });
+  assert.deepEqual(
+    dry.skipped.map((s) => s.id),
+    ["later"],
+  );
+
+  // A quantity edit with a known price: the plan's price is from the new quantity
+  const moved = sellSumm();
+  const entry = {
+    ...ed("row-sell", [set("sell", "quantity", 10, 20)]),
+    match: { legId: "buy", baseLegId: "sell", summ: 2, desired: 15 },
+  };
+  const b = stateFor(moved, planOf({ edit: [entry] }));
+  assert.deepEqual((await once(moved, b.dir, b.planDir, { ...ALL, dryRun: true })).skipped, []);
+  assert.equal(writesByLeg(moved).size, 0);
+  await once(moved, b.dir, b.planDir);
+  assert.equal(moved.leg("buy")?.price, 15);
+
+  // What stops a live run stops a dry one: the buy not at the plan's price, or a changed mate
+  const handEdited = sellSumm();
+  (handEdited.leg("buy") as FakeLeg).price = 2.2;
+  const c = stateFor(handEdited, planOf({ edit: [twoLegs()] }));
+  assert.equal((await once(handEdited, c.dir, c.planDir, { ...ALL, dryRun: true })).skipped.length, 1);
+  const mate = sellSumm();
+  const d = stateFor(mate, planOf({ edit: [twoLegs()] }));
+  (mate.leg("fee") as FakeLeg).price = 8;
+  assert.equal((await once(mate, d.dir, d.planDir, { ...ALL, dryRun: true })).skipped.length, 1);
 });
