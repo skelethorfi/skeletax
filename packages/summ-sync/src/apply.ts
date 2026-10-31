@@ -104,7 +104,7 @@ const idFilter = (legIds: string[]) => ({ type: "id", value: legIds, showAssocia
 
 type Found = { actionId: string; legs: Leg[]; detail: ActionDetail };
 
-/** The action that holds a leg now (action ids change on every write) and its legs. */
+/** The action that holds a leg now (an action id can change on any write) and its legs. */
 async function lookUp(client: ToolCaller, legId: string): Promise<Found | null> {
   const listed = parseActions(
     await client.callTool("query_summ_transactions", { filter: idFilter([legId]), includeHidden: true, count: 50 }),
