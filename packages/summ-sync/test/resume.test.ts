@@ -17,7 +17,9 @@ import {
 } from "../src/apply.ts";
 import { durability, isWriteLine, readLogLines, repairLog, takeLock } from "../src/journal.ts";
 import { parseDetail } from "../src/parse.ts";
-import type { DeleteEntry, EditEntry } from "../src/plan.ts";
+import { DEFAULTS } from "../src/config.ts";
+import { type DeleteEntry, type EditEntry, makePlan } from "../src/plan.ts";
+import { legsOf as legsOfDetail } from "../src/snapshot.ts";
 import { prune } from "../src/prune.ts";
 import { readApplyLog, readLeftLegs } from "../src/state.ts";
 import { Died, type FakeLeg, FakeSumm } from "./fake-summ.ts";
@@ -1240,4 +1242,379 @@ test("a read-back holding one of an entry's two priced legs gives neither a pric
       .map((l) => l.after);
   assert.deepEqual([after("sell"), after("buy")], [[null], [null]]);
   assert.equal(logOf(dir).at(-1)?.reason, "read-back");
+});
+
+// ---- A sell whose quote Summ cannot price: two edits, one entry (spec: Prices)
+const UNKNOWN = { source: "unknown" };
+const USD = 0.5;
+const twoLegs = (): EditEntry => ({
+  ...ed("row-sell", [set("sell", "price", 3, USD)]),
+  match: { legId: "buy", baseLegId: "sell", summ: 2, desired: null },
+});
+function sellSumm(): FakeSumm {
+  const summ = new FakeSumm();
+  summ.usdRate = 1.5;
+  summ.add("t", [
+    leg("sell", { trade: "sell", side: "outgoing", quantity: "10", price: 3, currencyIdentifier: { symbol: "TKN" } }),
+    leg("buy", { trade: "buy", side: "incoming", quantity: "4", price: 2, currencyIdentifier: UNKNOWN }),
+    leg("fee", { trade: "fee", side: "fees", quantity: "0.1", price: 9, currencyIdentifier: { symbol: "GAS" } }),
+  ]);
+  return summ;
+}
+const valueOf = (summ: FakeSumm, legId: string) => {
+  const l = summ.leg(legId) as FakeLeg;
+  return Number(l.quantity) * (l.price as number);
+};
+const editsOf = (summ: FakeSumm) => summ.calls.filter((c) => c.name === "edit_transaction").map((c) => c.args.edits);
+
+test("a two-leg entry: the sell in USD, then the buy at the sell's value as read back, in local price", async () => {
+  const summ = sellSumm();
+  const { dir, planDir } = stateFor(summ, planOf({ edit: [twoLegs()] }));
+  const result = await once(summ, dir, planDir);
+  assert.deepEqual(editsOf(summ), [
+    [{ transactionId: "sell", updates: { price: USD, priceValueCurrency: "USD" } }],
+    [{ transactionId: "buy", updates: { price: (10 * USD * 1.5) / 4 } }],
+  ]);
+  assert.equal(valueOf(summ, "sell"), valueOf(summ, "buy"));
+  assert.equal(summ.leg("buy")?.priceValueCurrency, undefined);
+  assert.equal(summ.leg("fee")?.price, 9);
+  assert.equal(result.edited, 2);
+  // Each is journalled: its pre-image, its intent, its after
+  const lines = logOf(dir).filter((l) => l.legId === "buy");
+  assert.deepEqual(
+    lines.map((l) => [Boolean(l.intent), l.local, l.after]),
+    [
+      [true, true, undefined],
+      [false, true, (10 * USD * 1.5) / 4],
+    ],
+  );
+  assert.ok(existsSync(join(dir, String(lines[0].pre))));
+  assert.match(String(lines[0].pre), /edit-0\.match\.json$/);
+});
+
+for (const mode of MODES) {
+  test(`a two-leg entry, ${mode.name}: a crash at any step, then a resume, ends as a clean run does`, async () => {
+    const clean = sellSumm();
+    mode.set(clean);
+    const cleanDirs = stateFor(clean, planOf({ edit: [twoLegs()] }));
+    await drive(clean, cleanDirs.dir, cleanDirs.planDir);
+    const want = JSON.stringify(clean.state());
+    for (let n = 1; n <= clean.steps; n++) {
+      const summ = sellSumm();
+      mode.set(summ);
+      const { dir, planDir } = stateFor(summ, planOf({ edit: [twoLegs()] }));
+      summ.dieAt = n;
+      await drive(summ, dir, planDir);
+      assert.equal(JSON.stringify(summ.state()), want, `state after a crash at step ${n}`);
+      assert.equal(valueOf(summ, "sell"), valueOf(summ, "buy"), `step ${n}`);
+      assert.equal(logOf(dir).at(-1)?.reason, "complete", `step ${n}`);
+      for (const legId of ["sell", "buy"]) {
+        const own = readApplyLog(dir)
+          .filter((e) => e.legId === legId && e.field === "price")
+          .at(-1);
+        assert.equal(own?.after, summ.leg(legId)?.price, `recorded price of ${legId}, step ${n}`);
+      }
+    }
+  });
+}
+
+test("a two-leg entry: the sell edited and the buy not resumes by doing the buy, whatever the stop", async () => {
+  // The buy's write fails and does not land
+  const failed = sellSumm();
+  failed.failBeforeWrite = 2;
+  const a = stateFor(failed, planOf({ edit: [twoLegs()] }));
+  await assert.rejects(once(failed, a.dir, a.planDir), /server gone/);
+  assert.equal(failed.leg("buy")?.price, 2);
+  assert.equal(logOf(a.dir).at(-1)?.reason, "write-failed");
+  await once(failed, a.dir, a.planDir);
+  assert.equal(valueOf(failed, "sell"), valueOf(failed, "buy"));
+
+  // The sell's read-back never agrees: unconfirmed, and the resume finds it landed
+  const lost = sellSumm();
+  lost.failAfterWrite = 1;
+  const b = stateFor(lost, planOf({ edit: [twoLegs()] }));
+  await assert.rejects(once(lost, b.dir, b.planDir), /server gone/);
+  const result = await once(lost, b.dir, b.planDir);
+  assert.equal(result.found, 1);
+  assert.equal(writesByLeg(lost).get("sell"), 1);
+  assert.equal(valueOf(lost, "sell"), valueOf(lost, "buy"));
+
+  // The buy landed and its answer was lost: done, and recorded as the sync's
+  const landed = sellSumm();
+  landed.failAfterWrite = 2;
+  const c = stateFor(landed, planOf({ edit: [twoLegs()] }));
+  await assert.rejects(once(landed, c.dir, c.planDir), /server gone/);
+  await once(landed, c.dir, c.planDir);
+  assert.equal(writesByLeg(landed).get("buy"), 1);
+  const own = readApplyLog(c.dir)
+    .filter((e) => e.legId === "buy")
+    .at(-1);
+  assert.equal(own?.after, landed.leg("buy")?.price);
+});
+
+test("a two-leg entry stops on a buy the plan did not expect, and when its value moved", async () => {
+  const summ = sellSumm();
+  (summ.leg("buy") as FakeLeg).price = 2.2;
+  const a = stateFor(summ, planOf({ edit: [twoLegs()] }));
+  await assert.rejects(once(summ, a.dir, a.planDir), /the plan expected 2 and sets/);
+  assert.equal(summ.leg("buy")?.price, 2.2);
+
+  // Only the buy planned, from the sell as pulled; the sell has moved since
+  const moved = sellSumm();
+  const plan = planOf({
+    edit: [{ ...ed("row-sell", []), match: { legId: "buy", baseLegId: "sell", summ: 2, desired: 7.5 } }],
+  });
+  const b = stateFor(moved, plan);
+  (moved.leg("sell") as FakeLeg).price = 3.1;
+  await assert.rejects(once(moved, b.dir, b.planDir), /value of leg sell moved/);
+  assert.equal(writesByLeg(moved).size, 0);
+});
+
+test("a two-leg entry with the sell standing edits the buy alone; one already equal is found done", async () => {
+  const summ = sellSumm();
+  const entry = { ...ed("row-sell", []), match: { legId: "buy", baseLegId: "sell", summ: 2, desired: 7.5 } };
+  const a = stateFor(summ, planOf({ edit: [entry] }));
+  await once(summ, a.dir, a.planDir);
+  assert.deepEqual(editsOf(summ), [[{ transactionId: "buy", updates: { price: 7.5 } }]]);
+
+  const done = sellSumm();
+  (done.leg("buy") as FakeLeg).price = 7.5 + 1e-13;
+  const b = stateFor(done, planOf({ edit: [entry] }));
+  const result = await once(done, b.dir, b.planDir);
+  assert.deepEqual([result.found, editsOf(done)], [1, []]);
+  // Not taken for the sync's own edit
+  assert.equal(readApplyLog(b.dir).length, 0);
+});
+
+test("a two-leg entry: a dry run writes nothing, and a signal between its edits finishes the entry", async () => {
+  const summ = sellSumm();
+  const a = stateFor(summ, planOf({ edit: [twoLegs()] }));
+  await once(summ, a.dir, a.planDir, { ...ALL, dryRun: true });
+  assert.deepEqual([editsOf(summ), summ.leg("sell")?.price], [[], 3]);
+
+  const signalled = sellSumm();
+  const signal = { requested: false };
+  const real = signalled.callTool.bind(signalled);
+  signalled.callTool = async (name, args) => {
+    const text = await real(name, args);
+    if (name === "edit_transaction") signal.requested = true;
+    return text;
+  };
+  const plan = planOf({ edit: [twoLegs(), ed("later", [set("other", "trade", "withdrawal", "fee")])] });
+  signalled.add("o", [leg("other")]);
+  const b = stateFor(signalled, plan);
+  await once(signalled, b.dir, b.planDir, ALL, { signal });
+  assert.equal(valueOf(signalled, "sell"), valueOf(signalled, "buy"));
+  assert.equal(signalled.leg("other")?.trade, "withdrawal");
+});
+
+test("an import's leg: price and category in one edit, its fee leg and amount untouched; a crash resumes", async () => {
+  const fresh = () => {
+    const summ = new FakeSumm();
+    summ.usdRate = 1.5;
+    summ.add("i", [
+      leg("eth", { trade: "withdrawal", side: "outgoing", price: 3000 }),
+      leg("gas", { trade: "fee", side: "fees", price: 3000 }),
+    ]);
+    return summ;
+  };
+  const entry = ed("row-eth", [set("eth", "trade", "withdrawal", "bridgeTradeOut"), set("eth", "price", 3000, 2000)]);
+  const clean = fresh();
+  const a = stateFor(clean, planOf({ categorise: [entry] }));
+  await once(clean, a.dir, a.planDir);
+  assert.deepEqual(editsOf(clean), [
+    [{ transactionId: "eth", updates: { trade: "bridgeTradeOut", price: 2000, priceValueCurrency: "USD" } }],
+  ]);
+  assert.equal(clean.leg("gas")?.price, 3000);
+  const want = JSON.stringify(clean.state());
+  for (let n = 1; n <= clean.steps; n++) {
+    const summ = fresh();
+    const { dir, planDir } = stateFor(summ, planOf({ categorise: [entry] }));
+    summ.dieAt = n;
+    await drive(summ, dir, planDir);
+    assert.equal(JSON.stringify(summ.state()), want, `step ${n}`);
+  }
+});
+
+test("a plan made, applied and pulled again plans nothing: sell, buy and an import's leg, with Summ's history", async () => {
+  const base = {
+    line: "",
+    chain: "THOR",
+    file: "2023-07-01_2024-06-30_THOR_abcde_Example.csv",
+    timestamp: "2024-03-01T10:00:00.000Z",
+    feeCurrency: "",
+    feeAmount: "",
+    from: "w",
+    to: "w",
+    blockchain: "",
+    referencePriceCurrency: "USD",
+    quoteCurrency: "",
+    quoteAmount: "",
+  };
+  const rows = [
+    {
+      ...base,
+      id: "2024-03-01T10:00:00.000Z.out.aaaaaaaaaaaa",
+      type: "sell",
+      baseCurrency: "TKN",
+      baseAmount: "10",
+      quoteCurrency: "SYN",
+      quoteAmount: "4",
+      description: "sell",
+      referencePrice: "0.5",
+      txids: ["1".repeat(64)],
+    },
+    {
+      ...base,
+      chain: "ETH",
+      file: "2023-07-01_2024-06-30_ETH_abcde_Example.csv",
+      id: "2024-03-01T10:00:00.000Z.out.bbbbbbbbbbbb",
+      type: "bridge-trade-out",
+      baseCurrency: "ETH",
+      baseAmount: "1",
+      description: "swap",
+      referencePrice: "2000",
+      txids: ["2".repeat(64)],
+    },
+  ];
+  const common = { timestamp: base.timestamp, from: "w", to: "w", source: "csv-source", importType: "manual-csv" };
+  const summ = new FakeSumm();
+  summ.usdRate = 1.5;
+  summ.add("t", [
+    {
+      ...leg("sell", { trade: "sell", side: "outgoing", quantity: "10", price: 3 }),
+      ...common,
+      id: rows[0].id,
+      description: "sell",
+      currencyIdentifier: { symbol: "TKN", source: "coingecko" },
+    },
+    {
+      ...leg("buy", { trade: "buy", side: "incoming", quantity: "4", price: 2 }),
+      ...common,
+      id: rows[0].id,
+      description: "sell",
+      currencyIdentifier: { symbol: "SYN", source: "unknown" },
+    },
+  ]);
+  summ.add("i", [
+    {
+      ...leg("eth", { trade: "withdrawal", side: "outgoing", price: 3000 }),
+      ...common,
+      id: "2".repeat(64),
+      source: "eth-wallet",
+      importType: "wallet",
+      description: "",
+      currencyIdentifier: { symbol: "ETH", source: "coingecko" },
+    },
+  ]);
+  const makeFrom = (applyLog: ReturnType<typeof readApplyLog>, history: Map<string, string[]>) => {
+    const details = [...summ.actions].map(([id, legs]) => parseDetail(summ.render(id, legs)));
+    return makePlan({
+      files: [],
+      rows,
+      legs: details.flatMap(legsOfDetail),
+      history,
+      txHashes: new Set(),
+      config: { ...DEFAULTS, managedSources: ["csv-source"] },
+      adopted: new Map(),
+      overrides: [],
+      applyLog,
+      now: "2024-08-01T00:00:00.000Z",
+    }).plan;
+  };
+  const first = makeFrom([], new Map());
+  assert.equal(first.edit[0].match?.legId, "buy");
+  assert.equal(first.categorise[0].changes.length, 2);
+  const { dir, planDir } = stateFor(summ, planOf({ edit: first.edit, categorise: first.categorise }));
+  await drive(summ, dir, planDir);
+  assert.equal(valueOf(summ, "sell"), valueOf(summ, "buy"));
+  // Summ labels the sync's edits as the user's, one Price line each, in the action as it now is
+  const price = "1 Jan 2026 00:00 · user · Price: AUD 1 → AUD 2";
+  const history = new Map(
+    [...summ.actions].map(([id, legs]) => [id, legs.flatMap(() => [price])] as [string, string[]]),
+  );
+  const second = makeFrom(readApplyLog(dir), history);
+  assert.deepEqual([second.edit, second.categorise, second.held, second.overridden], [[], [], [], []]);
+});
+
+test("a two-leg entry: a sell paying its fee in the asset sold gives the buy its net value", async () => {
+  const summ = sellSumm();
+  const fee = summ.leg("fee") as FakeLeg;
+  Object.assign(fee, { quantity: "2", currencyIdentifier: { symbol: "TKN" } });
+  const { dir, planDir } = stateFor(summ, planOf({ edit: [twoLegs()] }));
+  await once(summ, dir, planDir);
+  assert.equal(summ.leg("buy")?.price, (8 * USD * 1.5) / 4);
+});
+
+test("a two-leg entry stops when the buy's edit does not land, with nothing recorded as its price", async () => {
+  const summ = sellSumm();
+  const real = summ.callTool.bind(summ);
+  summ.callTool = async (name, args) => {
+    const text = await real(name, args);
+    if (name === "edit_transaction" && summ.leg("buy")?.price !== 2) (summ.leg("buy") as FakeLeg).price = 2;
+    return text;
+  };
+  const { dir, planDir } = stateFor(summ, planOf({ edit: [twoLegs()] }));
+  await assert.rejects(once(summ, dir, planDir), /do not show/);
+  assert.equal(
+    logOf(dir)
+      .filter((l) => l.legId === "buy")
+      .at(-1)?.after,
+    null,
+  );
+  assert.equal(logOf(dir).at(-1)?.reason, "read-back");
+});
+
+test("a two-leg entry's second edit stops when an action-mate changed since the pull", async () => {
+  const summ = sellSumm();
+  const entry = { ...ed("row-sell", []), match: { legId: "buy", baseLegId: "sell", summ: 2, desired: 7.5 } };
+  const { dir, planDir } = stateFor(summ, planOf({ edit: [entry] }));
+  (summ.leg("fee") as FakeLeg).price = 8;
+  await assert.rejects(once(summ, dir, planDir), /other legs of its action changed/);
+  assert.equal(writesByLeg(summ).size, 0);
+});
+
+test("a two-leg entry's buy is its own to change: a later entry in its action does not stop on it", async () => {
+  const summ = sellSumm();
+  (summ.actions.get("t") as FakeLeg[]).push(leg("other"));
+  const plan = planOf({ edit: [twoLegs(), ed("later", [set("other", "trade", "withdrawal", "fee")])] });
+  const { dir, planDir } = stateFor(summ, plan);
+  await once(summ, dir, planDir);
+  assert.equal(summ.leg("other")?.trade, "fee");
+});
+
+test("a dry run reports a two-leg entry as a live run would", async () => {
+  // Finished, then a stop on a later entry: both runs go past it
+  const summ = sellSumm();
+  summ.add("o", [leg("other")]);
+  const plan = planOf({ edit: [twoLegs(), ed("later", [set("other", "trade", "fee", "income")])] });
+  const a = stateFor(summ, plan);
+  await assert.rejects(once(summ, a.dir, a.planDir), /other/);
+  const dry = await once(summ, a.dir, a.planDir, { ...ALL, dryRun: true });
+  assert.deepEqual(
+    dry.skipped.map((s) => s.id),
+    ["later"],
+  );
+
+  // A quantity edit with a known price: the plan's price is from the new quantity
+  const moved = sellSumm();
+  const entry = {
+    ...ed("row-sell", [set("sell", "quantity", 10, 20)]),
+    match: { legId: "buy", baseLegId: "sell", summ: 2, desired: 15 },
+  };
+  const b = stateFor(moved, planOf({ edit: [entry] }));
+  assert.deepEqual((await once(moved, b.dir, b.planDir, { ...ALL, dryRun: true })).skipped, []);
+  assert.equal(writesByLeg(moved).size, 0);
+  await once(moved, b.dir, b.planDir);
+  assert.equal(moved.leg("buy")?.price, 15);
+
+  // What stops a live run stops a dry one: the buy not at the plan's price, or a changed mate
+  const handEdited = sellSumm();
+  (handEdited.leg("buy") as FakeLeg).price = 2.2;
+  const c = stateFor(handEdited, planOf({ edit: [twoLegs()] }));
+  assert.equal((await once(handEdited, c.dir, c.planDir, { ...ALL, dryRun: true })).skipped.length, 1);
+  const mate = sellSumm();
+  const d = stateFor(mate, planOf({ edit: [twoLegs()] }));
+  (mate.leg("fee") as FakeLeg).price = 8;
+  assert.equal((await once(mate, d.dir, d.planDir, { ...ALL, dryRun: true })).skipped.length, 1);
 });

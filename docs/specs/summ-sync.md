@@ -7,9 +7,11 @@ empty.
 
 It moves no tax treatment of its own. It makes Summ hold the rows the
 exporter wrote, so every disposal, acquisition, income and fee in Summ is
-the one the source data gives. Summ still computes every gain. The one
-fiat value the sync writes is a managed row's USD reference price (Prices
-below), which moves the proceeds, cost base or income of that row.
+the one the source data gives. Summ still computes every gain. The fiat
+values the sync writes are a row's USD reference price, on a managed row or
+on an import's leg of a swap, and on a sell whose quote Summ cannot price the
+buy leg's local price that gives it the sell's value (Prices below). They
+move the proceeds, cost base or income of that row.
 
 ## Two kinds of rows
 
@@ -22,7 +24,8 @@ below), which moves the proceeds, cost base or income of that row.
   side of a swap, an LP add or a refund. They are never uploaded. The sync finds Summ's own leg for each
   (same on-chain txid, currency and amount) and edits its type to
   match. It never creates or deletes a leg of Summ's own imports, and never
-  edits their amounts or fees: the import read those from the chain.
+  edits their amounts or fees: the import read those from the chain. The leg
+  of a swap also takes its row's USD price (Prices below).
 
 Each CSV file's chain (in its name, `periods.md`) says which kind its rows
 are: chains listed in `managedChains` (default `THOR` and `MAYA`) are
@@ -122,7 +125,8 @@ With a run dir the pull covers the run's periods with a day's margin each side
 the whole history. A leg dated outside the range is not in the snapshot, so a row
 could look missing, or a tx's other copy go unseen. So a plan from a partial snapshot
 may hold only edits of managed rows in current years. Uploads, deletes,
-categorisations and filed-year edits make plan refuse, and ask for `pull --all`; and
+categorisations and filed-year edits make plan refuse, and ask for `pull --all`, except a categorise
+entry in a current year that changes only an import leg's price, with nothing to ignore, since it rests only on a leg the snapshot holds; and
 `plan.md` says its reports can miss or misstate a tx with legs outside the range.
 
 Plan refuses a snapshot pulled for another run or none, or under other
@@ -380,7 +384,7 @@ until the sync sets it.
 **What Summ holds.** A leg's `price` is always in the user's local currency.
 Given a USD price, by upload or by an edit with `priceValueCurrency: "USD"`,
 Summ converts it at its own rate, marks the leg `priceValueCurrency: "USD"`
-and keeps no USD figure. Only the row's base leg is priced this way. The mark
+and keeps no USD figure. Only a base leg is priced this way (Trades below). The mark
 proves nothing on its own: `undo_edit` restores `price` and leaves the mark
 behind. So the sync cannot read the USD price back from Summ, and does not
 convert anything itself: an FX rate would add a source, and a threshold to
@@ -408,8 +412,9 @@ The USD price a leg holds is:
    the next pull is taken to hold the newer price;
 3. otherwise none.
 
-**Plan.** For a managed base leg (not a held row, not a fee or quote leg,
-not a categorised row's leg: Summ's imports keep their market price):
+**Plan.** For a managed base leg, and an import's leg matched to a categorised row
+of a swap (`bridge-trade-in`, `bridge-trade-out`), not a held row, not
+a fee or quote leg:
 
 | Run's reference price | Recorded price | Plan                                                                               |
 | --------------------- | -------------- | ---------------------------------------------------------------------------------- |
@@ -455,12 +460,59 @@ price.
 A row dated before `filedBefore` is an amendment, like any other edit: it
 needs `--approve-filed`.
 
-`plan.md` lists price edits apart from the other edits, largest leg value
+**Trades.** A price edit must not part a disposal's proceeds from the cost base of what
+it bought. Summ values each leg apart: an upload of a sell gives the two sides one value
+when it has no market price for the quote, and an edit of one leg leaves the other where
+it was.
+
+| The row                                                                              | Plan                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One row with a quote leg (a sell), its quote without a market price                  | one entry, two edits: the base leg's USD price, then the quote leg, so both sides hold the same value                                                                                                     |
+| One row with a quote leg, its quote with a market price                              | the price edit is held (`held`, kind `price`), awaiting a test of what upload produces, and so is a row whose price stands with its sides parted, so that none stays parted unseen. Its other edits go on |
+| Two rows of a swap, both managed                                                     | each its own price, from its own pool; the gap between them is what the swap cost                                                                                                                         |
+| A managed row and the import's leg of its other side, or two imports' legs of a swap | the import's leg takes its categorised row's USD price, in one edit with its category if that differs too                                                                                                 |
+
+Other categorised rows keep Summ's market price, and so does an import's fee leg. An
+import's amount and fee are never edited. Its leg follows the same recorded price and
+override rules as a managed leg, and is planned under categorise, so it waits as a
+categorisation does while the plan has uploads. A partial snapshot allows it only as above (State dir, Pull).
+
+A quote has no market price when Summ's action says so: the quote leg's
+`currencyIdentifier.source` is `unknown`. Anything else, an older copy with no source too,
+is taken as having one.
+
+**The second edit.** Summ converts USD at its own rate, so the sell's local value is known
+only once it is read back. So the entry's `match` names the quote leg, and apply edits it
+second: local price = base price × sold amount ÷ quote quantity, with no price currency. A
+sell paying its fee in the asset sold holds the fee in its quantity, and Summ values what it
+bought at the net amount, so the sold amount is the base quantity less a fee leg of that
+currency. The edit adds no USD mark and leaves one the leg already has, which says nothing:
+proceeds and cost base go by `price`. `match.desired` is that price when the base leg
+has no edit to wait for, and otherwise null. A sell paying its fee in the asset bought is not covered: Summ
+values it as the price times what was bought plus the fee, and the sync would read it as parted; such a row
+with an unknown quote or a standing price needs this added first.
+
+A row's quote leg is compared with its base leg by value, price × the amount above, after any
+quantity edit in the entry, within `1e-9` of the value: float noise, as an upload's two
+sides differ by. No recorded figure comes into it, so a row repaired by hand, whose sell
+has a standing price and whose buy holds its value, plans nothing, and neither does a
+row after its apply. A quote leg holding the base's value follows a new price on the base leg, whoever set it. When its base leg's price is not the sync's (an override, or drift), the
+quote leg is left alone. A row with no reference price, or no quote amount, plans no second edit.
+
+A quote leg's price that parts the sides is the user's when the leg no longer shows its own
+`after`, or when with no such line standing, an override exists on another value or the action's
+history has more `user` than `undo` `Price` lines than the sync has edits of the action's legs. It
+is kept and captured with `leg: "quote"`, as in Drift and overrides, and the sell's own edit goes
+on. Its `run` is the local price that would match, null when only the base's edit would tell. Its
+log lines hold the local price in `value`, with `local: true`.
+
+`plan.md` lists price edits apart from the other edits, an import's leg marked so, largest leg value
 first, each with Summ's price, the USD price and the rate between them
 (Summ's price ÷ the USD price), and heads the list with the legs whose rate is
 furthest from the median of the list. Most of the list differs only by FX and
 Summ's coarser prices; those at the head are the ones to read (a frozen or
-thin pool, or a Summ price from another market).
+thin pool, or a Summ price from another market). Below them, each two-leg
+entry is one line, with what the sell and the buy get.
 
 ## Plan
 
@@ -476,12 +528,12 @@ legs share their actions (a delete by action would remove those too).
 | Section    | Contents                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Applied as                                                                                                                                                         |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | delete     | managed legs with no row in the run; managed legs whose row changed in a field an edit cannot set (description, ID) or whose action shape changed; a fee leg the row no longer has                                                                                                                                                                                                                                                                                                                                                                                                                            | bulk delete by action id, after splitting a leg off an action whose other legs stay; only with `--approve-deletes`                                                 |
-| edit       | managed legs whose row changed only in editable fields; managed base legs whose reference price is not the recorded one (Prices above)                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `edit_transaction` per action                                                                                                                                      |
+| edit       | managed legs whose row changed only in editable fields; managed base legs whose reference price is not the recorded one, and the quote leg of a sell Summ cannot price (Prices above)                                                                                                                                                                                                                                                                                                                                                                                                                         | `edit_transaction` per action                                                                                                                                      |
 | upload     | rows with no leg in Summ after the deletes, per CSV file                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | files written to `plans/<timestamp>/upload/` (the file's header and those rows as the run wrote them; filed-year rows in `<file>_filed.csv`), uploaded by the user |
-| categorise | categorised rows whose Summ leg differs in type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `edit_transaction`                                                                                                                                                 |
+| categorise | categorised rows whose Summ leg differs in type; an import's leg of a swap whose reference price is not the recorded one (Prices above)                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `edit_transaction`                                                                                                                                                 |
 | superseded | extra rows a run row exports itself (Extra folders above)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | nothing: their legs adopt to the run row                                                                                                                           |
 | report     | categorised rows with no or several matching legs, or whose fee differs from Summ's (not edited); legs of a tx Summ holds twice beside the one a row matched (`duplicate-leg`); extra rows that share a txid, side and currency with run rows without being the same row (`extra-overlap`); legacy legs that fit several rows, or that look like an unmatched row (`legacy-lookalike`); managed rows whose ID Summ holds under a source not in `managedSources` (not uploaded again); managed rows Summ paired with a leg no row of their event names (`foreign-pair`); manual entries repeating a row's txid | nothing: for the user to resolve                                                                                                                                   |
-| held       | rows the plan leaves alone (Held below), with what it left out                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | nothing                                                                                                                                                            |
+| held       | rows the plan leaves alone (Held below), with what it left out; a price edit held (Prices, Trades)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | nothing                                                                                                                                                            |
 | overridden | differences an override keeps (undecided ones on every plan), and overrides captured in this plan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | nothing                                                                                                                                                            |
 
 **Held.** Nothing is planned for two kinds of row, which are listed instead
@@ -610,7 +662,8 @@ since it may have been made before the error):
 3. Deletes (approved), each a state machine (Deletes below).
 4. Edits and categorisation, each classified (Classifying below). All changes of one
    action go in one `edit_transaction`. A price change sends `price` with
-   `priceValueCurrency: "USD"`.
+   `priceValueCurrency: "USD"`. An entry with a `match` then makes its second edit
+   (Classifying below), read and written as an edit of its own.
    Then each made-up leg of the row is read by its id, waiting a few seconds for Summ to
    split it off, and ignored by its action id, only when that action holds nothing else.
    Already ignored: done. Gone: done if this plan logged its ignore, otherwise stop. No
@@ -657,6 +710,15 @@ A USD price cannot be read back in USD, so a price change is classified on its l
 | differs, an intent logged for this plan, marked USD, `updatedAt` later than the leg's in that intent's pre-image | done; its `via: found` line holds `after`                              |
 | differs, otherwise                                                                                               | stop                                                                   |
 
+An entry's `match`, the quote leg of a sell, is classified after its first edit is settled, from
+a fresh read, so a stop between the two edits goes on by doing the second:
+
+| The quote leg                                                            | Then                                                    |
+| ------------------------------------------------------------------------ | ------------------------------------------------------- |
+| holds the base leg's value (Prices, within the tolerance)                | done; a line with `after` if this plan logged an intent |
+| holds the plan's price, the action's other legs unchanged                | edit it                                                 |
+| anything else; or a `match.desired` the base leg's value no longer gives | stop                                                    |
+
 A price found done gets a line in the shape of the one after a price edit, so plan reads the
 same recorded price. An entry found at its after-value with no intent logged is not recorded
 as the sync's own edit, so it is not taken for one later.
@@ -680,7 +742,8 @@ uploading its CSV line again, and its pre-image (Journal) shows what Summ held.
 
 **Results.** Summ reports a wrong id as a success that did nothing, so every result is checked and
 every write read back. `Patched N`, `Bulk delete removed N` and `Bulk ignore updated N` must report
-the legs or action sent; an edit's and an ignore's must name affected actions. Then a read of the
+the legs or action sent; an edit's and an ignore's must name affected actions. A quote leg's second edit
+must read back at its local price. Then a read of the
 ids the result names (several tries, seconds apart) must show the legs at their new values; a price
 must show `updatedAt` moved and the USD mark, and its local price goes in the log as `after`, null when
 unconfirmed. A delete's legs must read as gone. Anything else stops the run, as does a write that
@@ -705,7 +768,7 @@ which logs only `apply-stop`, blocks nothing, and a failed write, which logs an 
 **Stops.** `apply-stop` carries a `reason`: `complete`, `signal`, `conflict`, `bad-result`, `read-back`,
 `write-failed` or `error`, with what was found. A hard kill leaves none; the next run needs none.
 The first SIGINT or SIGTERM says it is waiting, finishes the steps of an entry this run has begun to write
-(split, delete and ignore), writes `apply-stop` and exits 130. A delete entry with no split yet in this run
+(split, delete, ignore, and both edits of a sell), writes `apply-stop` and exits 130. A delete entry with no split yet in this run
 stops before its split or its permanent delete. A second stops at once, which is as safe as a crash.
 
 What a resume cannot tell: a user's edit in the moment between the read and the write is overwritten
@@ -722,7 +785,7 @@ delete compares no field (a later change). `updatedAt` moves on Summ's rebuilds 
    always holds this read. It never replaces a file: if the name is taken (a stop
    between this step and the next) the new read goes to `<entry>.<step>.2.json`.
    `<entry>` is the plan's section and index (`delete-3`, `edit-12`, `categorise-4`),
-   `<step>` one of `split-<n>`, `delete`, `edit`, `ignore-<n>`.
+   `<step>` one of `split-<n>`, `delete`, `edit`, `match`, `ignore-<n>`.
 3. Append an `intent: true` line to `apply-log.jsonl`, fsynced: one per changed
    field for an edit, one for a bulk call.
 4. Make the call.
@@ -780,4 +843,4 @@ recalculation (which is safe: it changes no transaction).
   custom currencies, an ID and a description.
 - Pairing legs. Summ's own matching pairs them; an unpaired leg shows as a
   report entry (Summ's `unmatchedTransfer` warning).
-- Gains, and prices of categorised rows' legs (Summ's own imports).
+- Gains, and prices of categorised rows' legs other than a swap's (Summ's own imports).

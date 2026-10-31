@@ -174,9 +174,14 @@ fetches them for every case it adds.
 
 ## Summ sync
 
-Summ sync sets the reference price of managed rows already in Summ, and keeps
+Summ sync sets the reference price of managed rows already in Summ, and of
+the leg of Summ's own import matched to a categorised row of a swap, and keeps
 a record of the USD price each leg holds, since Summ does not (`summ-sync.md`,
-Prices). Categorised rows' legs keep Summ's market price.
+Prices). Other categorised rows' legs keep Summ's market price, as does an
+import's fee leg. A sell whose quote Summ cannot price has its buy leg set to the sell's value,
+so proceeds and cost base stay equal; a sell whose quote has a market price holds its
+price edit until a test shows what upload produces. This moves the disposal's proceeds and
+the acquisition's cost base, from the observed swap price; the local value is Summ's conversion.
 
 ## Open
 

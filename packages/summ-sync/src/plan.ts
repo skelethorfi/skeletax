@@ -35,12 +35,25 @@ export interface Change {
   desired: Value;
 }
 
+/**
+ * The second edit of a one-row sell whose quote Summ cannot price: once the base leg holds its price, this leg takes
+ * the local price that gives it the base leg's value (spec: Prices).
+ */
+export interface ValueMatch {
+  legId: string;
+  baseLegId: string;
+  summ: Value;
+  /** The local price, when the base leg is not edited first; null when only the base's edit will tell. */
+  desired: number | null;
+}
+
 /** Edits of one row's legs (managed) or of Summ's own leg (categorised). */
 export interface EditEntry {
   id: string;
   filed: boolean;
   actionId: string;
   changes: Change[];
+  match?: ValueMatch;
   /**
    * Categorised only: the other side Summ made up to pair its leg as a transfer (importType soft-transfer), to
    * be ignored once the leg is categorised and Summ has split it off into an action of its own.
@@ -91,9 +104,10 @@ export interface ReportEntry {
   detail: string;
 }
 
-/** A row nothing is planned for: held by the config, or in an event whose Summ actions hold a manual entry. */
+/** A row nothing is planned for: held by the config, or in an event whose Summ actions hold a manual entry. Kind
+ * `price`: only the row's price edit is left out. */
 export interface HeldEntry {
-  kind: "hold" | "manual-pairing";
+  kind: "hold" | "manual-pairing" | "price";
   filed: boolean;
   /** The row, or null for legs with no row in the run (then summId names them). */
   id: string | null;
@@ -231,6 +245,20 @@ function withoutFee(row: Row, columns: number[]): Row {
 export const matchesOwnLegs = (row: Row, managedChains: Set<string>) =>
   !isManaged(row, managedChains) || (isProtocolRow(row, managedChains) && hasFee(row));
 
+/** Two values are one when they differ only by a float's noise: Summ holds an uploaded sell's sides this close. */
+export const sameValue = (a: number, b: number) => Math.abs(a - b) <= 1e-9 * Math.max(Math.abs(a), Math.abs(b));
+
+/** The types of a swap's rows: what an import's leg may take a price from (spec: Prices). */
+const SWAP_TYPES = new Set(["bridge-trade-in", "bridge-trade-out"]);
+
+/** The amount a sell's value goes by: Summ holds one paying its fee in the asset sold with the fee in its quantity, and
+ * values what it bought at the amount net of that fee. */
+export function soldAmount(base: Leg, legs: Leg[]): number {
+  if (base.side !== "outgoing") return base.quantity;
+  const fees = legs.filter((l) => l.side === "fees" && l.id === base.id && sameCurrency(l.currency, base.currency));
+  return fees.reduce((left, l) => left - l.quantity, base.quantity);
+}
+
 const hasQuote = (row: Row, type: SummType) => type.quote !== undefined && row.quoteCurrency !== "";
 const typeOf = (row: Row) => summType(row.type) as SummType;
 const txidsOf = (legs: Leg[]) =>
@@ -333,6 +361,7 @@ export function makePlan(input: PlanInput): PlanResult {
   const legsByAction = new Map<string, Leg[]>();
   for (const leg of input.legs) legsByAction.set(leg.actionId, [...(legsByAction.get(leg.actionId) ?? []), leg]);
   const unmappedChains = new Set<string>();
+  const priceHeld: HeldEntry[] = [];
 
   // Drift and overrides: a change the plan would make is kept as the user's when an override says so, or
   // when the action's history shows the user changed that field and apply-log has no such edit. An override
@@ -376,7 +405,7 @@ export function makePlan(input: PlanInput): PlanResult {
 
   // Prices: Summ keeps no USD figure, so the USD price a leg holds comes from the sync's own records: the local
   // price Summ showed after the sync's edit says whether that edit still stands (spec: Prices).
-  function priceChange(row: Row, base: Leg): Change | null {
+  function priceChange(row: Row, base: Leg): Change | "holds" | null {
     const history = input.history.get(base.actionId) ?? [];
     const count = (who: string) => history.filter((h) => h.split(` · ${who} · `)[1]?.includes("Price:")).length;
     const users = count("user");
@@ -432,7 +461,86 @@ export function makePlan(input: PlanInput): PlanResult {
       plan.overridden.push({ kind: "captured", override: captured });
       return null;
     }
-    return recorded === desired ? null : { leg: "base", legId: base.legId, field: "price", summ, desired };
+    return recorded === desired ? "holds" : { leg: "base", legId: base.legId, field: "price", summ, desired };
+  }
+
+  // A price edit must not part a one-row sell's proceeds from its cost base. Decided per quote: Summ cannot price it
+  // (source unknown): the quote leg follows the base leg's value. It has a market price: the price edit is held
+  function tradePrice(
+    row: Row,
+    base: Leg,
+    quote: Leg,
+    price: Change | "holds" | null,
+    amounts: [number, number],
+  ): { price: Change | null; match?: ValueMatch } {
+    if (price === null) return { price: null };
+    const change = price === "holds" ? null : price;
+    if (quote.currencySource !== "unknown") {
+      const parted = !sameValue((base.price ?? 0) * amounts[0], (quote.price ?? 0) * amounts[1]);
+      if (change || parted)
+        priceHeld.push({
+          kind: "price",
+          filed: isFiled(row.timestamp),
+          id: row.id,
+          legIds: [base.legId, quote.legId],
+          reason: `Summ has a market price for ${quote.currency}: awaiting a test of what upload produces`,
+          held: [
+            change
+              ? `price of the base leg ${change.summ} -> US$${change.desired}`
+              : "the base leg holds its price, and the quote leg a value other than the base leg's",
+          ],
+        });
+      return { price: null };
+    }
+    const match = valueMatch(row, base, quote, change, amounts);
+    return { price: change, ...(match ? { match } : {}) };
+  }
+
+  // The quote leg's price is compared by value, not with a recorded figure, so a row repaired by hand plans nothing. A
+  // price that parts the sides and is not the sync's is the user's: kept, as for a base leg
+  function valueMatch(
+    row: Row,
+    base: Leg,
+    quote: Leg,
+    change: Change | null,
+    [baseAmount, quoteAmount]: [number, number],
+  ): ValueMatch | null {
+    if (!(quoteAmount > 0)) return null;
+    const summ = quote.price ?? null;
+    const value = (base.price ?? 0) * baseAmount;
+    const equal = sameValue(value, (summ ?? 0) * quoteAmount);
+    const found = overrides.find((o) => o.id === row.id && o.leg === "quote" && o.field === "price");
+    const decided = found && same("price", found.summ, summ);
+    if (decided && found.retainUserEdit !== "no") {
+      if (found.retainUserEdit === "undecided") plan.overridden.push({ kind: "undecided", override: found });
+      return null;
+    }
+    if (!change && (equal || !(value > 0))) return null;
+    const desired = change ? null : value / quoteAmount;
+    if (!equal && !decided) {
+      const history = input.history.get(quote.actionId) ?? [];
+      const count = (who: string) => history.filter((h) => h.split(` · ${who} · `)[1]?.includes("Price:")).length;
+      const actionLegs = new Set((legsByAction.get(quote.actionId) ?? [quote]).map((l) => l.legId));
+      const lines = input.applyLog.filter((e) => e.intent && e.field === "price" && actionLegs.has(e.legId)).length;
+      const own = input.applyLog.filter((e) => e.field === "price" && e.legId === quote.legId).at(-1);
+      const stands = own?.after != null && same("price", own.after, summ);
+      if (!stands && (own?.after != null || found !== undefined || count("user") - count("undo") > lines)) {
+        const captured: Override = {
+          id: row.id,
+          leg: "quote",
+          field: "price",
+          run: desired,
+          summ,
+          seenAt: now,
+          reason: "",
+          retainUserEdit: "undecided",
+        };
+        overrides = [...overrides.filter((o) => o !== found), captured];
+        plan.overridden.push({ kind: "captured", override: captured });
+        return null;
+      }
+    }
+    return { legId: quote.legId, baseLegId: base.legId, summ, desired };
   }
 
   function compare(leg: Leg, role: LegRole, field: keyof Leg, desired: Value): Change[] {
@@ -722,9 +830,24 @@ export function makePlan(input: PlanInput): PlanResult {
     ]
       .map((c) => resolve(row.id, base.actionId, c))
       .filter((c): c is Change => c !== null);
-    const price = priceChange(row, base);
+    const rowPrice = priceChange(row, base);
+    const amountOf = (leg: Leg) =>
+      Number(changes.find((c) => c.legId === leg.legId && c.field === "quantity")?.desired ?? leg.quantity);
+    const { price, match } = quote
+      ? tradePrice(row, base, quote, rowPrice, [
+          soldAmount({ ...base, quantity: amountOf(base) }, fee ? [{ ...fee, quantity: amountOf(fee) }] : []),
+          amountOf(quote),
+        ])
+      : { price: rowPrice === "holds" ? null : rowPrice, match: undefined };
     if (price) changes.push(price);
-    if (changes.length) plan.edit.push({ id: row.id, filed: isFiled(row.timestamp), actionId: base.actionId, changes });
+    if (changes.length || match)
+      plan.edit.push({
+        id: row.id,
+        filed: isFiled(row.timestamp),
+        actionId: base.actionId,
+        changes,
+        ...(match ? { match } : {}),
+      });
   }
 
   const uploads = new Map<string, UploadEntry>();
@@ -988,6 +1111,9 @@ export function makePlan(input: PlanInput): PlanResult {
       });
     }
     const resolved = changes.map((c) => resolve(row.id, leg.actionId, c)).filter((c): c is Change => c !== null);
+    // The other side of a swap: valued at the swap's own price, as the row says. Its amount and fee are the import's
+    const price = SWAP_TYPES.has(row.type) ? priceChange(row, leg) : null;
+    if (price && price !== "holds") resolved.push(price);
     // A row that is not a plain send or receive leaves Summ's made-up other side of the transfer counted
     // on its own once categorised: it is ignored
     const trade = typeOf(row).trade;
@@ -1095,6 +1221,7 @@ export function makePlan(input: PlanInput): PlanResult {
   const fields = (e: EditEntry) =>
     [
       ...e.changes.map((c) => `${c.leg} ${c.field} ${c.summ} -> ${c.desired}`),
+      ...(e.match ? [`quote price ${e.match.summ} -> the base leg's value`] : []),
       ...(e.ignore ?? []).map((l) => `ignore made-up leg ${l}`),
     ].join("; ");
   const legById = new Map(input.legs.map((l) => [l.legId, l]));
@@ -1150,6 +1277,12 @@ export function makePlan(input: PlanInput): PlanResult {
     u.ids = u.ids.filter((id) => !holdOf.has(id));
   }
   plan.upload = plan.upload.filter((u) => u.ids.length);
+  // A row held whole has its price's entry in with the rest
+  for (const h of priceHeld) {
+    const whole = holdOf.get(h.id as string);
+    if (whole) whole.held.push(...h.held);
+    else plan.held.push(h);
+  }
   plan.held.unshift(...[...holdOf.values()].filter((h) => h.kind === "hold" || h.held.length));
 
   // ---- Foreign pairs: a managed row Summ paired with a leg of its own imports that no row of the row's event names.

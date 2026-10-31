@@ -23,6 +23,8 @@ export interface Leg {
   id: string;
   trade: string;
   currency: string;
+  /** Where Summ prices the currency from; `unknown`: it has no market price. Absent from an older copy. */
+  currencySource?: string;
   quantity: number;
   timestamp: string;
   from: string;
@@ -73,6 +75,9 @@ export function legsOf(detail: ActionDetail): Leg[] {
       id: text(leg.id),
       trade: text(leg.trade),
       currency: text((leg.currencyIdentifier as { symbol?: string } | undefined)?.symbol) || text(leg.currency),
+      ...(text((leg.currencyIdentifier as { source?: string } | undefined)?.source)
+        ? { currencySource: text((leg.currencyIdentifier as { source?: string }).source) }
+        : {}),
       quantity: Number(leg.quantity),
       timestamp: text(leg.timestamp),
       from: text(leg.from),
