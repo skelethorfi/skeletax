@@ -201,10 +201,19 @@ pool asset never reaches the wallet, though Midgard reports it as the output.
   come from the token contract, read once and stored.
 - **Activity:** the in leg is that token and amount (observed), keeping the
   outbound's txid. `details.paidVia` records the pool asset and amount.
-- **No such transfer:** the aggregator's swap failed and it paid the pool asset
-  on, so the leg stays the pool asset. The record stores `token: null`.
+- **No such transfer:** the leg stays the pool asset, the record stores
+  `token: null`, and the action gets a warning. Usually the aggregator's swap
+  failed and it paid the pool asset on, but a final token paid as a native coin
+  leaves no log either, so it needs checking. A reverted outbound, or a receipt
+  with no logs, stops the run and stores nothing.
+- **Symbol:** read when the record is first fetched, in upper case as Midgard
+  writes tokens, and kept. It is the contract's symbol then, not at the swap; a
+  refetch (`--fetch all`) after a rename changes the row's currency and ID. A
+  symbol that would read as another currency (`UNI-V2`, `LUNA`) fails the action.
+- **Loans** are not looked up: the loan mappers keep the pool asset.
 - **Replaying a run from before this source:** no record, so the pool asset, as
   that run wrote it.
 
 The aggregator's own fee and the DEX's price are inside the amount delivered, so
-they are not legs. Prices: `prices.md`.
+they are not legs. A token taxed on its way out of the wallet in the same tx is
+recorded at the amount transferred to the wallet. Prices: `prices.md`.

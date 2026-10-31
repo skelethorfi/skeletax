@@ -57,8 +57,8 @@ new agent, or the owner) checks it, reporting only counts, field names and shape
 
 1. No token of the original survives (\`npm run fixture -- anonymise\` already refuses if one does).
 2. No number or name in the case appears in the private store or private-denylist.txt.
-3. Nothing else narrows the search on-chain: asset pair, action or contract type, memo layout, output
-   count, anything unusual.
+3. Nothing else narrows the search on-chain: asset pair, an aggregator's delivered token, action or
+   contract type, memo layout, output count, anything unusual.
 4. The case maps to the same row types as the original.
 5. No test value written alongside it comes from the private transaction.
 

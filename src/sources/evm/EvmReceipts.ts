@@ -54,6 +54,7 @@ export function findTokenTransfer(
   const transfers = logs.filter(
     (log) =>
       log.topics[0] === ERC20_TRANSFER &&
+      log.topics.length === 3 &&
       log.topics[2]?.toLowerCase() === paddedTo &&
       log.address.toLowerCase().endsWith(tail.toLowerCase()),
   );
@@ -62,12 +63,8 @@ export function findTokenTransfer(
     throw new Error(`more than one token ending ${tail} was paid to ${to}`);
   }
 
-  return transfers.length
-    ? {
-        contract: transfers[0].address.toLowerCase(),
-        amount: transfers.reduce((sum, log) => sum + BigInt(log.data), 0n).toString(),
-      }
-    : undefined;
+  const amount = transfers.reduce((sum, log) => sum + BigInt(log.data), 0n);
+  return amount > 0n ? { contract: transfers[0].address.toLowerCase(), amount: amount.toString() } : undefined;
 }
 
 // What the wallet paid to send the tx, in wei (docs/specs/fees.md)
@@ -159,16 +156,29 @@ export class EvmReceipts {
     tail: string,
   ): Promise<EvmTokenPayout> {
     const receipt = await this.rawReceipt(chain, url, hash);
-    const transfer = findTokenTransfer(receipt.logs ?? [], to, tail);
+
+    // A reverted outbound, or an endpoint that leaves logs out, says nothing about what arrived, so it is never stored
+    if (BigInt(receipt.status ?? 0) !== 1n || !Array.isArray(receipt.logs)) {
+      throw new Error(`${chain} receipt ${hash}: not a successful tx with logs`);
+    }
+
+    const transfer = findTokenTransfer(receipt.logs, to, tail);
 
     if (!transfer) {
       return { chain, transactionHash: receipt.transactionHash, token: null };
     }
 
-    const call = async (data: string) =>
-      this.rpc(chain, url, "eth_call", [{ to: transfer.contract, data }, "latest"], `${transfer.contract} ${data}`);
-    const symbol = decodeSymbol(await call("0x95d89b41"));
-    const decimals = Number(BigInt(await call("0x313ce567")));
+    const call = async (data: string, name: string) => {
+      const answer = await this.rpc(chain, url, "eth_call", [{ to: transfer.contract, data }, "latest"], name);
+
+      if (!answer || answer === "0x") {
+        throw new Error(`${chain} token ${transfer.contract}: no ${name}`);
+      }
+
+      return answer as string;
+    };
+    const symbol = decodeSymbol(await call("0x95d89b41", "symbol"));
+    const decimals = Number(BigInt(await call("0x313ce567", "decimals")));
 
     if (!symbol) {
       throw new Error(`${chain} token ${transfer.contract}: no symbol`);

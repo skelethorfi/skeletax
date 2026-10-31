@@ -119,7 +119,17 @@ export function getAggregatorOutbound(
   const out = action.out?.find((tx) => tx.address?.toLowerCase() === to?.toLowerCase());
   const asset = out?.coins[0]?.asset;
 
-  if (action.type !== ActionTypeEnum.Swap || !tail || !out?.txID || !asset || !isL1Asset(asset)) {
+  const txType = (action.metadata?.swap as any)?.txType;
+
+  if (
+    action.type !== ActionTypeEnum.Swap ||
+    txType === "loanOpen" ||
+    txType === "loanRepayment" ||
+    !tail ||
+    !out?.txID ||
+    !asset ||
+    !isL1Asset(asset)
+  ) {
     return undefined;
   }
 

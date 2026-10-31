@@ -14,6 +14,8 @@ export interface ActionShape {
   // The memo's action, e.g. '=' or 'swap' for a user swap, or 'MAYA-PREFERRED-ASSET-…' for a
   // protocol-initiated swap of affiliate fees
   memoAction?: string;
+  // The memo names an aggregator's final token: mapped from the outbound's receipt (activity.md)
+  finalToken?: boolean;
 }
 
 export function getActionShape(action: Action): ActionShape {
@@ -27,6 +29,7 @@ export function getActionShape(action: Action): ActionShape {
     outAssets: action.out.map((tx) => tx.coins.map((coin) => coin.asset).sort()).sort(),
     ...(metadata?.contract ? { funds: parseFundsDenoms(metadata.contract.funds) } : {}),
     ...(metadata?.swap?.memo !== undefined ? { memoAction: getMemoAction(metadata.swap.memo) } : {}),
+    ...(metadata?.swap?.memo?.split(":")[7] ? { finalToken: true } : {}),
   };
 }
 
@@ -52,7 +55,8 @@ export function sameShape(a: ActionShape, b: ActionShape): boolean {
 export function describeShape(shape: ActionShape): string {
   const assets = (txs: string[][]) => txs.map((coins) => coins.join("+")).join(", ");
   const funds = shape.funds?.length ? ` funds [${shape.funds.join(", ")}]` : "";
-  return `${shape.type}${shape.subtype ? `/${shape.subtype}` : ""} ${shape.status}: [${assets(shape.inAssets)}] -> [${assets(shape.outAssets)}]${funds}`;
+  const final = shape.finalToken ? " to an aggregator's final token" : "";
+  return `${shape.type}${shape.subtype ? `/${shape.subtype}` : ""} ${shape.status}: [${assets(shape.inAssets)}] -> [${assets(shape.outAssets)}]${funds}${final}`;
 }
 
 // Every address and txid in the action, used to check a candidate shares nothing private

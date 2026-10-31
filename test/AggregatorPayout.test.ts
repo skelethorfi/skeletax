@@ -1,7 +1,9 @@
-import { describe, test } from "node:test";
+import { describe, mock, test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "fs";
-import { decodeSymbol, findTokenTransfer } from "../src/sources/evm/EvmReceipts.ts";
+import { decodeSymbol, EvmReceipts, findTokenTransfer } from "../src/sources/evm/EvmReceipts.ts";
+import { http } from "../src/sources/http.ts";
+import { getActionShape } from "../src/fixtures/Shape.ts";
 import { getAggregatorOutbound } from "../src/sources/Source.ts";
 import { runCase, toBundle, type GoldenCaseInput } from "../src/fixtures/GoldenCase.ts";
 import { PriceSource } from "../src/sources/Prices.ts";
@@ -103,5 +105,81 @@ describe("a swap paid through an aggregator", () => {
     } as any;
     await new PriceSource(new Map([["thorchain", midgard]])).add(toBundle(CASE));
     assert.deepEqual(asked, []);
+  });
+
+  test("a warning when the memo names a token and none arrived", async () => {
+    const { runBundle } = await import("../src/pipeline/run.ts");
+    const { getProtocol } = await import("../src/domain/Protocol.ts");
+    const failed = { ...CASE, tokenPayout: { ...CASE.tokenPayout!, token: null } };
+    const { issues } = runBundle(toBundle(failed), getProtocol(undefined));
+    assert.ok(issues.some((issue) => issue.kind === "warning" && issue.message.includes("final token")));
+  });
+
+  test("the symbol is upper case, and one that reads as another currency fails", () => {
+    const withSymbol = (symbol: string) => ({
+      ...CASE,
+      tokenPayout: { ...CASE.tokenPayout!, token: { ...CASE.tokenPayout!.token!, symbol } },
+    });
+    assert.equal((runCase(withSymbol("snx")) as any[])[1].baseCurrency, "SNX");
+    assert.throws(() => runCase(withSymbol("UNI-V2")), /does not fit/);
+    assert.throws(() => runCase(withSymbol("LUNA")), /does not fit/);
+  });
+});
+
+describe("the shape of a swap", () => {
+  test("an aggregator swap is not the same shape as a plain one", () => {
+    const plain = (CASE.data as any).metadata.swap.memo.split(":").slice(0, 6).join(":");
+    const data = { ...(CASE.data as any), metadata: { swap: { ...(CASE.data as any).metadata.swap, memo: plain } } };
+    assert.equal(getActionShape(CASE.data as any).finalToken, true);
+    assert.equal(getActionShape(data).finalToken, undefined);
+  });
+});
+
+describe("getTokenPayout", () => {
+  const token = "0xc011a73ee8576fb46f5e1c5751ca3b9fe0af2a6f";
+  const store = {
+    addedSinceReplay: () => false,
+    record: (_source: string, _key: string, fetch: () => Promise<{ data: unknown }>) =>
+      fetch().then((fetched) => fetched.data),
+  } as any;
+  const answer = (receipt: object) => async (_url: string, body: any) => ({
+    data: {
+      result:
+        body.method === "eth_getTransactionReceipt"
+          ? { transactionHash: "0xab", ...receipt }
+          : body.params[0].data === "0x95d89b41"
+            ? `0x${"534e58".padEnd(64, "0")}`
+            : "0x12",
+    },
+  });
+  const fetchWith = (receipt: object) => {
+    mock.method(http, "post", answer(receipt));
+    return new EvmReceipts(store, { ETH: "https://rpc.test" }).getTokenPayout("ETH", "AB", WALLET, "2a6f");
+  };
+
+  test("reads the token, its symbol and decimals", async (t) => {
+    t.after(() => mock.restoreAll());
+    assert.deepEqual(await fetchWith({ status: "0x1", logs: [log(token, WALLET, 5n)] }), {
+      chain: "ETH",
+      transactionHash: "0xab",
+      token: { contract: token, amount: "5", symbol: "SNX", decimals: 18 },
+    });
+  });
+
+  test("no token when none reached the wallet", async (t) => {
+    t.after(() => mock.restoreAll());
+    const payout = await fetchWith({ status: "0x1", logs: [] });
+    assert.equal(payout?.token, null);
+  });
+
+  test("stops on a reverted tx or a receipt with no logs, so nothing is stored", async (t) => {
+    t.after(() => mock.restoreAll());
+    await assert.rejects(fetchWith({ status: "0x0", logs: [] }));
+    await assert.rejects(fetchWith({ status: "0x1" }));
+  });
+
+  test("a replay of a run from before this source keeps the pool asset", async () => {
+    const replay = { ...store, addedSinceReplay: () => true };
+    assert.equal(await new EvmReceipts(replay, { ETH: "x" }).getTokenPayout("ETH", "AB", WALLET, "2a6f"), undefined);
   });
 });
