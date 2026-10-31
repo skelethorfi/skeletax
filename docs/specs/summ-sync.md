@@ -58,9 +58,11 @@ decides the design:
   `_id`, `id`, `description`, `trade`, `importType`, fee legs, comments,
   change history).
 - Edit one leg: type, currency, quantity, price, price currency, from, to,
-  timestamp, blockchain, reviewed. Not the description, the ID or tags. Every edit
-  rebuilds the action, so **action ids change on every write**; a leg's
-  `_id` does not.
+  timestamp, blockchain, reviewed. Not the description, the ID or tags. **An action's
+  id can change on any write or recalculation, and can stay the same across
+  an edit** (it does while Summ's computation is paused), so an id says
+  nothing about whether an action changed. A leg's `_id` stays across
+  rebuilds, except on legs Summ makes itself (`assumed-fee`).
 - Bulk: recategorise, ignore, comment, tag, change currency, value or
   account, and **delete (permanent, no undo)**. Edits other than delete
   return an undo handle.
@@ -93,7 +95,7 @@ nothing from it; the only link is the files below. It speaks MCP over
 ## Commands
 
     summ-sync login <state dir> [--write]  # browser OAuth; token in the state dir
-    summ-sync pull  <state dir> [<run dir>] [--full]  # writes a snapshot
+    summ-sync pull  <state dir> [<run dir>] [--all]  # writes a snapshot; resumes a stopped pull
     summ-sync plan  <state dir> <run dir> [--only <scope file>]  # reads files only; calls nothing
     summ-sync apply <state dir> <plan dir> [--dry-run] [--approve-deletes] [--approve-filed]
     summ-sync prune <state dir> [--older-than <days>]  # removes old committed snapshots and actions
@@ -104,40 +106,50 @@ in this repo. It is meant to be kept in git (prune relies on it).
 
 ## State dir
 
-    actions/<action id>.json    one action's JSON and change history, written once
-    snapshots/<time>.json       one pull: counts, and one entry per listed action
+    snapshots/<time>.json       one finished pull: counts, one entry per listed action
+    snapshots/<time>.details.jsonl  each action detail that pull read
+    actions/<action id>.json    details read before pulls kept their own, and actions apply saved
     plans/<time>/               plan.json, plan.md, upload/
     adopted.csv, overrides.json, apply-log.jsonl, summ-sync.json
 
-**Action store.** Summ's action ids are database ids made when the action
-is (re)built, and every write rebuilds it, so what the sync reads of an
-action never changes under the same id: its legs (all fields plan reads)
-and its change history entries. An id's detail is therefore fetched and
-written once and never rewritten (except by `pull --full`, below). Pull
-writes it. Apply adds only the fresh read it makes of an action just
-before deleting it, since Summ keeps nothing to fetch afterwards (if the id
-is unchanged since the pull, the store holds it already). An action apply edits gets a
-new id in Summ; apply does not store it, and the next pull fetches it as a
-new id. Other fields do
-move under the same id (`lastModified`, `updatedAt`, `balanceSnapshot`,
-`sortPriority`), as does the history's "_N earlier versions not read._"
-line; the stored file keeps them as first read, and nothing reads them.
+**Pull.** Every pull reads the detail of every action the plan needs. There is
+no reuse by id, and no cheaper signal is safe: an edit can keep its action id, the
+list shows no price, and Summ's last-modified sort is not reliably ordered. It is
+slow (minutes for a year, half an hour for the whole history), so it is resumable.
 
-**Snapshot file.** A pull's counts (the list's reported total, parsed and
-unique counts, managed sources, the run dir, how many details were fetched
-and how many the store already held), then one entry per listed action:
-`id`, `txHash`, `category`, `tags`, and `detail: true` when the action is
-one the plan needs (below). The file is written whole at the end of the
-pull, so a pull that stops leaves no snapshot. An action of a managed
-source that the full list missed because Summ rebuilt it during the pull
-(its new id is only in the source query) is added as an entry, with a
-warning, so the plan still reads its legs. Store files are written through
-a temporary file, so a stopped pull never leaves half a file under an id. The list pages themselves are
-not kept. An action deleted in Summ is simply absent from later snapshots;
-its stored detail stays.
+With a run dir the pull covers the run's periods with a day's margin each side
+(`range` in the snapshot, in the account's timezone); `--all`, or no run dir, covers
+the whole history. Plan refuses a snapshot pulled for another run. It also refuses,
+when the snapshot covers part of the history and the plan has uploads: a row's leg
+dated outside the range would look missing and an upload would count it twice, so
+such a plan needs `pull --all`. A change outside the range is not seen.
+
+**Details file.** Each detail goes on a line of `<time>.details.jsonl` as it is read
+(`a`: the action id, `at`, `action`, `history`; the first line records the run, range
+and sources). So each pull's state stays on record, under the action id it was read
+by. A stopped pull leaves this file and no `<time>.json`. The next pull of the same
+run, range and sources within a day goes on from it, reading only what is left; a
+line cut off by the stop is read again.
+
+**Snapshot file.** `version: 2`, `takenAt` (when the pull started, so a write during
+it counts as after it), the counts, `run`, `range`, `rounds`, then one entry per
+listed action: `id`, `txHash`, `category`, `tags`, and `detail: true` for the actions
+the plan needs. It is written whole, last. It is written only when the pull
+**settled**: a round had nothing left to read and listed exactly what the round
+before it did, the list's count equals its unique ids, every action of a managed
+source is in the list, and no leg is in two actions. Otherwise the pull lists again,
+up to five rounds, then stops and keeps what it read. A recalculation during a pull
+rebuilds every id, so everything is read again.
+
+This is not a point-in-time copy, which Summ cannot give. An edit that keeps its id,
+to an action already read, is not seen by this pull. Apply's re-read of each leg
+before writing it catches that for the plan's own legs.
+
+**Action store.** `actions/` is no longer written by pull, and older snapshots still
+read from it. Apply saves there each action it just inspected before deleting it.
 
 **Prune** removes snapshot files older than `--older-than` days (default
-30, by the time in their name; never the latest) and store files that no
+30, by the time in their name; never the latest), with their details files, and store files that no
 remaining snapshot lists, except actions apply saved before deleting them
 (named in `apply-log.jsonl`), but only files git tracks with no uncommitted
 changes (git keeps them); otherwise it removes nothing and lists the files.
@@ -190,11 +202,8 @@ on-chain txids are the 64-character hex strings in its description (as
 and the detail of each action the plan needs: every action of a managed
 source, and, when pull is given the run dir, every action whose tx hash is
 a txid of a categorised row or of a managed row with a request's gas
-(above). Pull fetches only the details the store lacks.
-`pull --full` fetches every needed detail again and reports each stored id
-whose legs or change history entries differ from Summ's (which would
-disprove the store's premise); it then replaces that store file. A snapshot
-is never patched: after an apply, pull again.
+(above). Every pull reads them all (State dir, Pull). A snapshot is never
+patched: after an apply, pull again.
 
 **Sync config** (`summ-sync.json` in the state dir):
 

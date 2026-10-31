@@ -1,8 +1,8 @@
 // The action store and the snapshots pull writes (spec: docs/specs/summ-sync.md, State dir):
 //
-//   <state dir>/actions/<action id>.json   one action's JSON and change history, written once: Summ gives an
-//                                          action a new id whenever it changes
-//   <state dir>/snapshots/<time>.json      one pull: its counts and an entry per listed action
+//   <state dir>/snapshots/<time>.json            one pull: its counts and an entry per listed action
+//   <state dir>/snapshots/<time>.details.jsonl   the action details that pull read (version 2)
+//   <state dir>/actions/<action id>.json         details pulls before version 2 read, and actions apply saved
 //
 // A snapshot is read as legs: each incoming, outgoing and fee leg of every action it needs the detail of, plus
 // the tx hashes of every listed action.
@@ -113,6 +113,33 @@ export interface SnapshotFile {
   actions: SnapshotEntry[];
 }
 
+/** A pull's range: the run's dates, and the instants (ms) its queries were limited to. */
+export interface PullRange {
+  from: string;
+  to: string;
+  after: number;
+  before: number;
+}
+
+/** The details file beside a snapshot file. */
+export const detailsFile = (file: string): string => file.replace(/\.json$/, ".details.jsonl");
+
+/** A pull's details by action id. The latest line of an id wins; a line cut off by a stop is left out. */
+export function readDetails(file: string): Map<string, ActionDetail> {
+  const details = new Map<string, ActionDetail>();
+  for (const line of readFileSync(file, "utf8").split("\n").slice(1)) {
+    if (!line) continue;
+    let parsed: { a: string; action: ActionDetail["action"]; history: string[] };
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    details.set(parsed.a, { action: parsed.action, history: parsed.history });
+  }
+  return details;
+}
+
 export const actionFile = (stateDir: string, actionId: string): string => join(stateDir, "actions", `${actionId}.json`);
 
 export function readAction(stateDir: string, actionId: string): ActionDetail | null {
@@ -130,15 +157,6 @@ export function storeAction(stateDir: string, detail: ActionDetail, replace = fa
     renameSync(`${file}.tmp`, file);
   }
   return file;
-}
-
-/** What the sync reads of an action: its legs and change history entries. The fields that move under the same
- * id (lastModified, updatedAt, balanceSnapshot, sortPriority, the count of earlier versions) are left out. */
-export function syncView(detail: ActionDetail): string {
-  return JSON.stringify({
-    legs: legsOf(detail).map(({ updatedAt: _, ...leg }) => leg),
-    history: detail.history.filter((h) => !/earlier versions not read/.test(h)),
-  });
 }
 
 /** The snapshot names (their times), oldest first. */
@@ -184,12 +202,13 @@ export function readSnapshotFile(file: string): SnapshotFile {
 /** A snapshot file read with the stored details of the actions it marks. */
 export function readSnapshot(file: string): Snapshot {
   const stateDir = dirname(dirname(file));
-  const entries = readSnapshotFile(file).actions;
+  const { actions: entries, version } = readSnapshotFile(file);
+  const details = version === 2 ? readDetails(detailsFile(file)) : null;
   const legs: Leg[] = [];
   const history = new Map<string, string[]>();
   for (const id of [...new Set(entries.filter((e) => e.detail).map((e) => e.id))].sort()) {
-    const detail = readAction(stateDir, id);
-    if (!detail) throw new Error(`${basename(file)} lists action ${id}, which is not in ${join(stateDir, "actions")}`);
+    const detail = details ? details.get(id) : readAction(stateDir, id);
+    if (!detail) throw new Error(`${basename(file)} lists action ${id}, whose detail is not kept`);
     legs.push(...legsOf(detail));
     history.set(detail.action._id, detail.history);
   }

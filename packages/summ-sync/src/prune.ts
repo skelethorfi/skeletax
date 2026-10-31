@@ -60,7 +60,10 @@ export function prune(stateDir: string, days = 30, now = Date.now()): PruneResul
     listed.add(id);
   const actionsDir = join(stateDir, "actions");
   const candidates = [
-    ...old.map((n) => `snapshots/${n}.json`),
+    ...old.flatMap((n) => [
+      `snapshots/${n}.json`,
+      ...(existsSync(join(stateDir, "snapshots", `${n}.details.jsonl`)) ? [`snapshots/${n}.details.jsonl`] : []),
+    ]),
     ...(existsSync(actionsDir) ? readdirSync(actionsDir) : [])
       .filter((f) => f.endsWith(".json") && !listed.has(f.replace(/\.json$/, "")))
       .map((f) => `actions/${f}`),

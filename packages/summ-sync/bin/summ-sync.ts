@@ -29,7 +29,7 @@ try {
     await pull(
       stateDir,
       rest.find((a) => !a.startsWith("--")),
-      { full: rest.includes("--full") },
+      { all: rest.includes("--all") },
     );
   else if (command === "plan") {
     const at = rest.indexOf("--only");

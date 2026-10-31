@@ -36,7 +36,7 @@ Filed years go in a separate apply with `--approve-filed`.
 ## Usage
 
     node packages/summ-sync/bin/summ-sync.ts login <state dir> [--write]
-    node packages/summ-sync/bin/summ-sync.ts pull  <state dir> [<run dir>] [--full]
+    node packages/summ-sync/bin/summ-sync.ts pull  <state dir> [<run dir>] [--all]
     node packages/summ-sync/bin/summ-sync.ts plan  <state dir> <run dir> [--only <scope file>]
     node packages/summ-sync/bin/summ-sync.ts apply <state dir> <plan dir> [--dry-run] [--approve-deletes] [--approve-filed]
     node packages/summ-sync/bin/summ-sync.ts prune <state dir> [--older-than <days>]
@@ -47,14 +47,15 @@ Filed years go in a separate apply with `--approve-filed`.
   `<state dir>/.auth.json` (mode 600).
 - `pull` writes `<state dir>/snapshots/<timestamp>.json`: the counts and
   one entry per listed action (id, tx hash, category, tags). The full JSON
-  and change history of each action of a managed source goes to the action
-  store, `<state dir>/actions/<action id>.json`. Given a run dir, it also
-  stores the detail of each action whose tx hash is a txid of the run's
-  categorised rows (chains not in `managedChains`). Summ gives an action a
-  new id whenever it changes, so an id is fetched once and only ids the
-  store lacks are fetched; `--full` fetches them all again (e.g. before
-  filing a year) and warns about any stored id whose legs or history
-  differ.
+  and change history of each action of a managed source goes to
+  `<state dir>/snapshots/<time>.details.jsonl` as it is read. Given a run dir,
+  it also reads each action whose tx hash is a txid of the run's categorised
+  rows (chains not in `managedChains`), and covers only the run's periods;
+  `--all` covers the whole history, and is needed before a plan with uploads.
+  Every pull reads every detail, because an action can change and keep its
+  id: minutes for a year, half an hour for everything. A stopped pull goes on
+  from where it stopped when run again. Its snapshot is written only once
+  Summ's list has stopped changing.
 - `plan` compares the run's period wallet files with the latest snapshot
   and writes `<state dir>/plans/<timestamp>/`: `plan.json`, `plan.md` and
   `upload/` (the rows Summ lacks, per file). It calls nothing and changes
