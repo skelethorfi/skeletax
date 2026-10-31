@@ -568,7 +568,6 @@ with the entries left out:
 an amendment: listed under its own heading in each section and applied only
 with `--approve-filed`, in a separate apply from the current year. Under that
 heading the plan says that a change there to an amount, price or type also moves the cost bases of later
-
 disposals of those assets, in later years and the current one, once Summ recalculates.
 
 **Drift and overrides.** A value the user changed in Summ is kept, never

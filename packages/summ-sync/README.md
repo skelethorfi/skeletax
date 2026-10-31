@@ -97,7 +97,7 @@ the cost bases of later disposals, in later years and the current one.
   in the action or naming the row's txid (`plan.md` marks a delete with no txid to
   look for). A plan from an older version, whose
   deletes hold no values, is refused: pull and plan again.
-  Apply lists no upload while any of the plan's deletes is not made: a row uploaded
+  Apply lists no upload while any delete this apply selects is not made: a row uploaded
   beside an old version would count twice. It says what to do instead.
 
   When every entry is done it adds the plan's adoptions and captured overrides

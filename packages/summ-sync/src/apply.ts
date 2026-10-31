@@ -1101,7 +1101,7 @@ function listUploads(plan: PlanFile, opts: ApplyOptions): { file: string; rows: 
 }
 
 /** How many deletes come before this apply's uploads: a row uploaded beside an old version still in Summ would count
- * twice, and not only under the same ID. Simple and strict: no list until every delete is made. */
+ * twice, and not only under the same ID. Simple and strict: no list until every selected delete is made. */
 export function deletesBeforeUploads(plan: PlanFile, opts: Flags): number {
   const select = { ...opts, dryRun: false };
   return selected(plan.upload, select).length ? selected(plan.delete, select).length : 0;
