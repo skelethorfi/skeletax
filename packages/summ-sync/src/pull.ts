@@ -10,6 +10,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { nextDay, startOfDay } from "./dates.ts";
+import { isWriteLine, readLogLines } from "./journal.ts";
 import { McpClient } from "./mcp.ts";
 import { matchesOwnLegs } from "./plan.ts";
 import { type ListedAction, parseActions, parseDetail, parsePageHeader } from "./parse.ts";
@@ -111,13 +112,8 @@ interface Header {
 
 /** The time of the last write apply logged, or 0. */
 function lastWrite(stateDir: string): number {
-  const file = join(stateDir, "apply-log.jsonl");
-  if (!existsSync(file)) return 0;
-  const times = readFileSync(file, "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((l) => JSON.parse(l) as { call?: string; time?: string })
-    .filter((l) => l.call !== "skip" && l.time)
+  const times = readLogLines<{ call?: string; time?: string }>(stateDir)
+    .filter((l) => isWriteLine(l) && l.time)
     .map((l) => Date.parse(l.time as string));
   return times.length ? Math.max(...times) : 0;
 }
