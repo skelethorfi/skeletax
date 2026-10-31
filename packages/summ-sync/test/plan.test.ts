@@ -2765,3 +2765,58 @@ test("a manual entry linked only by its Tx Hash holds the row's event", () => {
   assert.deepEqual([p.upload, p.report.map((x) => x.kind)], [[], ["manual-entry"]]);
   assert.equal(p.held[0].kind, "manual-pairing");
 });
+
+test("deleteManual: a named entry is planned first, with its values, and no longer holds its event", () => {
+  const r = btcRow({ type: "bridge-trade-in", feeCurrency: "", feeAmount: "" });
+  const own = ownLeg({ legId: "own", quantity: 0.01, trade: "deposit", side: "incoming", actionId: "act" });
+  const manual = ownLeg({
+    legId: "man",
+    quantity: 0.01,
+    trade: "withdrawal",
+    side: "outgoing",
+    actionId: "act",
+    importType: "manual",
+    source: "manual",
+    id: "hand",
+  });
+  const held = plan({ rows: [r], legs: [own, manual] }).plan;
+  assert.equal(held.delete.length, 0);
+  assert.equal(held.held[0].kind, "manual-pairing");
+  const deleteManual = [{ legId: "man", currency: "BTC", quantity: 0.01, reason: "stood in for the swap" }];
+  const named = plan({ rows: [r], legs: [own, manual], config: { ...CONFIG, deleteManual } }).plan;
+  assert.deepEqual(named.held, []);
+  assert.equal(named.delete[0].manual, true);
+  assert.deepEqual(named.delete[0].legIds, ["man"]);
+  assert.match(named.delete[0].reason, /manual entry: stood in for the swap/);
+  assert.deepEqual(
+    named.delete[0].others?.map((l) => l.legId),
+    ["own"],
+  );
+  // Another manual entry in the action still holds it
+  const other = { ...manual, legId: "man2", id: "hand2" };
+  assert.equal(
+    plan({ rows: [r], legs: [own, manual, other], config: { ...CONFIG, deleteManual } }).plan.held[0].kind,
+    "manual-pairing",
+  );
+});
+
+test("deleteManual: a wrong entry stops the plan, and one already gone is noted", () => {
+  const manual = ownLeg({ legId: "man", quantity: 1, importType: "manual", source: "manual", id: "hand" });
+  const entry = { legId: "man", currency: "BTC", quantity: 1, reason: "why" };
+  const run = (legs: Leg[], over = {}) =>
+    plan({ rows: [], legs, config: { ...CONFIG, deleteManual: [{ ...entry, ...over }] } }).plan;
+  assert.throws(() => run([manual], { quantity: 2 }), /config says 2/);
+  assert.throws(() => run([manual], { currency: "ETH" }), /config says 1 ETH/);
+  assert.throws(() => run([{ ...manual, importType: "wallet" }]), /not a manual entry/);
+  assert.match(run([]).notes.join(), /leg man is not in Summ/);
+});
+
+test("deleteManual: a scoped plan keeps a named entry whatever the scope says", () => {
+  const manual = ownLeg({ legId: "man", quantity: 1, importType: "manual", source: "manual", id: "hand" });
+  const deleteManual = [{ legId: "man", currency: "BTC", quantity: 1, reason: "why" }];
+  const p = plan({ rows: [], legs: [manual], config: { ...CONFIG, deleteManual }, scope: ["nothing-like-it"] }).plan;
+  assert.deepEqual(
+    p.delete.map((d) => d.legIds),
+    [["man"]],
+  );
+});

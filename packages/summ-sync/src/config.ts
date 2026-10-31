@@ -18,10 +18,20 @@ export interface Config {
   keepExtra: string[];
   /** Rows the plan leaves alone while a decision outside the sync is pending: nothing is planned for them. */
   hold: Hold[];
+  /** Manual entries the user has decided to delete: planned like any delete. Any other manual entry still holds. */
+  deleteManual: DeleteManual[];
 }
 
 /** A held row by its ID, or every row naming a txid. */
 export type Hold = ({ id: string; txid?: undefined } | { txid: string; id?: undefined }) & { reason: string };
+
+/** A manual entry by its leg, with what it must still hold, so an entry that changed or a wrong id stops the plan. */
+export interface DeleteManual {
+  legId: string;
+  currency: string;
+  quantity: number;
+  reason: string;
+}
 
 export const DEFAULTS: Config = {
   managedChains: ["THOR", "MAYA"],
@@ -31,6 +41,7 @@ export const DEFAULTS: Config = {
   extraDirs: [],
   keepExtra: [],
   hold: [],
+  deleteManual: [],
 };
 
 export function parseConfig(text: string): Config {
@@ -53,6 +64,23 @@ export function parseConfig(text: string): Config {
   ) {
     throw new Error(
       'summ-sync.json: hold must be a list of {"id": "<row ID>", "reason": "<why>"} or {"txid": "<txid>", "reason": "<why>"}, each with a reason',
+    );
+  }
+  if (
+    !Array.isArray(config.deleteManual) ||
+    !config.deleteManual.every(
+      (m) =>
+        typeof m?.legId === "string" &&
+        m.legId !== "" &&
+        typeof m.currency === "string" &&
+        m.currency !== "" &&
+        typeof m.quantity === "number" &&
+        typeof m.reason === "string" &&
+        m.reason.trim() !== "",
+    )
+  ) {
+    throw new Error(
+      'summ-sync.json: deleteManual must be a list of {"legId": "<leg>", "currency": "<symbol>", "quantity": <number>, "reason": "<why>"}',
     );
   }
   if (config.filedBefore !== null && !/^\d{4}-\d{2}-\d{2}$/.test(config.filedBefore)) {

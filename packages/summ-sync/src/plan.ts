@@ -148,6 +148,8 @@ export interface DeleteEntry {
   others?: LegValues[];
   /** The row's txids, or with no row those its legs name: a manual entry naming one at apply stops the entry. */
   txids?: string[];
+  /** Named in the config's deleteManual: these legs are manual entries, excused from what holds or stops the others. */
+  manual?: boolean;
 }
 
 export interface UploadEntry {
@@ -1230,6 +1232,41 @@ export function makePlan(input: PlanInput): PlanResult {
     });
   }
 
+  // Manual entries the user named: first in the plan, so what they stood in for sees them gone. A wrong or changed
+  // entry stops the plan: the user named something else
+  const namedManual = new Set(config.deleteManual.map((m) => m.legId));
+  const manualGroups = new Map<string, Leg[]>();
+  for (const m of config.deleteManual) {
+    const leg = input.legs.find((l) => l.legId === m.legId);
+    if (!leg) {
+      plan.notes.push(`deleteManual: leg ${m.legId} is not in Summ; remove its line once it is deleted`);
+      continue;
+    }
+    if (leg.importType !== "manual") {
+      throw new Error(`deleteManual: leg ${m.legId} is not a manual entry (import type ${leg.importType})`);
+    }
+    if (!sameCurrency(leg.currency, m.currency) || !sameAmount(leg.quantity, m.quantity)) {
+      throw new Error(
+        `deleteManual: leg ${m.legId} holds ${leg.quantity} ${leg.currency}, the config says ${m.quantity} ${m.currency}`,
+      );
+    }
+    manualGroups.set(leg.actionId, [...(manualGroups.get(leg.actionId) ?? []), leg]);
+  }
+  const rowDeletes = plan.delete;
+  plan.delete = [];
+  for (const [actionId, legs] of manualGroups) {
+    const reasons = config.deleteManual.filter((m) => legs.some((l) => l.legId === m.legId)).map((m) => m.reason);
+    const matched = (input.history.get(actionId) ?? []).some((h) => h.includes("transactionMatching"));
+    deleteGroup(
+      legs[0].id,
+      legs,
+      null,
+      `manual entry: ${[...new Set(reasons)].join("; ")}${matched ? " (Summ's matcher changed this action: the entry may be guarding a pairing)" : ""}`,
+    );
+    plan.delete[plan.delete.length - 1].manual = true;
+  }
+  plan.delete.push(...rowDeletes);
+
   // ---- Held: nothing is planned for a row the config holds (a decision pending outside the sync), nor for the rows
   // of an event (rows linked by a shared txid) when a Summ action of theirs holds a manual entry, or a manual entry
   // names one of their txids: the user's own pairing or stand-in, which a delete, a split, an upload or a categorise
@@ -1250,11 +1287,13 @@ export function makePlan(input: PlanInput): PlanResult {
     else if (!STABLE_ID.test(h.id) || inScope(h.id.slice(0, 24))) plan.notes.push(`hold: no row ${h.id} in the run`);
   }
   const manualIn = (actionIds: string[]) =>
-    [...new Set(actionIds)].flatMap((a) => (legsByAction.get(a) ?? []).filter((l) => l.importType === "manual"));
+    [...new Set(actionIds)].flatMap((a) =>
+      (legsByAction.get(a) ?? []).filter((l) => l.importType === "manual" && !namedManual.has(l.legId)),
+    );
   const pairingReason = (manual: Leg[]) =>
     `a manual entry is in a Summ action of this event or names its txid (${manual.map((l) => `${l.quantity} ${l.currency}`).join(", ")}): the user's pairing; resolve it in Summ`;
   const manualNaming = new Map<string, Leg[]>();
-  for (const leg of input.legs.filter((l) => l.importType === "manual")) {
+  for (const leg of input.legs.filter((l) => l.importType === "manual" && !namedManual.has(l.legId))) {
     for (const t of txidsNamedBy(leg)) manualNaming.set(t, [...(manualNaming.get(t) ?? []), leg]);
   }
   const legsOfRow = new Map(matched);
@@ -1548,7 +1587,8 @@ function narrow(
     return false;
   };
   const left: { summId: string; legs: Leg[]; txids: string[] }[] = [];
-  plan.delete = plan.delete.filter((d) => d.id !== null || legsIn(d.summId, d.legIds, true));
+  // A manual entry the config names is always in the plan: the rows it held no longer wait for it
+  plan.delete = plan.delete.filter((d) => d.id !== null || d.manual || legsIn(d.summId, d.legIds, true));
   // The rows of the scope naming a tx whose legs are left, and other legs with no row naming it, wait with them, and
   // so does every other tx of theirs, until no more join
   const leftTx = new Set(left.flatMap((l) => l.txids));
@@ -1590,7 +1630,7 @@ function narrow(
       );
   }
   const ids = new Set([...matched].filter((id) => !waitRows.has(id)));
-  plan.delete = plan.delete.filter((d) => (d.id !== null ? ids.has(d.id) : !waitLegs.has(d.summId)));
+  plan.delete = plan.delete.filter((d) => d.manual || (d.id !== null ? ids.has(d.id) : !waitLegs.has(d.summId)));
   plan.adopted = plan.adopted.filter((a) => ids.has(a.id));
   plan.superseded = plan.superseded.filter((s) => ids.has(s.run));
   plan.edit = plan.edit.filter((e) => ids.has(e.id));

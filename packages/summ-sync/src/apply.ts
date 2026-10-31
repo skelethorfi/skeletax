@@ -479,7 +479,7 @@ export async function applyPlan(
     const named = new Map((entry.others as LegValues[]).map((l) => [l.legId, l]));
     const visible = seen.filter((l) => !entry.legIds.includes(l.legId));
     for (const leg of new Map(visible.map((l) => [l.legId, l])).values()) {
-      if (leg.importType === "manual") {
+      if (leg.importType === "manual" && !namedManual.has(leg.legId)) {
         problems.push(
           `manual entry ${leg.legId} (${leg.quantity} ${leg.currency}) is in the action: the user's pairing`,
         );
@@ -507,8 +507,8 @@ export async function applyPlan(
 
   async function namedByManual(txids: string[], manual?: Leg[]): Promise<string | null> {
     if (!txids.length) return null;
-    const naming = (manual ?? (manualList ??= await manualEntries(client))).filter((l) =>
-      txidsNamedBy(l).some((t) => txids.includes(t)),
+    const naming = (manual ?? (manualList ??= await manualEntries(client))).filter(
+      (l) => !namedManual.has(l.legId) && txidsNamedBy(l).some((t) => txids.includes(t)),
     );
     return naming.length
       ? `manual entry ${naming.map((l) => `${l.legId} (${l.quantity} ${l.currency})`).join(", ")} names the row's txid: the user's pairing; resolve it in Summ, then pull and plan`
@@ -821,6 +821,8 @@ export async function applyPlan(
     return same(c.field, now, c.desired) ? "after" : "other";
   }
 
+  // The manual entries this apply deletes, the first of its deletes; without the approval they are as any other
+  const namedManual = new Set((opts.approveDeletes ? deletes : []).filter((e) => e.manual).flatMap((e) => e.legIds));
   // The legs this apply's deletes remove or ignore: another delete's own entry checks them
   const deleting = new Set(
     (opts.approveDeletes ? deletes : []).flatMap((e) => [

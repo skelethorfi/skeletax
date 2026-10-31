@@ -23,6 +23,7 @@ test("a config overrides the defaults it names", () => {
     extraDirs: [],
     keepExtra: [],
     hold: [],
+    deleteManual: [],
   });
 });
 
@@ -44,4 +45,12 @@ test("a hold names a row ID or a txid", () => {
     { txid: "A".repeat(64), reason: "pending" },
   ];
   assert.deepEqual(parseConfig(JSON.stringify({ hold })).hold, hold);
+});
+
+test("deleteManual needs a leg, currency, quantity and reason", () => {
+  const entry = { legId: "l", currency: "BTC", quantity: 1, reason: "why" };
+  assert.deepEqual(parseConfig(JSON.stringify({ deleteManual: [entry] })).deleteManual, [entry]);
+  for (const bad of [{ ...entry, reason: " " }, { ...entry, quantity: "1" }, { ...entry, legId: "" }, "l"]) {
+    assert.throws(() => parseConfig(JSON.stringify({ deleteManual: [bad] })), /deleteManual must be/);
+  }
 });
