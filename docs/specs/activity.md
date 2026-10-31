@@ -217,3 +217,12 @@ pool asset never reaches the wallet, though Midgard reports it as the output.
 The aggregator's own fee and the DEX's price are inside the amount delivered, so
 they are not legs. A token taxed on its way out of the wallet in the same tx is
 recorded at the amount transferred to the wallet. Prices: `prices.md`.
+
+**Not covered:**
+
+- **Sent in through an aggregator** (`swapIn`): the wallet calls the aggregator,
+  which swaps its token on a DEX and deposits the pool asset with the memo.
+  THORChain records the wallet as sending the pool asset, so the out leg names
+  that asset, though the wallet spent the token. Nothing in Midgard or THORNode
+  shows the token; only the inbound's receipt does.
+- **Maya**: aggregator swaps keep the pool asset, with no warning.
