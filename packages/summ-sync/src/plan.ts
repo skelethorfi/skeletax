@@ -1233,8 +1233,8 @@ export function makePlan(input: PlanInput): PlanResult {
   }
 
   // Manual entries the user named: first in the plan, so what they stood in for sees them gone. A wrong or changed
-  // entry stops the plan: the user named something else. An entry that cannot go (another manual entry in its action,
-  // or a hold on it) excuses nothing, so what it held stays held.
+  // entry stops the plan: the user named something else. An entry that cannot go excuses nothing, so what it held
+  // stays held.
   const namedManual = new Set<string>();
   const manualGroups = new Map<string, Leg[]>();
   for (const m of config.deleteManualEntries) {
@@ -1255,33 +1255,42 @@ export function makePlan(input: PlanInput): PlanResult {
     }
     manualGroups.set(leg.actionId, [...(manualGroups.get(leg.actionId) ?? []), leg]);
   }
+  // What keeps an entry from going. One that cannot go keeps them all: it could name what another stands in for
+  const allNamed = new Set(config.deleteManualEntries.map((m) => m.legId));
+  const blockers = new Map(
+    [...manualGroups].map(([actionId, legs]) => {
+      const txids = [...new Set([...txidsOf(legs), ...legs.flatMap(txidsNamedBy)])].filter((t) => !/^0+$/.test(t));
+      const unnamed = input.legs.filter(
+        (l) =>
+          l.importType === "manual" &&
+          !allNamed.has(l.legId) &&
+          (l.actionId === actionId || txidsNamedBy(l).some((t) => txids.includes(t))),
+      );
+      const onHold = config.hold.find((h) =>
+        h.txid === undefined
+          ? legs.some((l) => l.id === h.id) || !!rows.find((r) => r.id === h.id)?.txids.some((t) => txids.includes(t))
+          : txids.includes(normaliseTxid(h.txid)),
+      );
+      const reason = unnamed.length
+        ? `another manual entry is in its action or names its tx (${unnamed.map((l) => `${l.quantity} ${l.currency}`).join(", ")}): name it too, or resolve it in Summ`
+        : onHold?.reason;
+      return [actionId, { txids, reason, kind: unnamed.length ? ("manual-pairing" as const) : ("hold" as const) }];
+    }),
+  );
+  const anyBlocked = [...blockers.values()].some((b) => b.reason !== undefined);
   const rowDeletes = plan.delete;
   plan.delete = [];
   for (const [actionId, legs] of manualGroups) {
     const legIds = legs.map((l) => l.legId);
-    const txids = [...new Set([...txidsOf(legs), ...legs.flatMap(txidsNamedBy)])].filter((t) => !/^0+$/.test(t));
-    const allNamed = new Set(config.deleteManualEntries.map((m) => m.legId));
-    const unnamed = input.legs.filter(
-      (l) =>
-        l.importType === "manual" &&
-        !allNamed.has(l.legId) &&
-        (l.actionId === actionId || txidsNamedBy(l).some((t) => txids.includes(t))),
-    );
-    const onHold = config.hold.find((h) =>
-      h.txid === undefined
-        ? legs.some((l) => l.id === h.id) || !!rowsById.get(h.id)?.txids.some((t) => txids.includes(t))
-        : txids.includes(normaliseTxid(h.txid)),
-    );
-    if (unnamed.length || onHold) {
+    const { txids, reason, kind } = blockers.get(actionId)!;
+    if (anyBlocked) {
       plan.held.push({
-        kind: unnamed.length ? "manual-pairing" : "hold",
+        kind: reason === undefined ? "manual-pairing" : kind,
         filed: legs.some((l) => isFiled(l.timestamp)),
         id: null,
         summId: legs[0].id,
         legIds,
-        reason: unnamed.length
-          ? `another manual entry is in its action or names its tx (${unnamed.map((l) => `${l.quantity} ${l.currency}`).join(", ")}): name it too, or resolve it in Summ`
-          : (onHold as Hold).reason,
+        reason: reason ?? "another entry in deleteManualEntries cannot go, and none goes until it can",
         held: ["delete (named in deleteManualEntries)"],
       });
       continue;

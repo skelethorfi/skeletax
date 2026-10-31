@@ -749,7 +749,7 @@ comments in `plan.md`, and a warning if Summ's matcher changed the action: such 
 entry's txids include those its comments name. It is filed if any of its legs is.
 
 Only an entry that will go excuses anything. Another manual entry in its action or naming one of its txids, or a `hold` on
-its ID, its txid or a row of its txid, leaves it held, and its event held with it. Plan refuses filed and current-year
+its ID, its txid or a row of its txid, leaves it held, and its event held with it, along with every other named entry: one that cannot go keeps them all until it can. Plan refuses filed and current-year
 entries named together, since a run covers one: name one kind, apply, pull and plan, then the other. A run that would leave a named entry in Summ stops before writing anything: it needs
 `--approve-deletes`, and `--approve-filed` for a filed entry, while one already gone stops nothing. Named entries run as
 any delete: a split from what stays, a fresh read compared with the plan, two reads that agree, the journal and the

@@ -2959,3 +2959,48 @@ test("deleteManualEntries: the matcher's history warns, and a going entry repeat
     [],
   );
 });
+
+test("deleteManualEntries: one entry that cannot go keeps them all; two that share a tx and can go, go", () => {
+  const hand = (legId: string, comments: string[]) =>
+    ownLeg({ legId, quantity: 1, importType: "manual", source: "manual", id: legId, actionId: legId, comments });
+  const entry = (legId: string) => ({ legId, currency: "BTC", quantity: 1, reason: "why" });
+  const rows = [row({ txids: [TX1] }), row({ txids: [TX2] })];
+  const named = { ...CONFIG, deleteManualEntries: [entry("m1"), entry("m2")] };
+  const TX3 = "3".repeat(64);
+  const blocked = plan({
+    rows,
+    legs: [hand("m1", [TX1]), hand("m2", [TX1, TX2]), hand("m3", [TX2])],
+    config: named,
+  }).plan;
+  assert.deepEqual(blocked.delete, []);
+  assert.deepEqual(blocked.upload, []);
+  assert.ok(blocked.held.some((h) => h.legIds[0] === "m1" && /none goes until it can/.test(h.reason)));
+  const going = plan({ rows, legs: [hand("m1", [TX1, TX3]), hand("m2", [TX1, TX2])], config: named }).plan;
+  assert.deepEqual(
+    going.delete.map((d) => d.legIds[0]),
+    ["m1", "m2"],
+  );
+  assert.equal(going.upload.length, 1);
+});
+
+test("deleteManualEntries: a hold on an unmanaged row of its tx, or on its own ID, holds it", () => {
+  const r = btcRow({ txids: [TX1] });
+  const leg = ownLeg({
+    legId: "m",
+    quantity: 1,
+    importType: "manual",
+    source: "manual",
+    id: "own",
+    actionId: "a",
+    comments: [TX1],
+  });
+  const deleteManualEntries = [{ legId: "m", currency: "BTC", quantity: 1, reason: "why" }];
+  for (const id of [r.id, "own"]) {
+    const p = plan({
+      rows: [r],
+      legs: [leg],
+      config: { ...CONFIG, deleteManualEntries, hold: [{ id, reason: "pending" }] },
+    }).plan;
+    assert.deepEqual(p.delete, []);
+  }
+});
