@@ -1393,7 +1393,7 @@ export function makePlan(input: PlanInput): PlanResult {
   // amount: Summ's zero-cost warnings are what shows those.
   const DAY = 86_400_000;
   const within = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) <= DAY;
-  const replacedByRow = (leg: Leg) =>
+  const replacedByRow = (leg: Leg, disposal: Leg) =>
     rows.some((r) => {
       const type = typeOf(r);
       const inBase =
@@ -1411,6 +1411,7 @@ export function makePlan(input: PlanInput): PlanResult {
         (inBase || inQuote) &&
         r.type !== "spam" &&
         within(r.timestamp, leg.timestamp) &&
+        Date.parse(r.timestamp) <= Date.parse(disposal.timestamp) &&
         !holdOf.has(r.id) &&
         !heldBack.has(r.id) &&
         !overlapHeld.has(r.id) &&
@@ -1422,7 +1423,7 @@ export function makePlan(input: PlanInput): PlanResult {
       ? []
       : d.legIds
           .map((id) => input.legs.find((l) => l.legId === id) as Leg)
-          .filter((l) => l.side === "incoming" && !IGNORED.has(l.trade) && !replacedByRow(l))
+          .filter((l) => l.side === "incoming" && !IGNORED.has(l.trade))
           .flatMap((l) =>
             input.legs.filter(
               (m) =>
@@ -1433,48 +1434,55 @@ export function makePlan(input: PlanInput): PlanResult {
                 sameCurrency(m.currency, l.currency) &&
                 sameAmount(m.quantity, l.quantity) &&
                 Date.parse(m.timestamp) >= Date.parse(l.timestamp) &&
-                Date.parse(m.timestamp) - Date.parse(l.timestamp) <= DAY,
+                Date.parse(m.timestamp) - Date.parse(l.timestamp) <= DAY &&
+                !replacedByRow(l, m),
             ),
           );
   const dependentReason = (manual: Leg[]) =>
     `a manual entry sends on what this delete acquires (${manual.map((l) => `${l.quantity} ${l.currency}, leg ${l.legId}`).join("; ")}): with nothing to replace it, it would sell from nothing, a false gain; resolve it in Summ, or name it in deleteManualEntries`;
-  // Held, a group's legs stay in Summ, so the rows that remake them wait: a row with no link by txid is found by what it
-  // moves. Uploaded beside the kept legs it would count them twice
-  const remakes = (legs: Leg[]) =>
-    rows.filter((r) =>
-      legs.some(
-        (l) =>
-          typeOf(r).side === l.side &&
-          sameCurrency(r.baseCurrency, l.currency) &&
-          sameAmount(l.quantity, Number(r.baseAmount)) &&
-          within(r.timestamp, l.timestamp),
-      ),
-    );
+  // A held delete's legs stay in Summ, so the whole old event stays: the other deletes and uploads moving the same
+  // currency and amount within a day. Going ahead beside it they would take the amount out twice, or count it twice
+  const legsOfDelete = (d: DeleteEntry) => d.legIds.map((id) => input.legs.find((l) => l.legId === id) as Leg);
+  const sameMove = (a: Leg, currency: string, amount: number, time: string) =>
+    sameCurrency(a.currency, currency) && sameAmount(a.quantity, amount) && within(a.timestamp, time);
   const dependent = new Map<DeleteEntry, Leg[]>();
-  // Holding a row can take away what replaced another delete's acquisition, so this repeats until nothing changes
+  const hold = (r: Row, manual: Leg[]) => {
+    if (holdOf.has(r.id)) return false;
+    holdOf.set(r.id, {
+      kind: "manual-pairing",
+      filed: isFiled(r.timestamp),
+      id: r.id,
+      legIds: manual.map((l) => l.legId),
+      reason: dependentReason(manual),
+      held: [],
+    });
+    return true;
+  };
+  // Holding a row can take away what replaced another delete's acquisition, and each hold widens the event: this repeats
+  // until nothing changes
   for (let grew = true; grew;) {
     grew = false;
-    for (const d of plan.delete.filter((d) => !dependent.has(d))) {
+    for (const d of plan.delete) {
+      if (dependent.has(d)) continue;
       const manual = disposalsOf(d);
       if (!manual.length) continue;
       dependent.set(d, manual);
       grew = true;
-      const rowsHeld =
-        d.id !== null
-          ? (eventOf.get(d.id) ?? [runRows.get(d.id) as Row])
-          : remakes(d.legIds.map((id) => input.legs.find((l) => l.legId === id) as Leg)).flatMap(
-              (r) => eventOf.get(r.id) ?? [r],
-            );
-      for (const r of rowsHeld) {
-        if (!holdOf.has(r.id))
-          holdOf.set(r.id, {
-            kind: "manual-pairing",
-            filed: isFiled(r.timestamp),
-            id: r.id,
-            legIds: manual.map((l) => l.legId),
-            reason: dependentReason(manual),
-            held: [],
-          });
+    }
+    for (const [d, manual] of [...dependent]) {
+      const kept = legsOfDelete(d);
+      if (d.id !== null) for (const r of eventOf.get(d.id) ?? []) grew = hold(r, manual) || grew;
+      for (const other of plan.delete) {
+        if (other.manual || dependent.has(other)) continue;
+        if (kept.some((k) => legsOfDelete(other).some((l) => sameMove(l, k.currency, k.quantity, k.timestamp)))) {
+          dependent.set(other, manual);
+          grew = true;
+        }
+      }
+      // Only what this plan would upload: a row with no upload moves nothing
+      for (const r of rows.filter((r) => rowsById.has(r.id) && r.type !== "spam")) {
+        if (kept.some((k) => sameMove(k, r.baseCurrency, Number(r.baseAmount), r.timestamp)))
+          for (const e of eventOf.get(r.id) ?? [r]) grew = hold(e, manual) || grew;
       }
     }
   }

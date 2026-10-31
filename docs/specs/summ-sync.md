@@ -569,12 +569,13 @@ with the entries left out:
 
 - a delete of an acquisition a manual entry sends on: a leg coming in, not ignored, and a manual leg going out, not
   ignored, with the same currency and amount, up to a day after. With the acquisition gone, the entry would dispose from
-  nothing, a false gain. A row within a day replaces the acquisition if it goes ahead in this plan and is managed, or is
-  categorised and has a leg in Summ; spam, a held row and one held back replace nothing, and a row whose quote only names
-  the asset, such as a bridge's, does not acquire it. Otherwise the delete is held, with its row's event, or with no row
-  the events of rows moving what its legs hold within a day, since those would remake legs that stay. A manual entry
-  named in `deleteManualEntries` sends nothing on. A disposal of part of the amount, under another amount, or added after
-  the pull is not seen; Summ's zero-cost warnings show those.
+  nothing, a false gain. A row within a day of the acquisition and not after the disposal replaces it, if it goes ahead
+  in this plan and is managed, or is categorised and has a leg in Summ; spam, a held row and one held back replace
+  nothing, and a row whose quote only names the asset, such as a bridge's, does not acquire it. Otherwise the whole old
+  event stays: the delete, its row's event, other deletes moving the same currency and amount within a day, and rows to
+  upload that move them, since these would take the amount out twice or count it twice. A manual entry named in
+  `deleteManualEntries` sends nothing on. A disposal of part of the amount, under another amount, or added after the pull
+  is not seen, nor is a remaking row whose amount differs by a fee; Summ's zero-cost warnings show the first of these.
 
 **Filed years.** An entry whose row or leg is dated before `filedBefore` is
 an amendment: listed under its own heading in each section and applied only
@@ -649,7 +650,7 @@ tx waits or names a row outside the scope that the full plan uploads. A row
 outside the scope that Summ already holds, or that Summ imports itself,
 loses nothing, so it does not stop the delete. Held entries with no row are
 listed when the scope matches their legs, without this check (nothing is
-deleted). The plan is made from the whole run, as without `--only`, then
+deleted), and those held for a manual entry that sends on what they acquire whatever the scope. The plan is made from the whole run, as without `--only`, then
 keeps only what concerns the rows in scope: their deletes, edits, uploads,
 categorisations, adoptions, superseded extra rows, held entries, reports (a
 report with no row when it names one in scope) and overrides; and the

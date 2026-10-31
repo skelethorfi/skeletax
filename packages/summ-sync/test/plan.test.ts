@@ -3212,3 +3212,60 @@ test("a held delete of what a manual entry sends on stays listed whatever the sc
   assert.deepEqual(p.delete, []);
   assert.equal(p.held[0].dependent, true);
 });
+
+test("the whole old event stays with a held delete, and a replacing row must come before the disposal", () => {
+  const T = "2024-03-01T10:00:00.000Z";
+  const oldLeg = (legId: string, side: Leg["side"], trade: string, currency: string, quantity: number, n: string) =>
+    ownLeg({
+      legId,
+      actionId: legId,
+      side,
+      trade,
+      currency,
+      quantity,
+      source: "csv-source",
+      importType: "manual-csv",
+      id: `2024-03-01T10:00:00.000Z.in.${n}`,
+      timestamp: T,
+    });
+  const manual = ownLeg({
+    legId: "man",
+    actionId: "m",
+    trade: "sell",
+    currency: "ETH",
+    quantity: 0.5,
+    importType: "manual",
+    source: "manual",
+    id: "hand",
+    timestamp: "2024-03-01T10:01:00.000Z",
+  });
+  const trade = [
+    oldLeg("buy", "incoming", "buy", "ETH", 0.5, "000000000001"),
+    { ...oldLeg("out", "outgoing", "sell", "RUNE", 9, "000000000001"), actionId: "buy" },
+  ];
+  trade[0].actionId = "buy";
+  const fed = oldLeg("fed", "incoming", "deposit", "RUNE", 9, "000000000002");
+  const sent = oldLeg("sent", "outgoing", "withdrawal", "ETH", 0.5, "000000000003");
+  const elsewhere = {
+    ...oldLeg("far", "incoming", "deposit", "RUNE", 9, "000000000004"),
+    timestamp: "2024-06-01T00:00:00.000Z",
+  };
+  const p = plan({ legs: [...trade, fed, sent, elsewhere, manual] }).plan;
+  assert.deepEqual(
+    p.delete.map((d) => d.legIds[0]),
+    ["far"],
+  );
+  assert.equal(p.held.filter((h) => h.dependent).length, 3);
+  // A chain: a row held by the event no longer replaces another delete's acquisition
+  const late = row({
+    type: "receive",
+    baseCurrency: "ETH",
+    baseAmount: "0.5",
+    quoteCurrency: "",
+    quoteAmount: "",
+    timestamp: "2024-03-01T10:30:00.000Z",
+  });
+  const q = plan({ rows: [late], legs: [...trade, manual] }).plan;
+  assert.deepEqual(q.delete, []);
+  assert.deepEqual(q.upload, []);
+});
