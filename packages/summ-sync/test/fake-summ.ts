@@ -4,7 +4,10 @@
 // take its time. Its step counter ticks on every tool call and, through tick(), on every durable file operation:
 // at step n the process dies (everything after throws Died), or a user edit lands.
 
-import type { ToolCaller } from "../src/apply.ts";
+import type { PlanFile, ToolCaller } from "../src/apply.ts";
+import { parseDetail } from "../src/parse.ts";
+import { legValues } from "../src/plan.ts";
+import { legsOf } from "../src/snapshot.ts";
 
 export interface FakeLeg {
   price?: number;
@@ -23,6 +26,24 @@ export interface FakeLeg {
   blockchain?: string;
   description?: string;
   source?: string;
+  feeQuantity?: number;
+  feeCurrency?: string;
+  comments?: { comment: string }[];
+}
+
+/** The plan as a pull of this Summ would have named its deletes: the values of their legs, and the legs beside them. */
+export function named<T extends Pick<PlanFile, "delete">>(summ: FakeSumm, plan: T): T {
+  for (const d of plan.delete) {
+    if (d.legs) continue;
+    const actions = new Map(
+      d.legIds.flatMap((id) => (summ.holder(id) ? [summ.holder(id) as [string, FakeLeg[]]] : [])),
+    );
+    const legs = [...actions].flatMap(([id, held]) => legsOf(parseDetail(summ.render(id, held))));
+    d.legs = legs.filter((l) => d.legIds.includes(l.legId)).map(legValues);
+    d.others = legs.filter((l) => !d.legIds.includes(l.legId)).map(legValues);
+    d.actionIds = [...actions.keys()];
+  }
+  return plan;
 }
 
 export class Died extends Error {
@@ -53,6 +74,11 @@ export class FakeSumm implements ToolCaller {
   userEdits = new Map<number, (summ: FakeSumm) => void>();
   history = new Map<string, string[]>();
   steps = 0;
+  /** In place of the list of manual entries: an answer it cannot read. */
+  manualListText: string | null = null;
+  /** Lists give at most this many per page. */
+  pageSize = 250;
+
   dead = false;
   /** Local currency per USD: Summ converts a price given in USD at its own rate. */
   usdRate = 1;
@@ -163,6 +189,19 @@ export class FakeSumm implements ToolCaller {
                 (this.actions.get(id) ?? []).map((l) => l._id),
               ) ?? []),
     });
+    if (name === "query_summ_transactions" && (args.filter as { type: string }).type === "importType") {
+      if (this.manualListText !== null) return this.manualListText;
+      const hits = [...this.actions].filter(([, legs]) => legs.some((l) => l.importType === "manual"));
+      if (!hits.length)
+        return "# Transactions (Page 1 of 1, 0 returned, 0 total)\n\nNo transactions found matching your filters.";
+      const size = Math.min(args.count as number, this.pageSize);
+      const page = args.page as number;
+      const shown = hits.slice((page - 1) * size, page * size);
+      return [
+        `# Transactions (Page ${page} of ${Math.ceil(hits.length / size)}, ${shown.length} returned, ${hits.length} total)`,
+        ...shown.map(([actionId], i) => `## ${i + 1}. Send\n- **Action ID**: \`${actionId}\`\n`),
+      ].join("\n");
+    }
     if (name === "query_summ_transactions") {
       const ids = (args.filter as { value: string[] }).value;
       const view: [string, string[]][] = this.searchView

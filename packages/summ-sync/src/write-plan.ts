@@ -9,7 +9,16 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { extraDirsOf, loadConfig } from "./config.ts";
-import { type Change, makePlan, type EditEntry, parseScope, type Plan, type ValueMatch } from "./plan.ts";
+import {
+  type Change,
+  type DeleteEntry,
+  type EditEntry,
+  type LegValues,
+  makePlan,
+  parseScope,
+  type Plan,
+  type ValueMatch,
+} from "./plan.ts";
 import { parseCsvLine, readRun, type Row, type RunFile } from "./run.ts";
 import { latestSnapshot, type PullRange, readSnapshot, readSnapshotFile } from "./snapshot.ts";
 import { readAdopted, readApplyLog, readLeftLegs, readOverrides } from "./state.ts";
@@ -52,7 +61,10 @@ function section<T extends { filed: boolean }>(
   const out = [`## ${title} (${entries.length})`, ""];
   for (const [label, part] of [
     ["", entries.filter((e) => !e.filed)],
-    ["### Amendments (filed years): apply only with --approve-filed", entries.filter((e) => e.filed)],
+    [
+      "### Amendments (filed years): apply only with --approve-filed\n\nA change here to an amount, price or type also moves the cost bases of later disposals of these assets, into later years and the current year, once Summ recalculates.",
+      entries.filter((e) => e.filed),
+    ],
   ] as const) {
     if (part.length === 0) continue;
     if (label) out.push(label, "");
@@ -60,6 +72,19 @@ function section<T extends { filed: boolean }>(
   }
   if (entries.length === 0) out.push("None.", "");
   return out;
+}
+
+/** One leg a delete removes or leaves, as the plan holds it. */
+function legLine(e: DeleteEntry, what: string, l: LegValues): string {
+  return `| ${show(e.id)} | ${cell(e.summId)} | ${cell(e.reason)} | ${what} | \`${l.legId}\` | ${l.side} | ${cell(l.trade)} | ${cell(l.currency)} | ${l.quantity} | ${l.feeQuantity === null ? "–" : `${l.feeQuantity} ${show(l.feeCurrency)}`} | ${l.timestamp} | ${cell(l.source)} | ${cell(l.importType)} | ${cell(l.comments.join("; "))} |`;
+}
+
+/** What becomes of a leg beside a delete: another entry may delete it. */
+function fateOf(plan: Plan, l: LegValues): string {
+  const other = plan.delete.find((d) => d.legIds.includes(l.legId));
+  if (other) return `deleted by ${other.id ?? other.summId}`;
+  if (l.importType === "soft-transfer") return "stays, ignored: Summ made it up";
+  return l.importType === "assumed-fee" ? "stays; Summ-made, its id does not last" : "stays";
 }
 
 /** Where a file on an unmanaged chain goes: its rows have no tx of that chain (PROTOCOL_TYPES), so not into its wallet. */
@@ -108,11 +133,15 @@ export function renderPlan(plan: Plan, snapshot: string, run: string, legs: Map<
       (es) => ["| Extra row | Run row |", "| --- | --- |", ...es.map((e) => `| ${cell(e.extra)} | ${cell(e.run)} |`)],
     ),
     ...section("Delete (only with --approve-deletes)", plan.delete, (es) => [
-      "| Row | ID in Summ | Legs | Other legs in the actions | Reason |",
-      "| --- | --- | --- | --- | --- |",
-      ...es.map(
-        (e) => `| ${show(e.id)} | ${cell(e.summId)} | ${e.legIds.length} | ${e.otherLegs} | ${cell(e.reason)} |`,
-      ),
+      'Deletes are permanent. Apply compares each leg here with a fresh read, and stops on any difference, or on any other leg in the action. A leg that stays is split from what is deleted, and Summ may then change its category. A delete marked "no txid" has none to look for, so the check for a manual entry naming it could not apply: only a manual entry in its action stops it.',
+      "",
+
+      "| Row | ID in Summ | Reason | What happens | Leg | Side | Type | Currency | Amount | Fee on the leg | Date | Source | Import type | Comments |",
+      "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+      ...es.flatMap((e) => [
+        ...(e.legs ?? []).map((l) => legLine(e, e.txids?.length ? "deleted" : "deleted; no txid", l)),
+        ...(e.others ?? []).map((l) => legLine(e, fateOf(plan, l), l)),
+      ]),
     ]),
     ...section("Edit", withoutPrices, (es) => [
       "| Row | Leg | Field | Summ | Desired |",

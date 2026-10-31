@@ -59,7 +59,59 @@ export interface EditEntry {
    * be ignored once the leg is categorised and Summ has split it off into an action of its own.
    */
   ignore?: string[];
+  /** The row's txids: a manual entry naming one at apply stops the entry. A plan made before these has none. */
+  txids?: string[];
 }
+
+/** A leg as the pull read it: what a delete shows in plan.md, and compares with a fresh read at apply. */
+export interface LegValues {
+  legId: string;
+  side: string;
+  id: string;
+  trade: string;
+  currency: string;
+  quantity: number;
+  timestamp: string;
+  source: string;
+  importType: string;
+  from: string;
+  to: string;
+  blockchain: string;
+  description: string;
+  price: number | null;
+  /** The fee Summ keeps on the leg itself: it goes with the leg. */
+  feeQuantity: number | null;
+  feeCurrency: string | null;
+  comments: string[];
+}
+
+export const legValues = (l: Leg): LegValues => ({
+  legId: l.legId,
+  side: l.side,
+  id: l.id,
+  trade: l.trade,
+  currency: l.currency,
+  quantity: l.quantity,
+  timestamp: l.timestamp,
+  source: l.source,
+  importType: l.importType,
+  from: l.from,
+  to: l.to,
+  blockchain: l.blockchain,
+  description: l.description,
+  price: l.price ?? null,
+  feeQuantity: l.feeQuantity ?? null,
+  feeCurrency: l.feeCurrency ?? null,
+  comments: l.comments,
+});
+
+/** The txids a manual entry names: in its description or comments, or as its Tx Hash. */
+export const txidsNamedBy = (l: Leg): string[] => [
+  ...new Set([
+    ...[...[l.description, ...l.comments].join(" ").matchAll(/[0-9a-fA-F]{64}/g)].map((m) => m[0].toLowerCase()),
+    ...(/^[0-9a-f]{64}$/.test(normaliseTxid(l.id)) ? [normaliseTxid(l.id)] : []),
+  ]),
+];
 
 export interface DeleteEntry {
   /** The row the legs belong to, or null when the run has no row for them. */
@@ -72,6 +124,12 @@ export interface DeleteEntry {
   reason: string;
   /** Legs of other rows or sources in the same actions (deleting by action would remove them too). */
   otherLegs: number;
+  /** The values of `legIds`, compared at apply. A plan made before these has none, and its deletes are refused. */
+  legs?: LegValues[];
+  /** The other legs by name: any other leg in the action at apply stops the entry. */
+  others?: LegValues[];
+  /** The row's txids, or with no row those its legs name: a manual entry naming one at apply stops the entry. */
+  txids?: string[];
 }
 
 export interface UploadEntry {
@@ -585,6 +643,9 @@ export function makePlan(input: PlanInput): PlanResult {
       actionIds,
       reason,
       otherLegs: others.length,
+      legs: legs.map(legValues),
+      others: others.map(legValues),
+      txids: (row ? row.txids : txidsOf(legs)).filter((t) => !/^0+$/.test(t)),
     });
   };
   for (const [id, legs] of groups) {
@@ -1172,8 +1233,7 @@ export function makePlan(input: PlanInput): PlanResult {
     `a manual entry is in a Summ action of this event or names its txid (${manual.map((l) => `${l.quantity} ${l.currency}`).join(", ")}): the user's pairing; resolve it in Summ`;
   const manualNaming = new Map<string, Leg[]>();
   for (const leg of input.legs.filter((l) => l.importType === "manual")) {
-    for (const t of new Set(txidsOf([{ ...leg, description: [leg.description, ...leg.comments].join(" ") }])))
-      manualNaming.set(t, [...(manualNaming.get(t) ?? []), leg]);
+    for (const t of txidsNamedBy(leg)) manualNaming.set(t, [...(manualNaming.get(t) ?? []), leg]);
   }
   const legsOfRow = new Map(matched);
   for (const [row, leg] of categorised) legsOfRow.set(row.id, [...(legsOfRow.get(row.id) ?? []), leg]);
@@ -1247,7 +1307,14 @@ export function makePlan(input: PlanInput): PlanResult {
       });
       return false;
     } else if (d.id === null) {
-      const manual = manualIn(d.actionIds);
+      const manual = [
+        ...new Map(
+          [...manualIn(d.actionIds), ...(d.txids ?? []).flatMap((t) => manualNaming.get(t) ?? [])].map((l) => [
+            l.legId,
+            l,
+          ]),
+        ).values(),
+      ];
       if (manual.length)
         plan.held.push({
           kind: "manual-pairing",
@@ -1341,16 +1408,15 @@ export function makePlan(input: PlanInput): PlanResult {
   const txidRows = new Map<string, string>();
   for (const row of rows) for (const t of row.txids) txidRows.set(t, row.id);
   for (const leg of input.legs.filter((l) => l.importType === "manual")) {
-    const text = [leg.description, ...leg.comments].join(" ");
-    for (const m of text.matchAll(/[0-9a-fA-F]{64}/g)) {
-      const id = txidRows.get(m[0].toLowerCase());
+    for (const txid of txidsNamedBy(leg)) {
+      const id = txidRows.get(txid);
       if (id)
         plan.report.push({
           kind: "manual-entry",
           filed: isFiled(leg.timestamp),
           id,
           legIds: [leg.legId],
-          txids: [m[0].toLowerCase()],
+          txids: [txid],
           detail: "a manual entry names the row's txid",
         });
     }
@@ -1359,6 +1425,13 @@ export function makePlan(input: PlanInput): PlanResult {
   // ---- Overrides whose row is gone from the run
   const runIds = new Set(rows.map((r) => r.id));
   for (const override of overrides) if (!runIds.has(override.id)) plan.overridden.push({ kind: "gone", override });
+
+  // ---- What apply re-checks manual entries against
+  const rowOf = new Map(rows.map((r) => [r.id, r]));
+  for (const e of [...plan.edit, ...plan.categorise]) {
+    const txids = (rowOf.get(e.id)?.txids ?? []).filter((t) => !/^0+$/.test(t));
+    if (txids.length) e.txids = txids;
+  }
 
   if (input.scope) narrow(plan, input.scope, rows, legsOf, eventOf);
 

@@ -22,7 +22,7 @@ import { type DeleteEntry, type EditEntry, makePlan } from "../src/plan.ts";
 import { legsOf as legsOfDetail } from "../src/snapshot.ts";
 import { prune } from "../src/prune.ts";
 import { readApplyLog, readLeftLegs } from "../src/state.ts";
-import { Died, type FakeLeg, FakeSumm } from "./fake-summ.ts";
+import { Died, type FakeLeg, FakeSumm, named } from "./fake-summ.ts";
 
 // Thousands of applies: the disk is not what these tests are about. journal's own tests run with it
 durability.sync = () => {};
@@ -135,6 +135,7 @@ function everyType(): { summ: FakeSumm; plan: PlanFile } {
 
 /** A state dir holding the plan and a snapshot of Summ as it is now, with its details. */
 function stateFor(summ: FakeSumm, plan: PlanFile): { dir: string; planDir: string } {
+  named(summ, plan);
   const dir = mkdtempSync(join(tmpdir(), "summ-sync-resume-"));
   const planDir = join(dir, "plans", "p");
   mkdirSync(planDir, { recursive: true });
@@ -664,7 +665,12 @@ test("look-ups go by transactionId and never through the lagging search", async 
   summ.searchLag = 100;
   const { dir, planDir } = stateFor(summ, plan);
   await once(summ, dir, planDir);
-  assert.equal(summ.calls.filter((c) => c.name === "query_summ_transactions").length, 0);
+  assert.deepEqual(
+    summ.calls.filter(
+      (c) => c.name === "query_summ_transactions" && (c.args.filter as { type: string }).type !== "importType",
+    ),
+    [],
+  );
 });
 
 // ---- Failed reads and writes in the log

@@ -522,8 +522,14 @@ Summ or in the state dir: `apply` adds the legs the plan adopted and the
 overrides it captured to `adopted.csv` and `overrides.json` as they are
 then (not on a dry run), so a plan that is never applied changes nothing
 later plans assume, and an override edited by hand after the plan is kept. Each change names the row `ID`, the leg `_id`, the field, Summ's
-value and the desired value; each delete names the legs and how many other
-legs share their actions (a delete by action would remove those too).
+value and the desired value. Each delete holds, for its legs and for every other
+leg sharing their actions, the leg's values (`side`, `trade`, currency, quantity,
+timestamp, source, import type, row `ID`, from, to, blockchain, description, price, the fee
+held on the leg, comments), and its row's txids. `plan.md` shows each of those legs, one line each, and whether it
+is deleted, deleted by another entry, stays, or stays and is ignored as made up. Apply compares them
+(Deletes below). A delete with no txids (no row, and no txid in its legs' descriptions: usually an old ID)
+is marked `no txid`: there is nothing to look for, so a manual entry naming it cannot be seen, and only one
+in its action stops it.
 
 | Section    | Contents                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Applied as                                                                                                                                                         |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -553,12 +559,16 @@ with the entries left out:
   delete, split or edit there could break it, and an upload or a categorise
   beside it could count the same asset twice (a manual receive standing in
   for a swap's payout, next to the import's own receive of it). Legs with no
-  row in the run whose action holds a manual entry are not deleted either.
+  row in the run whose action holds a manual entry, or whose txid a manual entry
+  names, are not deleted either. A manual entry names a txid in its description, its comments or its Tx Hash.
+
   The user resolves the pairing in Summ, or the run, and plans again.
 
 **Filed years.** An entry whose row or leg is dated before `filedBefore` is
 an amendment: listed under its own heading in each section and applied only
-with `--approve-filed`, in a separate apply from the current year.
+with `--approve-filed`, in a separate apply from the current year. Under that
+heading the plan says that a change there to an amount, price or type also moves the cost bases of later
+disposals of those assets, in later years and the current one, once Summ recalculates.
 
 **Drift and overrides.** A value the user changed in Summ is kept, never
 set back by default. Summ's change history labels every edit through the
@@ -676,7 +686,8 @@ since it may have been made before the error):
    out of this: once Summ re-pairs the categorised leg with another (e.g. an uploaded
    bridge-trade-in), the edit's handle is stale.
 5. Only when every entry is done: add the plan's adoptions and captures to the tables
-   (idempotent), log `apply-stop` with `reason: complete`, and print the upload files.
+   (idempotent), log `apply-stop` with `reason: complete`, and print the upload files,
+   unless a row in them waits on a delete (Uploads below).
    A finished plan run again reports that it is complete and does nothing.
 6. Write the journal as it goes (below): each call, its result and its undo
    handle, one line per changed field (`legId`, `field`, `value`) for
@@ -723,7 +734,34 @@ A price found done gets a line in the shape of the one after a price edit, so pl
 same recorded price. An entry found at its after-value with no intent logged is not recorded
 as the sync's own edit, so it is not taken for one later.
 
-**Deletes.** Read every leg, then by what that shows, and read again after each step:
+**Manual entries.** Before a delete entry's split, and before the reads that agree on its
+delete, apply lists the actions holding a manual entry (`importType` filter, every page) and reads
+each. A manual entry naming one of the entry's txids (the row's, or with no row those its legs name)
+stops the entry. An edit or categorisation with txids checks the same, against one list read for the
+run's edits. A list stays good until the run's next write. Every page is read, and the actions must
+reach its `total`. An answer that is neither a list nor Summ's own empty answer (`0 total` and "No transactions
+found matching your filters."), or an action listed with no manual entry in it, stops. Any manual entry in the action of a leg to delete stops too. A plan
+holds back an event with a manual entry it can see, so these are the ones added since the pull.
+
+**Deletes.** Before anything else, a plan whose delete holds no values (made by an older version) is
+refused when deletes are approved, dry run too: pull and plan again. Every read of a delete's legs
+is compared with the plan, and any difference stops the entry before its next write:
+
+- each leg's row `ID`, currency, quantity, timestamp, source and import type, always.
+- its `side` and `trade`, unless it now reads ignored and this plan logged its split, even by intent alone
+  (a crash can lose the result); a fee leg then reads outgoing. A leg not ignored is compared whatever was logged.
+- its from, to, blockchain, description, price, fee on the leg and comments (a hand edit a delete would lose),
+  unless it reads ignored and the split's result line shows the split landed.
+
+- any leg in the action the plan does not name: a partner Summ paired after the pull, or a made-up
+  leg. It is neither split from nor ignored. Allowed: legs of this apply's other deletes and their
+  made-up legs, and Summ-made `assumed-fee` legs, whose ids do not last.
+- each named other leg still there: its identity fields and `trade`; a named leg that has left.
+  After a split in that action by this plan, its `trade` and its leaving are not compared, as
+  Summ may retype or re-pair what stays.
+
+A leg's action is read by its `_id`; no filter chooses what is written. Then, by what the read shows,
+and read again after each step:
 
 | The legs                                 | Then                                                                                                                                                                                                                                   |
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -735,10 +773,22 @@ as the sync's own edit, so it is not taken for one later.
 | sharing, ignored, no split logged        | stop: an edit to the same type would not split it, and the ignore is not the sync's                                                                                                                                                    |
 | alone                                    | two reads, a few seconds apart, must agree on the action ids and their legs; then delete by action id                                                                                                                                  |
 
+A bulk delete removes whole actions. What guards that is the `alone` row: no action is sent unless
+the read just before shows it holds only the entry's legs. A leg joining after that read would go with
+it, and only `Bulk delete removed N` shows it: N must equal the entry's legs, or the run stops.
+
 Never by a filter. A receive or send Summ made up to pair the deleted leg as a transfer (Made-up
 legs above) is named on the split's lines (`madeUp`), since nothing else names it once the leg is
 gone, and is then ignored as in step 4. Summ cannot undo a delete; a deleted row comes back by
 uploading its CSV line again, and its pre-image (Journal) shows what Summ held.
+
+**Uploads.** A row both deleted and uploaded by the plan (a remake) must not be uploaded before
+its delete: Summ would hold the new version beside the old, and count its disposal or income twice.
+The same can hold for a delete with no row, whose new version carries another ID. So apply prints no upload
+list while any delete it selected is not made: not on a run without `--approve-deletes` (also when it reports
+that plan complete), a stop or a signal. It says not to upload, and what to do next: run with the flag, or again,
+and pull and plan if refused. A dry run has made no delete: with the flag it says what a live run would then
+list; it never tells to upload while a delete is to come.
 
 **Results.** Summ reports a wrong id as a success that did nothing, so every result is checked and
 every write read back. `Patched N`, `Bulk delete removed N` and `Bulk ignore updated N` must report
@@ -774,7 +824,8 @@ stops before its split or its permanent delete. A second stops at once, which is
 What a resume cannot tell: a user's edit in the moment between the read and the write is overwritten
 (the read and the write are not atomic; the pre-image and the change history keep it). A crash during a USD
 edit is inferred, so a hand edit after it, marked USD, with no confirmed `after`, reads as the sync's. A
-delete compares no field (a later change). `updatedAt` moves on Summ's rebuilds too.
+leg joining an action between the last read and its delete is seen only in the removed count, after the fact.
+`updatedAt` moves on Summ's rebuilds too.
 
 **Journal.** Every write to Summ (split edit, delete, edit, ignore), in this order:
 
