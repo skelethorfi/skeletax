@@ -616,7 +616,7 @@ since it may have been made before the error):
    Already ignored: done. Gone: done if this plan logged its ignore, otherwise stop. No
    longer a made-up leg: stop. Still sharing: left as it is, reported in the run's output, and logged
    with a `skip` line naming it (`leftLeg`), and the run goes on, since its entry's own write stands.
-   The leg stays counted on its own until it is ignored. Every later plan reports it (`made-up-left`,
+   The leg stays counted on its own until it is ignored. Every later full plan reports it, and a scoped plan when its row is in scope (`made-up-left`,
    with its row, if any, and why), whether a delete or a categorise left it, for as long as the pull finds it
    in Summ and not ignored; pull reads its action by the leg's id for that. A leg outside a pull's range is not
    seen, as the range's limits say. Older `skip` lines name no leg and are not reported. An undo handle cannot be relied on to back
