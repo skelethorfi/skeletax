@@ -2974,7 +2974,7 @@ test("deleteManualEntries: one entry that cannot go keeps them all; two that sha
   }).plan;
   assert.deepEqual(blocked.delete, []);
   assert.deepEqual(blocked.upload, []);
-  assert.ok(blocked.held.some((h) => h.legIds[0] === "m1" && /none goes until it can/.test(h.reason)));
+  assert.ok(blocked.held.some((h) => h.legIds?.[0] === "m1" && /none goes until it can/.test(h.reason)));
   const going = plan({ rows, legs: [hand("m1", [TX1, TX3]), hand("m2", [TX1, TX2])], config: named }).plan;
   assert.deepEqual(
     going.delete.map((d) => d.legIds[0]),
