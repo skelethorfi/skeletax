@@ -404,13 +404,14 @@ The USD price a leg holds is:
 
 1. when the log has a `price` line for the leg: the latest line's value, if the
    leg still shows that line's `after`;
-2. with no such line, no override decided on the leg's price and no `user` `Price` line in the action's history:
-   the reference price of the row in the newest `plans/*/upload/` file made before the leg's `createdAt`, by the
-   time in the plan folder's name. A file with no price for the row, or no such file, gives none, and the leg is
-   edited once. So a newer plan's file does not count for a leg already in Summ. A row uploaded outside a plan has
-   none. A file does not prove it was the one uploaded: a plan made after the upload file's plan and before the
-   upload is taken as the source. A user edit older than the history window Summ shows reads as the sync's. A leg
-   with no `createdAt` (an old import) goes by the newest file, and only if marked USD;
+2. with no such line, no override decided on the leg's price and no `user` `Price` line in the action's history,
+   on a leg from a managed source: the reference price of the row in the `plans/*/upload/` files made before the leg's
+   `createdAt`, by the time in the plan folder's name, if they all give the same price. Any of them can be the one
+   uploaded, so files that disagree, a file with no price, or no such file give none, and the leg is edited once, to
+   the same USD price at worst. A newer plan's file does not count for a leg already in Summ. A leg uploaded from
+   outside `plans/` is taken to hold what those files say. A user edit or a Summ repricing older than the history
+   window Summ shows reads as holding that price. A leg with no `createdAt`, or from another source (Summ's own
+   import), goes by the newest file, and only if marked USD;
 3. otherwise none.
 
 **Plan.** For a managed base leg, and an import's leg matched to a categorised row

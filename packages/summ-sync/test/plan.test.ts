@@ -1967,6 +1967,12 @@ test("price: an upload holds its file's price though Summ does not mark it, by t
   // Uploaded from a file with no price
   const blank = new Map([[r.id, [at("2026-01-01T00:00:00Z", null)]]]);
   assert.equal(priceEdits(plan({ rows: [r], legs: legs("2026-02-01T00:00:00Z"), uploadFiles: blank }).plan).length, 1);
+  // Files that disagree: any can be the one uploaded, so it is edited once
+  const added = new Map([[r.id, [at("2026-01-01T00:00:00Z", null), at("2026-01-15T00:00:00Z", 2.5)]]]);
+  assert.equal(priceEdits(plan({ rows: [r], legs: legs("2026-02-01T00:00:00Z"), uploadFiles: added }).plan).length, 1);
+  // A file made after the leg does not count, nor one in the same instant
+  const later = new Map([[r.id, [at("2026-02-01T00:00:00Z", 2.5)]]]);
+  assert.equal(priceEdits(plan({ rows: [r], legs: legs("2026-02-01T00:00:00Z"), uploadFiles: later }).plan).length, 1);
   // A user's price edit is still theirs
   const edited = plan({
     rows: [r],
@@ -2658,6 +2664,19 @@ test("import price: price alone is planned once categorised, and nothing once it
     history: new Map([["l1", [USER_PRICE]]]),
   });
   assert.ok(empty(after), JSON.stringify(after, null, 1));
+});
+
+test("import price: Summ's own import leg is not an upload, whatever a plan's file says", () => {
+  const r = swapRow({ feeCurrency: "", feeAmount: "" });
+  const leg = {
+    ...ownLeg({ quantity: 0.01, trade: "bridgeTradeOut", price: 90000 }),
+    createdAt: "2026-02-01T00:00:00Z",
+  };
+  const uploadFiles = new Map([[r.id, [{ planTime: Date.parse("2026-01-01T00:00:00Z"), price: 60000 }]]]);
+  assert.deepEqual(
+    plan({ rows: [r], legs: [leg], uploadFiles }).plan.categorise[0].changes.map((c) => c.field),
+    ["price"],
+  );
 });
 
 test("import price: other categorised rows, and rows with no price, stay at market", () => {

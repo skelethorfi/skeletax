@@ -14,10 +14,14 @@ export interface UploadedFile {
   price: number | null;
 }
 
-/** The price in the newest plan file made before the leg existed: what the user can have uploaded. */
+/**
+ * The price every plan file made before the leg existed gives it: any of them can be the one uploaded, so files that
+ * disagree (a price added in a later plan) give none, and the leg is edited once to the same USD price at worst.
+ */
 export function priceUploadedBefore(files: UploadedFile[] | undefined, createdAt: string): number | null {
   const created = Date.parse(createdAt);
-  return files?.filter((f) => f.planTime < created).at(-1)?.price ?? null;
+  const before = files?.filter((f) => f.planTime < created) ?? [];
+  return before.length && before.every((f) => f.price === before[0].price) ? before[0].price : null;
 }
 
 export interface PlanInput {
@@ -490,7 +494,7 @@ export function makePlan(input: PlanInput): PlanResult {
     const recorded = stands
       ? Number(own.value)
       : !own && !decided && users === 0
-        ? base.createdAt
+        ? base.createdAt && managedSources.has(base.source)
           ? priceUploadedBefore(input.uploadFiles?.get(row.id), base.createdAt)
           : base.priceValueCurrency === "USD"
             ? (input.uploadedPrices?.get(row.id) ?? null)
