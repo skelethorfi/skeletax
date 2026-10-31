@@ -31,7 +31,9 @@ function git(stateDir: string, args: string[]): string[] {
 function keptForRollback(stateDir: string): { actions: Set<string>; snapshots: Set<string> } {
   const actions = new Set<string>();
   const snapshots = new Set<string>();
-  const lines = readLogLines<{ operation?: string; actionIds?: string[]; saved?: string | string[]; pre?: string }>(stateDir);
+  const lines = readLogLines<{ operation?: string; actionIds?: string[]; saved?: string | string[]; pre?: string }>(
+    stateDir,
+  );
   for (const l of lines) {
     if (l.operation === "delete" && Array.isArray(l.actionIds)) for (const id of l.actionIds) actions.add(id);
     // One file on a split's lines, a list on a delete's

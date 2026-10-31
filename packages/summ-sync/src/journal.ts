@@ -16,6 +16,7 @@ import {
   readdirSync,
   readFileSync,
   renameSync,
+  rmSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -145,7 +146,7 @@ export function takeLock(stateDir: string, isAlive: (pid: number) => boolean = p
 }
 
 export function releaseLock(stateDir: string): void {
-  unlinkSync(lockFile(stateDir));
+  rmSync(lockFile(stateDir), { force: true });
 }
 
 /** A row's exact line in a CSV file, to upload it again. */

@@ -166,7 +166,8 @@ export function startState(
     return "first";
   }
   const last = starts[starts.length - 1];
-  if (last.planSha !== sha) throw new Error(`plan.json of ${planName} changed since its apply began: pull and plan again`);
+  if (last.planSha !== sha)
+    throw new Error(`plan.json of ${planName} changed since its apply began: pull and plan again`);
   const was = last.flags as Flags;
   if (was.approveDeletes !== flags.approveDeletes || was.approveFiled !== flags.approveFiled)
     throw new Error(
@@ -195,8 +196,9 @@ export function undoHandle(text: string): string | null {
 
 type Found = { actionId: string; legs: Leg[]; detail: ActionDetail };
 
-// How Summ answers a transaction id it does not hold. Any other failure is a failed read, which says nothing of the leg
-const ABSENT = /not found|no such|does not exist|no transaction/i;
+// How Summ's tool answers a transaction id it does not hold. Any other failure, a gateway's 404 too, is a failed read,
+// which says nothing of the leg
+const ABSENT = /^inspect_transaction: .*(not found|no such|does not exist|no transaction)/is;
 
 /** The action that holds a leg now (an action id can change on any write) and its legs; null when Summ has no such leg. */
 async function lookUp(client: ToolCaller, legId: string): Promise<Found | null> {
@@ -210,7 +212,10 @@ async function lookUp(client: ToolCaller, legId: string): Promise<Found | null> 
   const detail = parseDetail(text);
   const legs = legsOf(detail);
   if (!legs.some((l) => l.legId === legId))
-    throw new ApplyStop("bad-result", `Summ answered for leg ${legId} with action ${detail.action._id}, which lacks it`);
+    throw new ApplyStop(
+      "bad-result",
+      `Summ answered for leg ${legId} with action ${detail.action._id}, which lacks it`,
+    );
   return { actionId: detail.action._id, legs, detail };
 }
 
@@ -317,7 +322,11 @@ export async function applyPlan(
   };
 
   /** The legs as the actions a result names show them, once they agree (Summ settles a few seconds after a write). */
-  async function readBack(text: string, legIds: string[], agrees: (l: Leg) => boolean): Promise<Map<string, Leg> | null> {
+  async function readBack(
+    text: string,
+    legIds: string[],
+    agrees: (l: Leg) => boolean,
+  ): Promise<Map<string, Leg> | null> {
     for (let i = 0; i < READ_BACKS; i++) {
       if (i) await sleep(settleMs);
       const seen = new Map<string, Leg>();
@@ -341,20 +350,19 @@ export async function applyPlan(
     return lines.get(entry.summId) ?? (entry.id === null ? undefined : lines.get(entry.id)) ?? null;
   };
 
-  // ---- Deletes
   const deletes = selected(plan.delete, opts);
   const uploads = selected(plan.upload, opts);
   const categorise = selected(plan.categorise, opts);
-  const stopping = () => {
-    if (!context.signal?.requested) return false;
-    result.stopped = true;
-    return true;
-  };
-  if (deletes.length && !opts.approveDeletes) say(`Deletes: ${deletes.length} not applied (needs --approve-deletes)`);
-  else if (deletes.length) say(`Deletes: ${deletes.length}`);
-  for (const entry of opts.approveDeletes ? deletes : []) {
-    if (stopping()) return result;
-    await applyDelete(entry);
+  const edits = [
+    ...selected(plan.edit, opts).map((e) => ["edit", e] as const),
+    ...(uploads.length ? [] : categorise).map((e) => ["categorise", e] as const),
+  ];
+
+  // ---- Deletes
+  async function lookUpAll(legIds: string[]): Promise<(Found | null)[]> {
+    const reads: (Found | null)[] = [];
+    for (const legId of legIds) reads.push(await lookUp(client, legId));
+    return reads;
   }
 
   /**
@@ -379,15 +387,20 @@ export async function applyPlan(
     };
 
     for (;;) {
-      const reads = await Promise.all(entry.legIds.map((legId) => lookUp(client, legId)));
+      const reads = await lookUpAll(entry.legIds);
       const absent = entry.legIds.filter((_, i) => !reads[i]);
       if (absent.length === entry.legIds.length) {
         if (!mine().some((l) => l.operation === "delete"))
-          return conflict(key, entry.id, `leg ${absent.join(", ")} is no longer in Summ, and this plan did not delete it`);
+          return conflict(
+            key,
+            entry.id,
+            `leg ${absent.join(", ")} is no longer in Summ, and this plan did not delete it`,
+          );
         found(key, entry.id, { legIds: entry.legIds });
         break;
       }
-      if (absent.length) return conflict(key, entry.id, `leg ${absent.join(", ")} is no longer in Summ, the others are`);
+      if (absent.length)
+        return conflict(key, entry.id, `leg ${absent.join(", ")} is no longer in Summ, the others are`);
 
       const actions = new Map((reads as Found[]).map((f) => [f.actionId, f]));
       const shared = [...actions.values()].filter((f) => f.legs.some((l) => !entry.legIds.includes(l.legId)));
@@ -418,7 +431,9 @@ export async function applyPlan(
           continue;
         }
         if (!write)
-          return say(`  would split ${entry.legIds.length} legs of ${entry.summId} off their actions, then delete them`);
+          return say(
+            `  would split ${entry.legIds.length} legs of ${entry.summId} off their actions, then delete them`,
+          );
         const legs = ownLegs(next).filter((l) => !isIgnored(l));
         const repeat = legs.find((l) => splitThisRun.has(l.legId));
         if (repeat) return conflict(key, entry.id, `leg ${repeat.legId} is not ignored after its split was read back`);
@@ -478,7 +493,11 @@ export async function applyPlan(
     checkResult(key, text, PATCHED, legs.length, true);
     const ids = legs.map((l) => l.legId);
     if (!(await readBack(text, ids, isIgnored)))
-      throw new ApplyStop("read-back", `${key}: the actions the split names do not show ${ids.join(", ")} ignored`, key);
+      throw new ApplyStop(
+        "read-back",
+        `${key}: the actions the split names do not show ${ids.join(", ")} ignored`,
+        key,
+      );
   }
 
   async function remove(key: string, entry: DeleteEntry, actions: Map<string, Found>) {
@@ -488,7 +507,13 @@ export async function applyPlan(
     const tag = {
       operation: "delete",
       entry: key,
-      pre: savePre(key, "delete", entry.id, [...actions.values()].map((f) => f.detail), lineOf(entry)),
+      pre: savePre(
+        key,
+        "delete",
+        entry.id,
+        [...actions.values()].map((f) => f.detail),
+        lineOf(entry),
+      ),
       id: entry.id,
       summId: entry.summId,
       legIds: entry.legIds,
@@ -500,10 +525,14 @@ export async function applyPlan(
     write({ call: "bulk_edit_transactions", ...tag, result: text });
     checkResult(key, text, REMOVED, entry.legIds.length, false);
     for (let i = 0; ; i++) {
-      const left = (await Promise.all(entry.legIds.map((legId) => lookUp(client, legId)))).filter(Boolean);
+      const left = (await lookUpAll(entry.legIds)).filter(Boolean);
       if (!left.length) return;
       if (i + 1 >= READ_BACKS)
-        throw new ApplyStop("read-back", `${key}: Summ reported the delete, and still holds ${left.length} of its legs`, key);
+        throw new ApplyStop(
+          "read-back",
+          `${key}: Summ reported the delete, and still holds ${left.length} of its legs`,
+          key,
+        );
       await sleep(settleMs);
     }
   }
@@ -516,20 +545,6 @@ export async function applyPlan(
   }
 
   // ---- Edits, then categorisation: the same call on a managed row's legs or on Summ's own leg
-  if (uploads.length && categorise.length) {
-    result.heldBack = categorise.length;
-    say(`Categorisation: ${categorise.length} held back until the uploads are in Summ`);
-  }
-  const edits = [
-    ...selected(plan.edit, opts).map((e) => ["edit", e] as const),
-    ...(uploads.length ? [] : categorise).map((e) => ["categorise", e] as const),
-  ];
-  if (edits.length) say(`Edits and categorisation: ${edits.length}`);
-  for (const [kind, entry] of edits) {
-    if (stopping()) return result;
-    await applyEdit(kind, entry);
-  }
-
   async function applyEdit(kind: "edit" | "categorise", entry: EditEntry) {
     const key = `${kind}-${plan[kind].indexOf(entry)}`;
     if (entry.changes.length && !(await editLegs(kind, key, entry))) return;
@@ -547,7 +562,9 @@ export async function applyPlan(
       if (!now || now.legs.length === 1 || isIgnored(now.legs.find((l) => l.legId === legId) as Leg)) break;
     }
     if (!now) {
-      const ignoring = journal.some((l) => l.entry === key && l.operation === "ignore" && (l.legIds as string[]).includes(legId));
+      const ignoring = journal.some(
+        (l) => l.entry === key && l.operation === "ignore" && (l.legIds as string[]).includes(legId),
+      );
       if (ignoring) return found(key, id, { legIds: [legId] });
       return conflict(key, id, `made-up leg ${legId} is no longer in Summ, and this plan did not ignore it`);
     }
@@ -555,7 +572,8 @@ export async function applyPlan(
     if (isIgnored(leg)) return found(key, id, { legIds: [legId] });
     if (now.legs.length !== 1)
       return conflict(key, id, `made-up leg ${legId} still shares its action with ${now.legs.length - 1} other legs`);
-    if (leg.importType !== "soft-transfer") return conflict(key, id, `leg ${legId} is not a made-up leg (${leg.importType})`);
+    if (leg.importType !== "soft-transfer")
+      return conflict(key, id, `leg ${legId} is not a made-up leg (${leg.importType})`);
     // No legId or field: as ever, plan does not read an ignore as an edit
     const tag = {
       operation: "ignore",
@@ -642,7 +660,8 @@ export async function applyPlan(
       const l = was.find((w) => w.legId === h.legId);
       for (const field of l ? MATE_FIELDS : []) {
         const [a, b] = [(l as Leg)[field] ?? null, h[field] ?? null];
-        if (!same(field, a, b)) moved.push(`${field} of leg ${h.legId} is ${JSON.stringify(b)}, was ${JSON.stringify(a)}`);
+        if (!same(field, a, b))
+          moved.push(`${field} of leg ${h.legId} is ${JSON.stringify(b)}, was ${JSON.stringify(a)}`);
       }
     }
     return moved.length ? moved.join("; ") : null;
@@ -676,7 +695,17 @@ export async function applyPlan(
       // In the shape of the line after a price edit: plan reads from it what the sync's price is
       for (const { c, leg } of states)
         if (c.field === "price")
-          write?.({ call: "found", via: "found", entry: key, id: entry.id, legId: c.legId, field: "price", from: c.summ, value: c.desired, after: leg.price ?? null });
+          write?.({
+            call: "found",
+            via: "found",
+            entry: key,
+            id: entry.id,
+            legId: c.legId,
+            field: "price",
+            from: c.summ,
+            value: c.desired,
+            after: leg.price ?? null,
+          });
       return true;
     }
     const changedMates = matesChanged(first, now.legs);
@@ -743,14 +772,35 @@ export async function applyPlan(
     const seen = problem ? null : await readBack(text, [...byLeg.keys()], agrees);
     if (priced) write({ ...line(priced), undo, after: seen?.get(priced.legId)?.price ?? null });
     if (problem) throw new ApplyStop("bad-result", `${key}: ${problem}`, key);
-    if (!affectedActions(text).length) throw new ApplyStop("bad-result", `${key}: the result names no affected action`, key);
+    if (!affectedActions(text).length)
+      throw new ApplyStop("bad-result", `${key}: the result names no affected action`, key);
     if (!seen) throw new ApplyStop("read-back", `${key}: the actions the edit names do not show ${summary}`, key);
     say(`  ${kind} ${entry.id}: ${summary}${undo ? ` (undo ${undo})` : ""}`);
     return true;
   }
 
-  for (const u of uploads)
-    result.uploads.push({ file: u.filed ? u.file.replace(/\.csv$/, "_filed.csv") : u.file, rows: u.ids.length });
+  // ---- The run: entries in order, each finished before a signal is looked at
+  const stopping = () => {
+    if (!context.signal?.requested) return false;
+    result.stopped = true;
+    return true;
+  };
+  if (deletes.length && !opts.approveDeletes) say(`Deletes: ${deletes.length} not applied (needs --approve-deletes)`);
+  else if (deletes.length) say(`Deletes: ${deletes.length}`);
+  for (const entry of opts.approveDeletes ? deletes : []) {
+    if (stopping()) return result;
+    await applyDelete(entry);
+  }
+  if (uploads.length && categorise.length) {
+    result.heldBack = categorise.length;
+    say(`Categorisation: ${categorise.length} held back until the uploads are in Summ`);
+  }
+  if (edits.length) say(`Edits and categorisation: ${edits.length}`);
+  for (const [kind, entry] of edits) {
+    if (stopping()) return result;
+    await applyEdit(kind, entry);
+  }
+  result.uploads = listUploads(plan, opts);
   return result;
 }
 
@@ -796,19 +846,20 @@ export async function runApply(
     appendLogLine(logFile, { time: new Date().toISOString(), plan: planName, run, ...line });
   };
 
-  // The first signal lets the current entry finish; the handler is then gone, so a second stops at once
-  const signal = hooks.signal ?? { requested: false };
-  const onSignal = () => {
-    signal.requested = true;
-    console.log("\nStopping: waiting for the current entry to finish. A second signal stops at once; apply can resume.");
-  };
-  const realSignals = !hooks.signal && !opts.dryRun;
-  if (realSignals) for (const s of ["SIGINT", "SIGTERM"] as const) process.once(s, onSignal);
-
   if (!opts.dryRun) {
     tick("lock");
     takeLock(stateDir, hooks.isAlive);
   }
+  // The first signal lets the current entry finish; the handler is then gone, so a second stops at once
+  const signal = hooks.signal ?? { requested: false };
+  const onSignal = () => {
+    signal.requested = true;
+    console.log(
+      "\nStopping: waiting for the current entry to finish. A second signal stops at once; apply can resume.",
+    );
+  };
+  const realSignals = !hooks.signal && !opts.dryRun;
+  if (realSignals) for (const s of ["SIGINT", "SIGTERM"] as const) process.once(s, onSignal);
   try {
     if (!opts.dryRun) {
       tick("repair");
@@ -826,22 +877,33 @@ export async function runApply(
     );
     const prior = readLogLines<LogLine>(stateDir).filter((l) => l.plan === planName);
     const baseline = readSnapshot(join(stateDir, "snapshots", `${plan.snapshot}.json`)).legs;
-    if (!opts.dryRun) log({ call: "apply-start", planSha: sha, snapshot: plan.snapshot, flags, resumed: state === "resume" });
+    if (!opts.dryRun)
+      log({ call: "apply-start", planSha: sha, snapshot: plan.snapshot, flags, resumed: state === "resume" });
 
     let result: ApplyResult;
     try {
       await client.connect();
-      result = await applyPlan(client, plan, opts, log, console.log, settleMs, { stateDir, planDir: dir }, {
-        prior,
-        baseline,
-        signal,
-        tick,
-      });
+      result = await applyPlan(
+        client,
+        plan,
+        opts,
+        log,
+        console.log,
+        settleMs,
+        { stateDir, planDir: dir },
+        {
+          prior,
+          baseline,
+          signal,
+          tick,
+        },
+      );
       if (!opts.dryRun && !result.stopped) {
         const captured = plan.overridden.filter((o) => o.kind === "captured").map((o) => o.override);
         tick("tables");
         const changed = mergeTables(stateDir, plan.adopted, captured);
-        if (changed.length) console.log(`Added the plan's adoptions and captured overrides to ${changed.join(" and ")}`);
+        if (changed.length)
+          console.log(`Added the plan's adoptions and captured overrides to ${changed.join(" and ")}`);
       }
     } catch (e) {
       // A failed read changed nothing, and this line is no write. A failed write has its own line, which is
@@ -856,7 +918,9 @@ export async function runApply(
         } catch {
           // The stop itself is the news; the next run reads the journal as it is
         }
-        console.log("Stopped. Nothing more was written. Check what it reports, then run apply again, or pull and plan.");
+        console.log(
+          "Stopped. Nothing more was written. Check what it reports, then run apply again, or pull and plan.",
+        );
       }
       throw e;
     }

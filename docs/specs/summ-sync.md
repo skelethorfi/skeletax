@@ -110,7 +110,7 @@ in this repo. It is meant to be kept in git (prune relies on it).
     snapshots/<time>.details.jsonl  each action detail that pull read
     actions/<action id>.json    details read before pulls kept their own, and actions older applies saved
     plans/<time>/               plan.json, plan.md, upload/, pre/ (apply's pre-images)
-    adopted.csv, overrides.json, apply-log.jsonl, summ-sync.json
+    adopted.csv, overrides.json, apply-log.jsonl, summ-sync.json, .lock (while an apply runs)
 
 **Pull.** Every pull reads the detail of every action the plan needs. There is
 no reuse by id, and no cheaper signal is safe: an edit can keep its action id, the
@@ -598,50 +598,110 @@ of its neighbours.
 
 ## Apply
 
-In this order, stopping at the first failure (a read, query or inspect,
-that fails with a server error (5xx) is first retried once after a pause,
-in pull too; a write never is, since it may have been made before the
-error):
+An apply can always go on from where it stopped, and stops rather than guesses. Run the
+same command again after any stop. In this order (a read, query or inspect, that fails with
+a server error (5xx) is first retried once after a pause, in pull too; a write never is,
+since it may have been made before the error):
 
-1. Check the plan's snapshot is the latest, and that `apply-log.jsonl`
-   records no write since that snapshot was taken; refuse otherwise (pull
-   and plan again).
-2. Deletes (approved). Each leg is looked up again by `_id`, and only
-   actions that now hold nothing but the entry's legs are deleted, by
-   their action ids. A leg that shares its action with other legs (in the
-   plan or in Summ now) is first split off: one `edit_transaction` per
-   action sets the entry's legs in it to `ignoreIn` (incoming) or
-   `ignoreOut` (outgoing, fee), and Summ moves them to an action of their
-   own. Apply looks them up again (waiting a few seconds, up to five
-   times, and once more after it sees them alone) and deletes that action.
-   When Summ has not split them off, apply skips the entry there: the legs
-   stay ignored (they no longer count), and the skip names the edit's undo
-   handle. A leg already ignored that still shares its action is skipped
-   (an edit to the same type would not split it). A receive or send Summ
-   made up to pair the deleted leg as a transfer (Made-up legs above) is
-   then left alone, and is ignored by its action id as in step 3. Never by a
-   filter: Summ's `id` filter lists the leg's action but can list
-   unrelated actions too, even with `showAssociated: 0`, so a look-up
-   inspects each action it lists and keeps only the one holding the leg.
-   Summ cannot undo a delete; a deleted row comes back by uploading its CSV line
-   again, and its pre-image (Journal) shows what Summ held.
-3. Edits and categorisation. Before each action, look it up again by leg
-   `_id` (an action id can change on any write) and check the leg still
-   holds the plan's "Summ value"; a leg that changed since the pull is
-   skipped and reported. All changes of one action go in one
-   `edit_transaction`. A price change sends `price` with
+1. Take `<state dir>/.lock` (exclusive create, holding the pid). A lock whose process is
+   dead, or with no pid, is cleared; a live one refuses. A dry run neither takes it nor
+   logs anything.
+2. Check the plan may start or go on (Refusal below), and log `apply-start`.
+3. Deletes (approved), each a state machine (Deletes below).
+4. Edits and categorisation, each classified (Classifying below). All changes of one
+   action go in one `edit_transaction`. A price change sends `price` with
    `priceValueCurrency: "USD"`.
-   Then each made-up leg of the row is looked up again by `_id`
-   (waiting a few seconds for Summ to split it off) and ignored by its
-   action id, only when that action holds nothing else; if the edit was
-   skipped, so is the ignore. An undo handle cannot be relied on to back
-   out of this: once Summ re-pairs the categorised leg with another
-   (e.g. an uploaded bridge-trade-in), the edit's handle is stale.
-4. Print the upload files for the user to upload.
-5. Write the journal as it goes (below): each call, its result and its undo
+   Then each made-up leg of the row is read by its id, waiting a few seconds for Summ to
+   split it off, and ignored by its action id, only when that action holds nothing else.
+   Already ignored: done. Gone: done if this plan logged its ignore, otherwise stop. Still
+   sharing, or no longer a made-up leg: stop. An undo handle cannot be relied on to back
+   out of this: once Summ re-pairs the categorised leg with another (e.g. an uploaded
+   bridge-trade-in), the edit's handle is stale.
+5. Only when every entry is done: add the plan's adoptions and captures to the tables
+   (idempotent), log `apply-stop` with `reason: complete`, and print the upload files.
+   A finished plan run again reports that it is complete and does nothing.
+6. Write the journal as it goes (below): each call, its result and its undo
    handle, one line per changed field (`legId`, `field`, `value`) for
    plan's drift check and recorded prices (the line after a price edit holds the
-   local price read back, `after`; its value is in USD), and each skip.
+   local price read back, `after`; its value is in USD).
+
+**Reads.** Every look-up is `inspect_transaction` by `transactionId` (the leg's `_id`), which
+returns the action holding the leg now, whatever its id has become, with no search lag. A
+tool error saying the transaction is not found means the leg is gone. Any other failure is a
+failed read: the run stops, and that says nothing of the leg.
+
+**Classifying.** Every entry, on every run, by a fresh read of its legs:
+
+| The legs hold                                                          | Then                                                        |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------- |
+| all the plan's before-value, and the action's other legs are unchanged | proceed                                                     |
+| all the after-value                                                    | done: counted, logged `call: found`, `via: found`, no write |
+| anything else, including some at one and some at the other             | stop and report what was found                              |
+
+The other legs are compared with the plan's snapshot: which legs are there, and their trade,
+currency, quantity, timestamp, from, to, blockchain and price. Legs this apply itself changes
+or moves are left to their own entries, and Summ-made `assumed-fee` legs have no lasting id.
+
+A USD price cannot be read back in USD, so a price change is classified on its local price:
+
+| Local price                                                                                                      | Then                                                                   |
+| ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| a value this plan confirmed earlier (`after` in the log) still stands                                            | done                                                                   |
+| differs from that confirmed value                                                                                | stop                                                                   |
+| equals the before-value                                                                                          | proceed: re-sending is harmless, and an edit can really change nothing |
+| differs, an intent logged for this plan, marked USD, `updatedAt` later than the leg's in that intent's pre-image | done; its `via: found` line holds `after`                              |
+| differs, otherwise                                                                                               | stop                                                                   |
+
+A price found done gets a line in the shape of the one after a price edit, so plan reads the
+same recorded price. An entry found at its after-value with no intent logged is not recorded
+as the sync's own edit, so it is not taken for one later.
+
+**Deletes.** Read every leg, then by what that shows, and read again after each step:
+
+| The legs                                 | Then                                                                                                                                                                                                                                   |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| all gone, a delete logged for this entry | done                                                                                                                                                                                                                                   |
+| all gone, none logged                    | stop                                                                                                                                                                                                                                   |
+| some gone, some not                      | stop                                                                                                                                                                                                                                   |
+| sharing an action, not ignored           | split: one `edit_transaction` per action sets the entry's legs in it to `ignoreIn` (incoming) or `ignoreOut` (outgoing, fee), and Summ moves them to an action of their own. Once per leg in a run; a leg not ignored after that stops |
+| sharing, ignored, its split logged       | wait a few seconds, up to five times, then stop, naming the undo handles; the legs stay ignored and no longer count                                                                                                                    |
+| sharing, ignored, no split logged        | stop: an edit to the same type would not split it, and the ignore is not the sync's                                                                                                                                                    |
+| alone                                    | two reads, a few seconds apart, must agree on the action ids and their legs; then delete by action id                                                                                                                                  |
+
+Never by a filter. A receive or send Summ made up to pair the deleted leg as a transfer (Made-up
+legs above) is named on the split's lines (`madeUp`), since nothing else names it once the leg is
+gone, and is then ignored as in step 4. Summ cannot undo a delete; a deleted row comes back by
+uploading its CSV line again, and its pre-image (Journal) shows what Summ held.
+
+**Results.** Summ reports a wrong id as a success that did nothing, so every result is checked and
+every write read back. `Patched N`, `Bulk delete removed N` and `Bulk ignore updated N` must report
+the legs or action sent; an edit's and an ignore's must name affected actions. Then a read of the
+ids the result names (several tries, seconds apart) must show the legs at their new values; a price
+must show `updatedAt` moved and the USD mark, and its local price goes in the log as `after`, null when
+unconfirmed. A delete's legs must read as gone. Anything else stops the run, as does a write that
+fails. A failed write is never retried in the same run: the next run classifies the leg.
+
+**Refusal.** There is no flag past these; the way on is to pull and plan.
+
+- First start (no `apply-start` for this plan): the plan's snapshot is the latest, and the log has
+  no write since its `takenAt`.
+- Resume: the same snapshot is still the latest, `planSha` (the hash of `plan.json`) and the flags
+  (`--approve-deletes`, `--approve-filed`) equal the logged `apply-start`, and every write line since
+  `takenAt` belongs to this plan's runs (its `plan`, and a `run` one of its `apply-start` lines has).
+
+A write line is any line but `skip`, `found`, `apply-start`, `apply-stop` and `torn-line`. So a failed read,
+which logs only `apply-stop`, blocks nothing, and a failed write, which logs an `error` line, counts. An
+`error` line of an older log counts as it did.
+
+**Stops.** `apply-stop` carries a `reason`: `complete`, `signal`, `conflict`, `bad-result`, `read-back`,
+`write-failed` or `error`, with what was found. A hard kill leaves none; the next run needs none.
+The first SIGINT or SIGTERM says it is waiting, finishes the current entry's steps (split, delete and
+ignore), writes `apply-stop` and exits 130. A second stops at once, which is as safe as a crash.
+
+What a resume cannot tell: a user's edit in the moment between the read and the write is overwritten
+(the read and the write are not atomic; the pre-image and the change history keep it). A crash during a USD
+edit is inferred, so a hand edit after it, marked USD, with no confirmed `after`, reads as the sync's. A
+delete compares no field (a later change). `updatedAt` moves on Summ's rebuilds too.
 
 **Journal.** Every write to Summ (split edit, delete, edit, ignore), in this order:
 
@@ -658,17 +718,22 @@ error):
 4. Make the call.
 5. Append the result lines. A call that throws may still have landed: it gets a line
    with `error`, then apply stops.
+6. Check the result and read the write back (Results above).
 
-Write lines carry `entry` and `pre` (the file, relative to the state dir); a skip
-carries `entry`. Lines of a delete or an ignore have `legIds`, not `legId` and
+Write lines carry `entry` and `pre` (the file, relative to the state dir); a `skip`
+line, only in older logs, carries `entry`. Lines of a delete or an ignore have `legIds`, not `legId` and
 `field`, and an `error` line has neither, so plan does not read them as edits.
 A pre-image holds the action the write addresses. An action Summ pairs a leg into as a
 result is not saved. An intent counts as the sync's own value even if its call failed,
 since it may have landed.
 
-A stop therefore leaves a pre-image with no line (no write made) or an intent with no
-result (the write may have been made). An intent counts as a write for the refusal in
-step 1 and as the sync's own for drift: its value in Summ is not taken for the user's.
+A stop therefore leaves a pre-image with no line (no write made), an intent with no
+result (the write may have been made), or a last line cut off. Every reader of the log
+leaves out a cut-off last line (one with no newline that does not parse); a bad line
+anywhere else stops the reader with a message. The next apply moves the fragment to a
+`torn-line` line of its own before appending. All of a run's lines carry its `run`.
+An intent counts as a write for the refusal in
+Refusal and as the sync's own for drift: its value in Summ is not taken for the user's.
 Prices count `intent` lines of the `price` field only, so each edit counts once.
 
 A delete's pre-image also holds the row's exact line (`line`, `lineHeader`, `lineSource`:
@@ -677,8 +742,8 @@ in the run's wallet files and then the plan's upload files; all null when none h
 which stops nothing. A remade row's line is the run's version, which can differ
 from what Summ held; the pre-image's action is the record of that.
 
-Logs and plans from before the journal keep working: their lines have no `entry` or `pre`,
-and count as they did.
+Logs and plans from before the journal keep working: their lines have no `entry`, `pre` or
+`run`, and count as they did.
 
 While the plan has uploads (for the years this apply covers), apply holds
 back categorisation: Summ pairs a categorised leg with the other side of
@@ -686,8 +751,8 @@ its swap only when that side is already in Summ, so the user uploads first
 and runs pull, plan and apply again.
 
 An apply carries out the current years' entries, or with `--approve-filed`
-only the filed years'. `--dry-run` does steps 1 to 3 with read tools only
-and writes nothing.
+only the filed years'. `--dry-run` classifies every entry with read tools only, reports all
+it would stop at, and writes nothing.
 
 Then `pull` and `plan` again: the plan should be empty, apart from what the
 upload adds once done.
