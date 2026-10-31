@@ -748,8 +748,9 @@ one action are one delete entry, first in the plan, whatever `--only` says (a no
 comments in `plan.md`, and a warning if Summ's matcher changed the action: such an entry may be guarding a pairing. The
 entry's txids include those its comments name. It is filed if any of its legs is.
 
-Only an entry that will go excuses anything. Another manual entry in its action, or a `hold` on its ID or txid, leaves it
-held, and its event held with it. A run that would leave a named entry in Summ stops before writing anything: it needs
+Only an entry that will go excuses anything. Another manual entry in its action or naming one of its txids, or a `hold` on
+its ID, its txid or a row of its txid, leaves it held, and its event held with it. Plan refuses filed and current-year
+entries named together, since a run covers one: name one kind, apply, pull and plan, then the other. A run that would leave a named entry in Summ stops before writing anything: it needs
 `--approve-deletes`, and `--approve-filed` for a filed entry, while one already gone stops nothing. Named entries run as
 any delete: a split from what stays, a fresh read compared with the plan, two reads that agree, the journal and the
 pre-image. Any other manual entry still holds its event in the plan and stops apply. Summ has no undo for a delete; a

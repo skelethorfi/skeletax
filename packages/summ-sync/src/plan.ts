@@ -1259,12 +1259,18 @@ export function makePlan(input: PlanInput): PlanResult {
   plan.delete = [];
   for (const [actionId, legs] of manualGroups) {
     const legIds = legs.map((l) => l.legId);
-    const unnamed = (legsByAction.get(actionId) ?? []).filter(
-      (l) => l.importType === "manual" && !legIds.includes(l.legId),
-    );
     const txids = [...new Set([...txidsOf(legs), ...legs.flatMap(txidsNamedBy)])].filter((t) => !/^0+$/.test(t));
+    const allNamed = new Set(config.deleteManualEntries.map((m) => m.legId));
+    const unnamed = input.legs.filter(
+      (l) =>
+        l.importType === "manual" &&
+        !allNamed.has(l.legId) &&
+        (l.actionId === actionId || txidsNamedBy(l).some((t) => txids.includes(t))),
+    );
     const onHold = config.hold.find((h) =>
-      h.txid === undefined ? legs.some((l) => l.id === h.id) : txids.includes(normaliseTxid(h.txid)),
+      h.txid === undefined
+        ? legs.some((l) => l.id === h.id) || !!rowsById.get(h.id)?.txids.some((t) => txids.includes(t))
+        : txids.includes(normaliseTxid(h.txid)),
     );
     if (unnamed.length || onHold) {
       plan.held.push({
@@ -1274,7 +1280,7 @@ export function makePlan(input: PlanInput): PlanResult {
         summId: legs[0].id,
         legIds,
         reason: unnamed.length
-          ? `another manual entry is in its action (${unnamed.map((l) => `${l.quantity} ${l.currency}`).join(", ")}): name it too, or resolve it in Summ`
+          ? `another manual entry is in its action or names its tx (${unnamed.map((l) => `${l.quantity} ${l.currency}`).join(", ")}): name it too, or resolve it in Summ`
           : (onHold as Hold).reason,
         held: ["delete (named in deleteManualEntries)"],
       });
@@ -1290,6 +1296,11 @@ export function makePlan(input: PlanInput): PlanResult {
     );
     Object.assign(plan.delete[plan.delete.length - 1], { manual: true, txids });
     legIds.forEach((id) => namedManual.add(id));
+  }
+  if (new Set(plan.delete.map((d) => d.filed)).size > 1) {
+    throw new Error(
+      "deleteManualEntries: names both filed and current-year entries, and a run covers one: name one kind at a time",
+    );
   }
   plan.delete.push(...rowDeletes);
 
@@ -1378,6 +1389,7 @@ export function makePlan(input: PlanInput): PlanResult {
       h.txid === undefined ? h.id === d.summId : txidsOf(legsOf(d.legIds)).includes(normaliseTxid(h.txid)),
     );
   plan.delete = plan.delete.filter((d) => {
+    if (d.manual) return true; // Checked where it was named
     const h = d.id !== null ? holdOf.get(d.id) : undefined;
     const gone = d.id === null ? holdOfLegs(d) : undefined;
     if (h) h.held.push(`delete (${d.reason})`);

@@ -2880,3 +2880,82 @@ test("deleteManualEntries: filed if any leg is, its comment's txid is checked, a
   assert.deepEqual(p.delete[0].txids, [TX1]);
   assert.deepEqual(p.report, []);
 });
+
+test("deleteManualEntries: another manual entry naming its tx holds it, as does a hold on a row of its tx", () => {
+  const hand = (legId: string, actionId: string, comments: string[]) =>
+    ownLeg({ legId, quantity: 1, importType: "manual", source: "manual", id: legId, actionId, comments });
+  const one = row({ txids: [TX1] });
+  const two = row({ txids: [TX2] });
+  const config = {
+    ...CONFIG,
+    deleteManualEntries: [{ legId: "m1", currency: "BTC", quantity: 1, reason: "why" }],
+  };
+  const p = plan({
+    rows: [one, two],
+    legs: [hand("m1", "a", [TX1, TX2]), hand("m2", "b", [TX1])],
+    config,
+  }).plan;
+  assert.deepEqual(p.delete, []);
+  assert.deepEqual(p.upload, []);
+  const held = plan({
+    rows: [two],
+    legs: [hand("m1", "a", [TX2])],
+    config: { ...config, hold: [{ id: two.id, reason: "pending" }] },
+  }).plan;
+  assert.deepEqual(held.delete, []);
+});
+
+test("deleteManualEntries: filed and current-year entries are refused together, and named ones come first", () => {
+  const hand = (legId: string, timestamp: string) =>
+    ownLeg({ legId, quantity: 1, importType: "manual", source: "manual", id: legId, actionId: legId, timestamp });
+  const entry = (legId: string) => ({ legId, currency: "BTC", quantity: 1, reason: "why" });
+  const config = { ...CONFIG, filedBefore: "2020-01-01", deleteManualEntries: [entry("old"), entry("new")] };
+  assert.throws(
+    () =>
+      plan({
+        legs: [hand("old", "2019-01-01T00:00:00.000Z"), hand("new", "2024-03-01T00:00:00.000Z")],
+        config,
+      }),
+    /both filed and current-year/,
+  );
+  const stable = "2024-03-01T10:00:00.000Z.out.abcdef012345";
+  const p = plan({
+    legs: [
+      hand("new", "2024-03-01T00:00:00.000Z"),
+      ownLeg({ legId: "gone", source: "csv-source", importType: "manual-csv", id: stable, actionId: "c" }),
+    ],
+    config: { ...config, deleteManualEntries: [entry("new")] },
+  }).plan;
+  assert.deepEqual(
+    p.delete.map((d) => d.legIds[0]),
+    ["new", "gone"],
+  );
+});
+
+test("deleteManualEntries: the matcher's history warns, and a going entry repeats no report", () => {
+  const r = row({ txids: [TX1] });
+  const leg = ownLeg({
+    legId: "m",
+    quantity: 1,
+    importType: "manual",
+    source: "manual",
+    id: "m",
+    actionId: "a",
+    comments: [TX1],
+  });
+  const config = {
+    ...CONFIG,
+    deleteManualEntries: [{ legId: "m", currency: "BTC", quantity: 1, reason: "why" }],
+  };
+  const p = plan({
+    rows: [r],
+    legs: [leg],
+    config,
+    history: new Map([["a", ["1 Jan 2024 00:00 · transactionMatching · Category: x"]]]),
+  }).plan;
+  assert.match(p.delete[0].reason, /may be guarding a pairing/);
+  assert.deepEqual(
+    p.report.filter((e) => e.kind === "manual-entry"),
+    [],
+  );
+});

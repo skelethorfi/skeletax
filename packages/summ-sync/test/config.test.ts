@@ -50,7 +50,13 @@ test("a hold names a row ID or a txid", () => {
 test("deleteManualEntries needs a leg, currency, quantity and reason", () => {
   const entry = { legId: "l", currency: "BTC", quantity: 1, reason: "why" };
   assert.deepEqual(parseConfig(JSON.stringify({ deleteManualEntries: [entry] })).deleteManualEntries, [entry]);
-  for (const bad of [{ ...entry, reason: " " }, { ...entry, quantity: "1" }, { ...entry, legId: "" }, "l"]) {
+  for (const bad of [
+    { ...entry, reason: " " },
+    { ...entry, quantity: "1" },
+    { ...entry, legId: "" },
+    { ...entry, currency: "" },
+    "l",
+  ]) {
     assert.throws(() => parseConfig(JSON.stringify({ deleteManualEntries: [bad] })), /deleteManualEntries must be/);
   }
 });
