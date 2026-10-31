@@ -1,5 +1,5 @@
 // prune: removes snapshot files older than `days` (never the latest), and action store files that no remaining
-// snapshot lists, but only files git holds as committed, and nothing apply-log.jsonl names (spec:
+// snapshot lists, but only files git holds as committed, and no action a delete named or `saved` file (spec:
 // docs/specs/summ-sync.md, State dir). Plans, and so pre-images, are never removed.
 
 import { execFileSync } from "node:child_process";

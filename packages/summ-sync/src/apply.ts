@@ -263,6 +263,7 @@ export async function applyPlan(
       for (const [n, first] of [...shared.values()].entries()) {
         // The look-up above is out of date once another of this entry's actions has been written to
         const legId = first.legs.find((l) => entry.legIds.includes(l.legId))?.legId as string;
+        if (n) await sleep(settleMs); // Summ's search lags a write
         const f = n === 0 ? first : await lookUp(client, legId);
         if (!f) return skip(key, entry.id, `leg ${legId} is no longer in Summ`, { legIds: entry.legIds });
         // An edit to the type a leg already has changes nothing, so Summ would not split it

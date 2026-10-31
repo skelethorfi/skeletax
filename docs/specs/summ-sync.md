@@ -159,8 +159,8 @@ lines (`saved`) still name it.
 30, by the time in their name; never the latest), with their details files, and store files that no
 remaining snapshot lists, but only files git tracks with no uncommitted
 changes (git keeps them); otherwise it removes nothing and lists the files.
-It keeps what a rollback needs: every action `apply-log.jsonl` names (a delete's
-`actionIds`, any `saved` file), and the snapshot and details file of every plan
+It keeps what a rollback needs: a delete's `actionIds` and any `saved` file in
+`apply-log.jsonl`, and the snapshot and details file of every plan
 with a `pre` line, and so what that snapshot lists. A plan with `pre` lines whose
 `plan.json` is gone stops the prune. Plans, with their pre-images, are never removed.
 
@@ -662,6 +662,10 @@ error):
 Write lines carry `entry` and `pre` (the file, relative to the state dir); a skip
 carries `entry`. Lines of a delete or an ignore have `legIds`, not `legId` and
 `field`, and an `error` line has neither, so plan does not read them as edits.
+A pre-image holds the action the write addresses. An action Summ pairs a leg into as a
+result is not saved. An intent counts as the sync's own value even if its call failed,
+since it may have landed.
+
 A stop therefore leaves a pre-image with no line (no write made) or an intent with no
 result (the write may have been made). An intent counts as a write for the refusal in
 step 1 and as the sync's own for drift: its value in Summ is not taken for the user's.

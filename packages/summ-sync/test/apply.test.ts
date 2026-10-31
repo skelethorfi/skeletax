@@ -624,6 +624,25 @@ test("a plan is refused once an apply wrote to Summ after its snapshot: pull aga
   assert.throws(() => checkFresh(wrote, planFile({ snapshot: snap[0] })), /1 writes since snapshot/);
 });
 
+test("a plan is refused after a hard kill that left only an intent line", () => {
+  const snap: [string, string] = ["2024-01-02T00-00-00", "2024-01-02T00:00:00.000Z"];
+  const killed = stateDir(
+    [snap],
+    [
+      JSON.stringify({
+        time: "2024-01-03T00:00:00.000Z",
+        plan: "p",
+        call: "edit_transaction",
+        intent: true,
+        legId: "leg-1",
+        field: "trade",
+        value: "fee",
+      }),
+    ],
+  );
+  assert.throws(() => checkFresh(killed, planFile({ snapshot: snap[0] })), /1 writes since snapshot/);
+});
+
 test("runApply adds the plan's adoptions to adopted.csv, but not on a dry run", async () => {
   const snap: [string, string] = ["2024-01-02T00-00-00", "2024-01-02T00:00:00.000Z"];
   const plan = planFile({ snapshot: snap[0], adopted: [{ legId: "leg-old", id: "row-1" }] });

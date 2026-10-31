@@ -58,7 +58,7 @@ export interface PreImage {
   step: string;
   id: string | null;
   capturedAt: string;
-  /** Each action the write touches, with its change history, as just read. */
+  /** The action the write addresses, with its change history, as just read. Not an action Summ pairs a leg into. */
   actions: ActionDetail[];
   /** A delete only: the row's line, null when neither the run nor the plan's upload files hold it. */
   line?: string | null;
