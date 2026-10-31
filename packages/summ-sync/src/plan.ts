@@ -148,6 +148,8 @@ export interface DeleteEntry {
   others?: LegValues[];
   /** The row's txids, or with no row those its legs name: a manual entry naming one at apply stops the entry. */
   txids?: string[];
+  /** Named in the config's deleteManualEntries: these legs are manual entries, excused from what holds or stops the others. */
+  manual?: boolean;
 }
 
 export interface UploadEntry {
@@ -660,7 +662,7 @@ export function makePlan(input: PlanInput): PlanResult {
     plan.delete.push({
       id: row?.id ?? null,
       summId,
-      filed: isFiled(row?.timestamp ?? legs[0].timestamp),
+      filed: row ? isFiled(row.timestamp) : legs.some((l) => isFiled(l.timestamp)),
       legIds,
       actionIds,
       reason,
@@ -1230,6 +1232,87 @@ export function makePlan(input: PlanInput): PlanResult {
     });
   }
 
+  // Manual entries the user named: first in the plan, so what they stood in for sees them gone. A wrong or changed
+  // entry stops the plan: the user named something else. An entry that cannot go excuses nothing, so what it held
+  // stays held.
+  const namedManual = new Set<string>();
+  const manualGroups = new Map<string, Leg[]>();
+  for (const m of config.deleteManualEntries) {
+    const leg = input.legs.find((l) => l.legId === m.legId);
+    if (!leg) {
+      plan.notes.push(
+        `deleteManualEntries: leg ${m.legId} is not in the snapshot: remove its line if it is deleted, else pull again`,
+      );
+      continue;
+    }
+    if (leg.importType !== "manual") {
+      throw new Error(`deleteManualEntries: leg ${m.legId} is not a manual entry (import type ${leg.importType})`);
+    }
+    if (!sameCurrency(leg.currency, m.currency) || !sameAmount(leg.quantity, m.quantity)) {
+      throw new Error(
+        `deleteManualEntries: leg ${m.legId} holds ${leg.quantity} ${leg.currency}, the config says ${m.quantity} ${m.currency}`,
+      );
+    }
+    manualGroups.set(leg.actionId, [...(manualGroups.get(leg.actionId) ?? []), leg]);
+  }
+  // What keeps an entry from going. One that cannot go keeps them all: it could name what another stands in for
+  const allNamed = new Set(config.deleteManualEntries.map((m) => m.legId));
+  const blockers = new Map(
+    [...manualGroups].map(([actionId, legs]) => {
+      const txids = [...new Set([...txidsOf(legs), ...legs.flatMap(txidsNamedBy)])].filter((t) => !/^0+$/.test(t));
+      const unnamed = input.legs.filter(
+        (l) =>
+          l.importType === "manual" &&
+          !allNamed.has(l.legId) &&
+          (l.actionId === actionId || txidsNamedBy(l).some((t) => txids.includes(t))),
+      );
+      const onHold = config.hold.find((h) =>
+        h.txid === undefined
+          ? legs.some((l) => l.id === h.id) || !!rows.find((r) => r.id === h.id)?.txids.some((t) => txids.includes(t))
+          : txids.includes(normaliseTxid(h.txid)),
+      );
+      const reason = unnamed.length
+        ? `another manual entry is in its action or names its tx (${unnamed.map((l) => `${l.quantity} ${l.currency}`).join(", ")}): name it too, or resolve it in Summ`
+        : onHold?.reason;
+      return [actionId, { txids, reason, kind: unnamed.length ? ("manual-pairing" as const) : ("hold" as const) }];
+    }),
+  );
+  const anyBlocked = [...blockers.values()].some((b) => b.reason !== undefined);
+  const rowDeletes = plan.delete;
+  plan.delete = [];
+  for (const [actionId, legs] of manualGroups) {
+    const legIds = legs.map((l) => l.legId);
+    const { txids, reason, kind } = blockers.get(actionId)!;
+    if (anyBlocked) {
+      plan.held.push({
+        kind: reason === undefined ? "manual-pairing" : kind,
+        filed: legs.some((l) => isFiled(l.timestamp)),
+        id: null,
+        summId: legs[0].id,
+        legIds,
+        reason: reason ?? "another entry in deleteManualEntries cannot go, and none goes until it can",
+        held: ["delete (named in deleteManualEntries)"],
+      });
+      continue;
+    }
+    const reasons = config.deleteManualEntries.filter((m) => legIds.includes(m.legId)).map((m) => m.reason);
+    const matched = (input.history.get(actionId) ?? []).some((h) => h.includes("transactionMatching"));
+    deleteGroup(
+      legs[0].id,
+      legs,
+      null,
+      `manual entry: ${[...new Set(reasons)].join("; ")}${matched ? " (Summ's matcher changed this action: the entry may be guarding a pairing)" : ""}`,
+    );
+    Object.assign(plan.delete[plan.delete.length - 1], { manual: true, txids });
+    legIds.forEach((id) => namedManual.add(id));
+  }
+  if (new Set(plan.delete.map((d) => d.filed)).size > 1) {
+    throw new Error(
+      "deleteManualEntries: names both filed and current-year entries, and a run covers one: name one kind at a time",
+    );
+  }
+  plan.delete.push(...rowDeletes);
+
   // ---- Held: nothing is planned for a row the config holds (a decision pending outside the sync), nor for the rows
   // of an event (rows linked by a shared txid) when a Summ action of theirs holds a manual entry, or a manual entry
   // names one of their txids: the user's own pairing or stand-in, which a delete, a split, an upload or a categorise
@@ -1250,11 +1333,13 @@ export function makePlan(input: PlanInput): PlanResult {
     else if (!STABLE_ID.test(h.id) || inScope(h.id.slice(0, 24))) plan.notes.push(`hold: no row ${h.id} in the run`);
   }
   const manualIn = (actionIds: string[]) =>
-    [...new Set(actionIds)].flatMap((a) => (legsByAction.get(a) ?? []).filter((l) => l.importType === "manual"));
+    [...new Set(actionIds)].flatMap((a) =>
+      (legsByAction.get(a) ?? []).filter((l) => l.importType === "manual" && !namedManual.has(l.legId)),
+    );
   const pairingReason = (manual: Leg[]) =>
     `a manual entry is in a Summ action of this event or names its txid (${manual.map((l) => `${l.quantity} ${l.currency}`).join(", ")}): the user's pairing; resolve it in Summ`;
   const manualNaming = new Map<string, Leg[]>();
-  for (const leg of input.legs.filter((l) => l.importType === "manual")) {
+  for (const leg of input.legs.filter((l) => l.importType === "manual" && !namedManual.has(l.legId))) {
     for (const t of txidsNamedBy(leg)) manualNaming.set(t, [...(manualNaming.get(t) ?? []), leg]);
   }
   const legsOfRow = new Map(matched);
@@ -1313,6 +1398,7 @@ export function makePlan(input: PlanInput): PlanResult {
       h.txid === undefined ? h.id === d.summId : txidsOf(legsOf(d.legIds)).includes(normaliseTxid(h.txid)),
     );
   plan.delete = plan.delete.filter((d) => {
+    if (d.manual) return true; // Checked where it was named
     const h = d.id !== null ? holdOf.get(d.id) : undefined;
     const gone = d.id === null ? holdOfLegs(d) : undefined;
     if (h) h.held.push(`delete (${d.reason})`);
@@ -1429,7 +1515,7 @@ export function makePlan(input: PlanInput): PlanResult {
   // ---- Manual entries repeating a row's txid
   const txidRows = new Map<string, string>();
   for (const row of rows) for (const t of row.txids) txidRows.set(t, row.id);
-  for (const leg of input.legs.filter((l) => l.importType === "manual")) {
+  for (const leg of input.legs.filter((l) => l.importType === "manual" && !namedManual.has(l.legId))) {
     for (const txid of txidsNamedBy(leg)) {
       const id = txidRows.get(txid);
       if (id)
@@ -1548,7 +1634,8 @@ function narrow(
     return false;
   };
   const left: { summId: string; legs: Leg[]; txids: string[] }[] = [];
-  plan.delete = plan.delete.filter((d) => d.id !== null || legsIn(d.summId, d.legIds, true));
+  // A manual entry the config names is always in the plan: the rows it held no longer wait for it
+  plan.delete = plan.delete.filter((d) => d.id !== null || d.manual || legsIn(d.summId, d.legIds, true));
   // The rows of the scope naming a tx whose legs are left, and other legs with no row naming it, wait with them, and
   // so does every other tx of theirs, until no more join
   const leftTx = new Set(left.flatMap((l) => l.txids));
@@ -1566,7 +1653,7 @@ function narrow(
         join(r.txids);
       }
     for (const d of plan.delete.filter(
-      (d) => d.id === null && !waitLegs.has(d.summId) && !entries.includes(d.summId),
+      (d) => d.id === null && !d.manual && !waitLegs.has(d.summId) && !entries.includes(d.summId),
     )) {
       const legs = legsOf(d.legIds);
       const named = txidsOf(legs);
@@ -1578,6 +1665,8 @@ function narrow(
   }
   const waiting = [...waitRows, ...waitLegs.keys()];
   if (waiting.length) plan.notes.push(`scope: ${waiting.join(", ")} wait with the legs of their tx left above`);
+  for (const d of plan.delete.filter((d) => d.manual))
+    plan.notes.push(`scope: manual entry ${d.summId} is deleted as the config names it, whatever the scope`);
   // Legs an entry names by their ID in Summ are deleted all the same: said, as their tx's rows may not be uploaded
   for (const d of plan.delete.filter((d) => d.id === null && entries.includes(d.summId))) {
     const named = txidsOf(legsOf(d.legIds)).filter(real);
@@ -1590,7 +1679,7 @@ function narrow(
       );
   }
   const ids = new Set([...matched].filter((id) => !waitRows.has(id)));
-  plan.delete = plan.delete.filter((d) => (d.id !== null ? ids.has(d.id) : !waitLegs.has(d.summId)));
+  plan.delete = plan.delete.filter((d) => d.manual || (d.id !== null ? ids.has(d.id) : !waitLegs.has(d.summId)));
   plan.adopted = plan.adopted.filter((a) => ids.has(a.id));
   plan.superseded = plan.superseded.filter((s) => ids.has(s.run));
   plan.edit = plan.edit.filter((e) => ids.has(e.id));

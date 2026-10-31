@@ -2765,3 +2765,242 @@ test("a manual entry linked only by its Tx Hash holds the row's event", () => {
   assert.deepEqual([p.upload, p.report.map((x) => x.kind)], [[], ["manual-entry"]]);
   assert.equal(p.held[0].kind, "manual-pairing");
 });
+
+test("deleteManualEntries: a named entry is planned first, with its values, and no longer holds its event", () => {
+  const r = btcRow({ type: "bridge-trade-in", feeCurrency: "", feeAmount: "" });
+  const own = ownLeg({ legId: "own", quantity: 0.01, trade: "deposit", side: "incoming", actionId: "act" });
+  const manual = ownLeg({
+    legId: "man",
+    quantity: 0.01,
+    trade: "withdrawal",
+    side: "outgoing",
+    actionId: "act",
+    importType: "manual",
+    source: "manual",
+    id: "hand",
+  });
+  const held = plan({ rows: [r], legs: [own, manual] }).plan;
+  assert.equal(held.delete.length, 0);
+  assert.equal(held.held[0].kind, "manual-pairing");
+  const deleteManualEntries = [{ legId: "man", currency: "BTC", quantity: 0.01, reason: "stood in for the swap" }];
+  const named = plan({ rows: [r], legs: [own, manual], config: { ...CONFIG, deleteManualEntries } }).plan;
+  assert.deepEqual(named.held, []);
+  assert.equal(named.delete[0].manual, true);
+  assert.deepEqual(named.delete[0].legIds, ["man"]);
+  assert.match(named.delete[0].reason, /manual entry: stood in for the swap/);
+  assert.deepEqual(
+    named.delete[0].others?.map((l) => l.legId),
+    ["own"],
+  );
+  // Another manual entry in the action still holds it
+  const other = { ...manual, legId: "man2", id: "hand2" };
+  assert.equal(
+    plan({ rows: [r], legs: [own, manual, other], config: { ...CONFIG, deleteManualEntries } }).plan.held[0].kind,
+    "manual-pairing",
+  );
+});
+
+test("deleteManualEntries: a wrong entry stops the plan, and one already gone is noted", () => {
+  const manual = ownLeg({ legId: "man", quantity: 1, importType: "manual", source: "manual", id: "hand" });
+  const entry = { legId: "man", currency: "BTC", quantity: 1, reason: "why" };
+  const run = (legs: Leg[], over = {}) =>
+    plan({ rows: [], legs, config: { ...CONFIG, deleteManualEntries: [{ ...entry, ...over }] } }).plan;
+  assert.throws(() => run([manual], { quantity: 2 }), /config says 2/);
+  assert.throws(() => run([manual], { currency: "ETH" }), /config says 1 ETH/);
+  assert.throws(() => run([{ ...manual, importType: "wallet" }]), /not a manual entry/);
+  assert.match(run([]).notes.join(), /leg man is not in the snapshot/);
+});
+
+test("deleteManualEntries: a scoped plan keeps a named entry whatever the scope says", () => {
+  const manual = ownLeg({ legId: "man", quantity: 1, importType: "manual", source: "manual", id: "hand" });
+  const deleteManualEntries = [{ legId: "man", currency: "BTC", quantity: 1, reason: "why" }];
+  const p = plan({
+    rows: [],
+    legs: [manual],
+    config: { ...CONFIG, deleteManualEntries },
+    scope: ["nothing-like-it"],
+  }).plan;
+  assert.deepEqual(
+    p.delete.map((d) => d.legIds),
+    [["man"]],
+  );
+});
+
+test("deleteManualEntries: an entry that cannot go excuses nothing: its event stays held, nothing is uploaded", () => {
+  const r = row({ txids: [TX1] });
+  const hand = (legId: string, id: string, over: Partial<Leg> = {}) =>
+    ownLeg({ legId, quantity: 1, importType: "manual", source: "manual", id, actionId: "hand", ...over });
+  const naming = { comments: [TX1] };
+  const deleteManualEntries = [{ legId: "m1", currency: "BTC", quantity: 1, reason: "why" }];
+  const config = { ...CONFIG, deleteManualEntries };
+  // Another manual entry beside it
+  const beside = plan({ rows: [r], legs: [hand("m1", "h1", naming), hand("m2", "h2")], config }).plan;
+  assert.deepEqual(beside.delete, []);
+  assert.deepEqual(beside.upload, []);
+  assert.ok(beside.held.some((h) => h.id === null && /another manual entry/.test(h.reason)));
+  assert.ok(beside.held.some((h) => h.id === r.id));
+  // The control: with only the named entry, the event goes ahead
+  const alone = plan({ rows: [r], legs: [hand("m1", "h1", naming)], config }).plan;
+  assert.equal(alone.delete[0].manual, true);
+  assert.equal(alone.upload.length, 1);
+  // A hold on its txid
+  const onHold = plan({
+    rows: [r],
+    legs: [hand("m1", "h1", naming)],
+    config: { ...config, hold: [{ txid: TX1, reason: "pending" }] },
+  }).plan;
+  assert.deepEqual(onHold.delete, []);
+  assert.deepEqual(onHold.upload, []);
+});
+
+test("deleteManualEntries: filed if any leg is, its comment's txid is checked, and no report repeats it", () => {
+  const legs = [
+    ownLeg({
+      legId: "a",
+      quantity: 1,
+      importType: "manual",
+      source: "manual",
+      id: "h",
+      actionId: "x",
+      comments: [TX1],
+    }),
+    ownLeg({
+      legId: "b",
+      quantity: 1,
+      importType: "manual",
+      source: "manual",
+      id: "h",
+      actionId: "x",
+      timestamp: "2019-01-01T00:00:00.000Z",
+    }),
+  ];
+  const deleteManualEntries = ["a", "b"].map((legId) => ({ legId, currency: "BTC", quantity: 1, reason: "why" }));
+  const p = plan({ legs, config: { ...CONFIG, filedBefore: "2020-01-01", deleteManualEntries } }).plan;
+  assert.equal(p.delete[0].filed, true);
+  assert.deepEqual(p.delete[0].txids, [TX1]);
+  assert.deepEqual(p.report, []);
+});
+
+test("deleteManualEntries: another manual entry naming its tx holds it, as does a hold on a row of its tx", () => {
+  const hand = (legId: string, actionId: string, comments: string[]) =>
+    ownLeg({ legId, quantity: 1, importType: "manual", source: "manual", id: legId, actionId, comments });
+  const one = row({ txids: [TX1] });
+  const two = row({ txids: [TX2] });
+  const config = {
+    ...CONFIG,
+    deleteManualEntries: [{ legId: "m1", currency: "BTC", quantity: 1, reason: "why" }],
+  };
+  const p = plan({
+    rows: [one, two],
+    legs: [hand("m1", "a", [TX1, TX2]), hand("m2", "b", [TX1])],
+    config,
+  }).plan;
+  assert.deepEqual(p.delete, []);
+  assert.deepEqual(p.upload, []);
+  const held = plan({
+    rows: [two],
+    legs: [hand("m1", "a", [TX2])],
+    config: { ...config, hold: [{ id: two.id, reason: "pending" }] },
+  }).plan;
+  assert.deepEqual(held.delete, []);
+});
+
+test("deleteManualEntries: filed and current-year entries are refused together, and named ones come first", () => {
+  const hand = (legId: string, timestamp: string) =>
+    ownLeg({ legId, quantity: 1, importType: "manual", source: "manual", id: legId, actionId: legId, timestamp });
+  const entry = (legId: string) => ({ legId, currency: "BTC", quantity: 1, reason: "why" });
+  const config = { ...CONFIG, filedBefore: "2020-01-01", deleteManualEntries: [entry("old"), entry("new")] };
+  assert.throws(
+    () =>
+      plan({
+        legs: [hand("old", "2019-01-01T00:00:00.000Z"), hand("new", "2024-03-01T00:00:00.000Z")],
+        config,
+      }),
+    /both filed and current-year/,
+  );
+  const stable = "2024-03-01T10:00:00.000Z.out.abcdef012345";
+  const p = plan({
+    legs: [
+      hand("new", "2024-03-01T00:00:00.000Z"),
+      ownLeg({ legId: "gone", source: "csv-source", importType: "manual-csv", id: stable, actionId: "c" }),
+    ],
+    config: { ...config, deleteManualEntries: [entry("new")] },
+  }).plan;
+  assert.deepEqual(
+    p.delete.map((d) => d.legIds[0]),
+    ["new", "gone"],
+  );
+});
+
+test("deleteManualEntries: the matcher's history warns, and a going entry repeats no report", () => {
+  const r = row({ txids: [TX1] });
+  const leg = ownLeg({
+    legId: "m",
+    quantity: 1,
+    importType: "manual",
+    source: "manual",
+    id: "m",
+    actionId: "a",
+    comments: [TX1],
+  });
+  const config = {
+    ...CONFIG,
+    deleteManualEntries: [{ legId: "m", currency: "BTC", quantity: 1, reason: "why" }],
+  };
+  const p = plan({
+    rows: [r],
+    legs: [leg],
+    config,
+    history: new Map([["a", ["1 Jan 2024 00:00 · transactionMatching · Category: x"]]]),
+  }).plan;
+  assert.match(p.delete[0].reason, /may be guarding a pairing/);
+  assert.deepEqual(
+    p.report.filter((e) => e.kind === "manual-entry"),
+    [],
+  );
+});
+
+test("deleteManualEntries: one entry that cannot go keeps them all; two that share a tx and can go, go", () => {
+  const hand = (legId: string, comments: string[]) =>
+    ownLeg({ legId, quantity: 1, importType: "manual", source: "manual", id: legId, actionId: legId, comments });
+  const entry = (legId: string) => ({ legId, currency: "BTC", quantity: 1, reason: "why" });
+  const rows = [row({ txids: [TX1] }), row({ txids: [TX2] })];
+  const named = { ...CONFIG, deleteManualEntries: [entry("m1"), entry("m2")] };
+  const TX3 = "3".repeat(64);
+  const blocked = plan({
+    rows,
+    legs: [hand("m1", [TX1]), hand("m2", [TX1, TX2]), hand("m3", [TX2])],
+    config: named,
+  }).plan;
+  assert.deepEqual(blocked.delete, []);
+  assert.deepEqual(blocked.upload, []);
+  assert.ok(blocked.held.some((h) => h.legIds?.[0] === "m1" && /none goes until it can/.test(h.reason)));
+  const going = plan({ rows, legs: [hand("m1", [TX1, TX3]), hand("m2", [TX1, TX2])], config: named }).plan;
+  assert.deepEqual(
+    going.delete.map((d) => d.legIds[0]),
+    ["m1", "m2"],
+  );
+  assert.equal(going.upload.length, 1);
+});
+
+test("deleteManualEntries: a hold on an unmanaged row of its tx, or on its own ID, holds it", () => {
+  const r = btcRow({ txids: [TX1] });
+  const leg = ownLeg({
+    legId: "m",
+    quantity: 1,
+    importType: "manual",
+    source: "manual",
+    id: "own",
+    actionId: "a",
+    comments: [TX1],
+  });
+  const deleteManualEntries = [{ legId: "m", currency: "BTC", quantity: 1, reason: "why" }];
+  for (const id of [r.id, "own"]) {
+    const p = plan({
+      rows: [r],
+      legs: [leg],
+      config: { ...CONFIG, deleteManualEntries, hold: [{ id, reason: "pending" }] },
+    }).plan;
+    assert.deepEqual(p.delete, []);
+  }
+});

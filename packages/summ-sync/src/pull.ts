@@ -212,7 +212,11 @@ export async function pull(
     }
     if (txids) for (const id of actionsWithTxids(actions, txids)) needed.add(id);
     // A made-up leg an apply left in place can be outside all of those: plan must see whether it is still there
-    for (const { legId } of readLeftLegs(stateDir)) {
+    // and so can a manual entry the config names, alone in its action
+    for (const legId of [
+      ...readLeftLegs(stateDir).map((l) => l.legId),
+      ...config.deleteManualEntries.map((m) => m.legId),
+    ]) {
       const text = await client.callTool("inspect_transaction", { transactionId: legId }).catch((e: Error) => {
         if (isLegAbsent(e.message, legId)) return null;
         throw e;

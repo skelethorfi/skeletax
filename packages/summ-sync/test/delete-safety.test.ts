@@ -655,3 +655,88 @@ test("the manual list is read again after a write of the run, and not before one
   await apply(summ, dir, planDir);
   assert.equal(lists(), 2, "before the split, and after it before the delete");
 });
+
+const handEntry = (over: Partial<FakeLeg> = {}) =>
+  leg("d", { importType: "manual", source: "manual", id: "hand", comments: [{ comment: `swap ${TXID}` }], ...over });
+const namedHand = () => del({ manual: true, summId: "hand", txids: [TXID] });
+
+test("a named manual entry is split from its partner and deleted, and the partner stays", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [handEntry(), partner()]);
+  const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [namedHand()] })));
+  const { result } = await apply(summ, dir, planDir);
+  assert.equal(result?.deleted, 1);
+  assert.equal(result?.split, 1);
+  assert.equal(summ.leg("d"), undefined);
+  assert.ok(summ.leg("partner"));
+});
+
+test("a manual entry the plan does not name, added after the pull, still stops a named one", async () => {
+  await (async () => {
+    const summ = new FakeSumm();
+    summ.add("a", [handEntry()]);
+    const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [namedHand()] })));
+    summ.add("a", [handEntry(), leg("e", { importType: "manual", source: "manual", id: "hand2", trade: "deposit" })]);
+    const { stop } = await apply(summ, dir, planDir);
+    assert.match(String(stop?.message), /manual entry e .* is in the action/);
+    assert.deepEqual(writesOf(summ), []);
+  })();
+});
+
+test("a named manual entry that changed after the pull stops, with nothing written", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [handEntry()]);
+  const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [namedHand()] })));
+  Object.assign(summ.leg("d") as FakeLeg, { quantity: "2" });
+  const { stop } = await apply(summ, dir, planDir);
+  assert.match(String(stop?.message), /quantity of leg d is 2/);
+  assert.deepEqual(writesOf(summ), []);
+});
+
+test("a run that would leave a named manual entry stops before it writes anything", async () => {
+  for (const [opts, entry] of [
+    [{ ...ALL, approveDeletes: false }, {}],
+    [ALL, { filed: true }],
+    [{ ...ALL, approveFiled: true }, { filed: false }],
+  ] as const) {
+    const summ = new FakeSumm();
+    summ.add("a", [handEntry()]);
+    summ.add("b", [leg("x")]);
+    const d = [namedHand(), del({ legIds: ["x"], summId: "row-x", filed: opts.approveFiled })].map((e, i) =>
+      i === 0 ? { ...e, ...entry } : e,
+    );
+    const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: d })));
+    const { stop } = await apply(summ, dir, planDir, opts);
+    assert.match(String(stop?.message), /must go first/);
+    assert.deepEqual(writesOf(summ), []);
+  }
+});
+
+test("a named manual entry already deleted does not stop a later run of the other year", async () => {
+  const summ = new FakeSumm();
+  summ.add("b", [leg("x")]);
+  const entries = [{ ...namedHand(), filed: true }, del({ legIds: ["x"], summId: "row-x" })];
+  const held = new FakeSumm();
+  held.add("a", [handEntry()]);
+  held.add("b", [leg("x")]);
+  const file = named(held, planOf({ delete: entries }));
+  const { dir, planDir } = stateFor(summ, file);
+  const { result } = await apply(summ, dir, planDir);
+  assert.equal(result?.deleted, 1);
+});
+
+test("named manual entries run before a row's delete in their event", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [handEntry()]);
+  summ.add("b", [leg("x")]);
+  const { dir, planDir } = stateFor(
+    summ,
+    named(summ, planOf({ delete: [namedHand(), del({ legIds: ["x"], summId: "row-x", txids: [TXID] })] })),
+  );
+  const { result } = await apply(summ, dir, planDir);
+  assert.equal(result?.deleted, 2);
+  assert.deepEqual(writesOf(summ), [
+    ["delete", "d"],
+    ["delete", "x"],
+  ]);
+});

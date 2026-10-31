@@ -18,10 +18,20 @@ export interface Config {
   keepExtra: string[];
   /** Rows the plan leaves alone while a decision outside the sync is pending: nothing is planned for them. */
   hold: Hold[];
+  /** Manual entries the user has decided to delete: planned like any delete. Any other manual entry still holds. */
+  deleteManualEntries: DeleteManualEntry[];
 }
 
 /** A held row by its ID, or every row naming a txid. */
 export type Hold = ({ id: string; txid?: undefined } | { txid: string; id?: undefined }) & { reason: string };
+
+/** A manual entry by its leg, with what it must still hold, so an entry that changed or a wrong id stops the plan. */
+export interface DeleteManualEntry {
+  legId: string;
+  currency: string;
+  quantity: number;
+  reason: string;
+}
 
 export const DEFAULTS: Config = {
   managedChains: ["THOR", "MAYA"],
@@ -31,6 +41,7 @@ export const DEFAULTS: Config = {
   extraDirs: [],
   keepExtra: [],
   hold: [],
+  deleteManualEntries: [],
 };
 
 export function parseConfig(text: string): Config {
@@ -55,6 +66,25 @@ export function parseConfig(text: string): Config {
       'summ-sync.json: hold must be a list of {"id": "<row ID>", "reason": "<why>"} or {"txid": "<txid>", "reason": "<why>"}, each with a reason',
     );
   }
+  if (
+    !Array.isArray(config.deleteManualEntries) ||
+    !config.deleteManualEntries.every(
+      (m) =>
+        typeof m?.legId === "string" &&
+        m.legId !== "" &&
+        typeof m.currency === "string" &&
+        m.currency !== "" &&
+        typeof m.quantity === "number" &&
+        typeof m.reason === "string" &&
+        m.reason.trim() !== "",
+    )
+  ) {
+    throw new Error(
+      'summ-sync.json: deleteManualEntries must be a list of {"legId": "<leg>", "currency": "<symbol>", "quantity": <number>, "reason": "<why>"}',
+    );
+  }
+  const named = config.deleteManualEntries.map((m) => m.legId);
+  if (new Set(named).size !== named.length) throw new Error("summ-sync.json: deleteManualEntries names a leg twice");
   if (config.filedBefore !== null && !/^\d{4}-\d{2}-\d{2}$/.test(config.filedBefore)) {
     throw new Error("summ-sync.json: filedBefore must be a date (YYYY-MM-DD) or null");
   }
