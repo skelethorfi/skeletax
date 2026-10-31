@@ -148,7 +148,7 @@ export interface DeleteEntry {
   others?: LegValues[];
   /** The row's txids, or with no row those its legs name: a manual entry naming one at apply stops the entry. */
   txids?: string[];
-  /** Named in the config's deleteManual: these legs are manual entries, excused from what holds or stops the others. */
+  /** Named in the config's deleteManualEntries: these legs are manual entries, excused from what holds or stops the others. */
   manual?: boolean;
 }
 
@@ -662,7 +662,7 @@ export function makePlan(input: PlanInput): PlanResult {
     plan.delete.push({
       id: row?.id ?? null,
       summId,
-      filed: isFiled(row?.timestamp ?? legs[0].timestamp),
+      filed: row ? isFiled(row.timestamp) : legs.some((l) => isFiled(l.timestamp)),
       legIds,
       actionIds,
       reason,
@@ -1233,21 +1233,24 @@ export function makePlan(input: PlanInput): PlanResult {
   }
 
   // Manual entries the user named: first in the plan, so what they stood in for sees them gone. A wrong or changed
-  // entry stops the plan: the user named something else
-  const namedManual = new Set(config.deleteManual.map((m) => m.legId));
+  // entry stops the plan: the user named something else. An entry that cannot go (another manual entry in its action,
+  // or a hold on it) excuses nothing, so what it held stays held.
+  const namedManual = new Set<string>();
   const manualGroups = new Map<string, Leg[]>();
-  for (const m of config.deleteManual) {
+  for (const m of config.deleteManualEntries) {
     const leg = input.legs.find((l) => l.legId === m.legId);
     if (!leg) {
-      plan.notes.push(`deleteManual: leg ${m.legId} is not in Summ; remove its line once it is deleted`);
+      plan.notes.push(
+        `deleteManualEntries: leg ${m.legId} is not in the snapshot: remove its line if it is deleted, else pull again`,
+      );
       continue;
     }
     if (leg.importType !== "manual") {
-      throw new Error(`deleteManual: leg ${m.legId} is not a manual entry (import type ${leg.importType})`);
+      throw new Error(`deleteManualEntries: leg ${m.legId} is not a manual entry (import type ${leg.importType})`);
     }
     if (!sameCurrency(leg.currency, m.currency) || !sameAmount(leg.quantity, m.quantity)) {
       throw new Error(
-        `deleteManual: leg ${m.legId} holds ${leg.quantity} ${leg.currency}, the config says ${m.quantity} ${m.currency}`,
+        `deleteManualEntries: leg ${m.legId} holds ${leg.quantity} ${leg.currency}, the config says ${m.quantity} ${m.currency}`,
       );
     }
     manualGroups.set(leg.actionId, [...(manualGroups.get(leg.actionId) ?? []), leg]);
@@ -1255,7 +1258,29 @@ export function makePlan(input: PlanInput): PlanResult {
   const rowDeletes = plan.delete;
   plan.delete = [];
   for (const [actionId, legs] of manualGroups) {
-    const reasons = config.deleteManual.filter((m) => legs.some((l) => l.legId === m.legId)).map((m) => m.reason);
+    const legIds = legs.map((l) => l.legId);
+    const unnamed = (legsByAction.get(actionId) ?? []).filter(
+      (l) => l.importType === "manual" && !legIds.includes(l.legId),
+    );
+    const txids = [...new Set([...txidsOf(legs), ...legs.flatMap(txidsNamedBy)])].filter((t) => !/^0+$/.test(t));
+    const onHold = config.hold.find((h) =>
+      h.txid === undefined ? legs.some((l) => l.id === h.id) : txids.includes(normaliseTxid(h.txid)),
+    );
+    if (unnamed.length || onHold) {
+      plan.held.push({
+        kind: unnamed.length ? "manual-pairing" : "hold",
+        filed: legs.some((l) => isFiled(l.timestamp)),
+        id: null,
+        summId: legs[0].id,
+        legIds,
+        reason: unnamed.length
+          ? `another manual entry is in its action (${unnamed.map((l) => `${l.quantity} ${l.currency}`).join(", ")}): name it too, or resolve it in Summ`
+          : (onHold as Hold).reason,
+        held: ["delete (named in deleteManualEntries)"],
+      });
+      continue;
+    }
+    const reasons = config.deleteManualEntries.filter((m) => legIds.includes(m.legId)).map((m) => m.reason);
     const matched = (input.history.get(actionId) ?? []).some((h) => h.includes("transactionMatching"));
     deleteGroup(
       legs[0].id,
@@ -1263,7 +1288,8 @@ export function makePlan(input: PlanInput): PlanResult {
       null,
       `manual entry: ${[...new Set(reasons)].join("; ")}${matched ? " (Summ's matcher changed this action: the entry may be guarding a pairing)" : ""}`,
     );
-    plan.delete[plan.delete.length - 1].manual = true;
+    Object.assign(plan.delete[plan.delete.length - 1], { manual: true, txids });
+    legIds.forEach((id) => namedManual.add(id));
   }
   plan.delete.push(...rowDeletes);
 
@@ -1468,7 +1494,7 @@ export function makePlan(input: PlanInput): PlanResult {
   // ---- Manual entries repeating a row's txid
   const txidRows = new Map<string, string>();
   for (const row of rows) for (const t of row.txids) txidRows.set(t, row.id);
-  for (const leg of input.legs.filter((l) => l.importType === "manual")) {
+  for (const leg of input.legs.filter((l) => l.importType === "manual" && !namedManual.has(l.legId))) {
     for (const txid of txidsNamedBy(leg)) {
       const id = txidRows.get(txid);
       if (id)
@@ -1606,7 +1632,7 @@ function narrow(
         join(r.txids);
       }
     for (const d of plan.delete.filter(
-      (d) => d.id === null && !waitLegs.has(d.summId) && !entries.includes(d.summId),
+      (d) => d.id === null && !d.manual && !waitLegs.has(d.summId) && !entries.includes(d.summId),
     )) {
       const legs = legsOf(d.legIds);
       const named = txidsOf(legs);
@@ -1618,6 +1644,8 @@ function narrow(
   }
   const waiting = [...waitRows, ...waitLegs.keys()];
   if (waiting.length) plan.notes.push(`scope: ${waiting.join(", ")} wait with the legs of their tx left above`);
+  for (const d of plan.delete.filter((d) => d.manual))
+    plan.notes.push(`scope: manual entry ${d.summId} is deleted as the config names it, whatever the scope`);
   // Legs an entry names by their ID in Summ are deleted all the same: said, as their tx's rows may not be uploaded
   for (const d of plan.delete.filter((d) => d.id === null && entries.includes(d.summId))) {
     const named = txidsOf(legsOf(d.legIds)).filter(real);

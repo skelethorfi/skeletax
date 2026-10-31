@@ -19,14 +19,14 @@ export interface Config {
   /** Rows the plan leaves alone while a decision outside the sync is pending: nothing is planned for them. */
   hold: Hold[];
   /** Manual entries the user has decided to delete: planned like any delete. Any other manual entry still holds. */
-  deleteManual: DeleteManual[];
+  deleteManualEntries: DeleteManualEntry[];
 }
 
 /** A held row by its ID, or every row naming a txid. */
 export type Hold = ({ id: string; txid?: undefined } | { txid: string; id?: undefined }) & { reason: string };
 
 /** A manual entry by its leg, with what it must still hold, so an entry that changed or a wrong id stops the plan. */
-export interface DeleteManual {
+export interface DeleteManualEntry {
   legId: string;
   currency: string;
   quantity: number;
@@ -41,7 +41,7 @@ export const DEFAULTS: Config = {
   extraDirs: [],
   keepExtra: [],
   hold: [],
-  deleteManual: [],
+  deleteManualEntries: [],
 };
 
 export function parseConfig(text: string): Config {
@@ -67,8 +67,8 @@ export function parseConfig(text: string): Config {
     );
   }
   if (
-    !Array.isArray(config.deleteManual) ||
-    !config.deleteManual.every(
+    !Array.isArray(config.deleteManualEntries) ||
+    !config.deleteManualEntries.every(
       (m) =>
         typeof m?.legId === "string" &&
         m.legId !== "" &&
@@ -80,9 +80,11 @@ export function parseConfig(text: string): Config {
     )
   ) {
     throw new Error(
-      'summ-sync.json: deleteManual must be a list of {"legId": "<leg>", "currency": "<symbol>", "quantity": <number>, "reason": "<why>"}',
+      'summ-sync.json: deleteManualEntries must be a list of {"legId": "<leg>", "currency": "<symbol>", "quantity": <number>, "reason": "<why>"}',
     );
   }
+  const named = config.deleteManualEntries.map((m) => m.legId);
+  if (new Set(named).size !== named.length) throw new Error("summ-sync.json: deleteManualEntries names a leg twice");
   if (config.filedBefore !== null && !/^\d{4}-\d{2}-\d{2}$/.test(config.filedBefore)) {
     throw new Error("summ-sync.json: filedBefore must be a date (YYYY-MM-DD) or null");
   }

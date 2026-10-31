@@ -693,19 +693,50 @@ test("a named manual entry that changed after the pull stops, with nothing writt
   assert.deepEqual(writesOf(summ), []);
 });
 
-test("without the deletes' approval, a named manual entry still stops an edit naming its txid", async () => {
+test("a run that would leave a named manual entry stops before it writes anything", async () => {
+  for (const [opts, entry] of [
+    [{ ...ALL, approveDeletes: false }, {}],
+    [ALL, { filed: true }],
+    [{ ...ALL, approveFiled: true }, { filed: false }],
+  ] as const) {
+    const summ = new FakeSumm();
+    summ.add("a", [handEntry()]);
+    summ.add("b", [leg("x")]);
+    const d = [namedHand(), del({ legIds: ["x"], summId: "row-x", filed: opts.approveFiled })].map((e, i) =>
+      i === 0 ? { ...e, ...entry } : e,
+    );
+    const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: d })));
+    const { stop } = await apply(summ, dir, planDir, opts);
+    assert.match(String(stop?.message), /must go first/);
+    assert.deepEqual(writesOf(summ), []);
+  }
+});
+
+test("a named manual entry already deleted does not stop a later run of the other year", async () => {
+  const summ = new FakeSumm();
+  summ.add("b", [leg("x")]);
+  const entries = [{ ...namedHand(), filed: true }, del({ legIds: ["x"], summId: "row-x" })];
+  const held = new FakeSumm();
+  held.add("a", [handEntry()]);
+  held.add("b", [leg("x")]);
+  const file = named(held, planOf({ delete: entries }));
+  const { dir, planDir } = stateFor(summ, file);
+  const { result } = await apply(summ, dir, planDir);
+  assert.equal(result?.deleted, 1);
+});
+
+test("named manual entries run before a row's delete in their event", async () => {
   const summ = new FakeSumm();
   summ.add("a", [handEntry()]);
-  summ.add("b", [leg("x", { description: "" })]);
-  const edit: EditEntry = {
-    id: "row-x",
-    filed: false,
-    legIds: ["x"],
-    actionId: "b",
-    txids: [TXID],
-    changes: [{ leg: "base", legId: "x", field: "quantity", summ: 1, desired: 2 }],
-  } as EditEntry;
-  const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [namedHand()], edit: [edit] })));
-  const { stop } = await apply(summ, dir, planDir, { ...ALL, approveDeletes: false });
-  assert.match(String(stop?.message), /manual entry d .*names the row's txid/);
+  summ.add("b", [leg("x")]);
+  const { dir, planDir } = stateFor(
+    summ,
+    named(summ, planOf({ delete: [namedHand(), del({ legIds: ["x"], summId: "row-x", txids: [TXID] })] })),
+  );
+  const { result } = await apply(summ, dir, planDir);
+  assert.equal(result?.deleted, 2);
+  assert.deepEqual(writesOf(summ), [
+    ["delete", "d"],
+    ["delete", "x"],
+  ]);
 });

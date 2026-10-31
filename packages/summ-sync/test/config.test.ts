@@ -23,7 +23,7 @@ test("a config overrides the defaults it names", () => {
     extraDirs: [],
     keepExtra: [],
     hold: [],
-    deleteManual: [],
+    deleteManualEntries: [],
   });
 });
 
@@ -47,10 +47,15 @@ test("a hold names a row ID or a txid", () => {
   assert.deepEqual(parseConfig(JSON.stringify({ hold })).hold, hold);
 });
 
-test("deleteManual needs a leg, currency, quantity and reason", () => {
+test("deleteManualEntries needs a leg, currency, quantity and reason", () => {
   const entry = { legId: "l", currency: "BTC", quantity: 1, reason: "why" };
-  assert.deepEqual(parseConfig(JSON.stringify({ deleteManual: [entry] })).deleteManual, [entry]);
+  assert.deepEqual(parseConfig(JSON.stringify({ deleteManualEntries: [entry] })).deleteManualEntries, [entry]);
   for (const bad of [{ ...entry, reason: " " }, { ...entry, quantity: "1" }, { ...entry, legId: "" }, "l"]) {
-    assert.throws(() => parseConfig(JSON.stringify({ deleteManual: [bad] })), /deleteManual must be/);
+    assert.throws(() => parseConfig(JSON.stringify({ deleteManualEntries: [bad] })), /deleteManualEntries must be/);
   }
+});
+
+test("deleteManualEntries may not name a leg twice", () => {
+  const entry = { legId: "l", currency: "BTC", quantity: 1, reason: "why" };
+  assert.throws(() => parseConfig(JSON.stringify({ deleteManualEntries: [entry, entry] })), /names a leg twice/);
 });

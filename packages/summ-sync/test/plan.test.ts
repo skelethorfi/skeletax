@@ -2766,7 +2766,7 @@ test("a manual entry linked only by its Tx Hash holds the row's event", () => {
   assert.equal(p.held[0].kind, "manual-pairing");
 });
 
-test("deleteManual: a named entry is planned first, with its values, and no longer holds its event", () => {
+test("deleteManualEntries: a named entry is planned first, with its values, and no longer holds its event", () => {
   const r = btcRow({ type: "bridge-trade-in", feeCurrency: "", feeAmount: "" });
   const own = ownLeg({ legId: "own", quantity: 0.01, trade: "deposit", side: "incoming", actionId: "act" });
   const manual = ownLeg({
@@ -2782,8 +2782,8 @@ test("deleteManual: a named entry is planned first, with its values, and no long
   const held = plan({ rows: [r], legs: [own, manual] }).plan;
   assert.equal(held.delete.length, 0);
   assert.equal(held.held[0].kind, "manual-pairing");
-  const deleteManual = [{ legId: "man", currency: "BTC", quantity: 0.01, reason: "stood in for the swap" }];
-  const named = plan({ rows: [r], legs: [own, manual], config: { ...CONFIG, deleteManual } }).plan;
+  const deleteManualEntries = [{ legId: "man", currency: "BTC", quantity: 0.01, reason: "stood in for the swap" }];
+  const named = plan({ rows: [r], legs: [own, manual], config: { ...CONFIG, deleteManualEntries } }).plan;
   assert.deepEqual(named.held, []);
   assert.equal(named.delete[0].manual, true);
   assert.deepEqual(named.delete[0].legIds, ["man"]);
@@ -2795,28 +2795,88 @@ test("deleteManual: a named entry is planned first, with its values, and no long
   // Another manual entry in the action still holds it
   const other = { ...manual, legId: "man2", id: "hand2" };
   assert.equal(
-    plan({ rows: [r], legs: [own, manual, other], config: { ...CONFIG, deleteManual } }).plan.held[0].kind,
+    plan({ rows: [r], legs: [own, manual, other], config: { ...CONFIG, deleteManualEntries } }).plan.held[0].kind,
     "manual-pairing",
   );
 });
 
-test("deleteManual: a wrong entry stops the plan, and one already gone is noted", () => {
+test("deleteManualEntries: a wrong entry stops the plan, and one already gone is noted", () => {
   const manual = ownLeg({ legId: "man", quantity: 1, importType: "manual", source: "manual", id: "hand" });
   const entry = { legId: "man", currency: "BTC", quantity: 1, reason: "why" };
   const run = (legs: Leg[], over = {}) =>
-    plan({ rows: [], legs, config: { ...CONFIG, deleteManual: [{ ...entry, ...over }] } }).plan;
+    plan({ rows: [], legs, config: { ...CONFIG, deleteManualEntries: [{ ...entry, ...over }] } }).plan;
   assert.throws(() => run([manual], { quantity: 2 }), /config says 2/);
   assert.throws(() => run([manual], { currency: "ETH" }), /config says 1 ETH/);
   assert.throws(() => run([{ ...manual, importType: "wallet" }]), /not a manual entry/);
-  assert.match(run([]).notes.join(), /leg man is not in Summ/);
+  assert.match(run([]).notes.join(), /leg man is not in the snapshot/);
 });
 
-test("deleteManual: a scoped plan keeps a named entry whatever the scope says", () => {
+test("deleteManualEntries: a scoped plan keeps a named entry whatever the scope says", () => {
   const manual = ownLeg({ legId: "man", quantity: 1, importType: "manual", source: "manual", id: "hand" });
-  const deleteManual = [{ legId: "man", currency: "BTC", quantity: 1, reason: "why" }];
-  const p = plan({ rows: [], legs: [manual], config: { ...CONFIG, deleteManual }, scope: ["nothing-like-it"] }).plan;
+  const deleteManualEntries = [{ legId: "man", currency: "BTC", quantity: 1, reason: "why" }];
+  const p = plan({
+    rows: [],
+    legs: [manual],
+    config: { ...CONFIG, deleteManualEntries },
+    scope: ["nothing-like-it"],
+  }).plan;
   assert.deepEqual(
     p.delete.map((d) => d.legIds),
     [["man"]],
   );
+});
+
+test("deleteManualEntries: an entry that cannot go excuses nothing: its event stays held, nothing is uploaded", () => {
+  const r = row({ txids: [TX1] });
+  const hand = (legId: string, id: string, over: Partial<Leg> = {}) =>
+    ownLeg({ legId, quantity: 1, importType: "manual", source: "manual", id, actionId: "hand", ...over });
+  const naming = { comments: [TX1] };
+  const deleteManualEntries = [{ legId: "m1", currency: "BTC", quantity: 1, reason: "why" }];
+  const config = { ...CONFIG, deleteManualEntries };
+  // Another manual entry beside it
+  const beside = plan({ rows: [r], legs: [hand("m1", "h1", naming), hand("m2", "h2")], config }).plan;
+  assert.deepEqual(beside.delete, []);
+  assert.deepEqual(beside.upload, []);
+  assert.ok(beside.held.some((h) => h.id === null && /another manual entry/.test(h.reason)));
+  assert.ok(beside.held.some((h) => h.id === r.id));
+  // The control: with only the named entry, the event goes ahead
+  const alone = plan({ rows: [r], legs: [hand("m1", "h1", naming)], config }).plan;
+  assert.equal(alone.delete[0].manual, true);
+  assert.equal(alone.upload.length, 1);
+  // A hold on its txid
+  const onHold = plan({
+    rows: [r],
+    legs: [hand("m1", "h1", naming)],
+    config: { ...config, hold: [{ txid: TX1, reason: "pending" }] },
+  }).plan;
+  assert.deepEqual(onHold.delete, []);
+  assert.deepEqual(onHold.upload, []);
+});
+
+test("deleteManualEntries: filed if any leg is, its comment's txid is checked, and no report repeats it", () => {
+  const legs = [
+    ownLeg({
+      legId: "a",
+      quantity: 1,
+      importType: "manual",
+      source: "manual",
+      id: "h",
+      actionId: "x",
+      comments: [TX1],
+    }),
+    ownLeg({
+      legId: "b",
+      quantity: 1,
+      importType: "manual",
+      source: "manual",
+      id: "h",
+      actionId: "x",
+      timestamp: "2019-01-01T00:00:00.000Z",
+    }),
+  ];
+  const deleteManualEntries = ["a", "b"].map((legId) => ({ legId, currency: "BTC", quantity: 1, reason: "why" }));
+  const p = plan({ legs, config: { ...CONFIG, filedBefore: "2020-01-01", deleteManualEntries } }).plan;
+  assert.equal(p.delete[0].filed, true);
+  assert.deepEqual(p.delete[0].txids, [TX1]);
+  assert.deepEqual(p.report, []);
 });

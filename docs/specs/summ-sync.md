@@ -564,7 +564,7 @@ with the entries left out:
   row in the run whose action holds a manual entry, or whose txid a manual entry
   names, are not deleted either. A manual entry names a txid in its description, its comments or its Tx Hash.
 
-  The user resolves the pairing in Summ, or the run, and plans again. Or the user names the entry in `deleteManual`
+  The user resolves the pairing in Summ, or the run, and plans again. Or the user names the entry in `deleteManualEntries`
   (below): a manual entry never goes without being named.
 
 **Filed years.** An entry whose row or leg is dated before `filedBefore` is
@@ -740,16 +740,20 @@ as the sync's own edit, so it is not taken for one later.
 **Deleting a manual entry.** A manual entry can be the user's stand-in, so the sync deletes one only when the
 user names it in `summ-sync.json`:
 
-    "deleteManual": [{ "legId": "<leg>", "currency": "BTC", "quantity": 0.1, "reason": "<why>" }]
+    "deleteManualEntries": [{ "legId": "<leg>", "currency": "BTC", "quantity": 0.1, "reason": "<why>" }]
 
-Plan refuses a named leg that is not a manual entry, or whose currency or amount differ. A named leg no longer in Summ
-gives a note, so its line can be removed. Named legs of one action are one delete entry, first in the plan, whatever
-`--only` says, with the reason, values and comments in `plan.md`, and a warning if Summ's matcher changed the action:
-such an entry may be guarding a pairing. They need `--approve-deletes`, and `--approve-filed` in a filed year. They run
-as any delete: a split from what stays, a fresh read compared with the plan, two reads that agree, the journal and the
-pre-image. Only named legs are excused: any other manual entry still holds its event in the plan and stops apply, and
-without `--approve-deletes` a named one stops apply as any other does. Summ has no undo for a delete; a pre-image is
-what it can be entered again from.
+Plan refuses a named leg that is not a manual entry, or whose currency or amount differ. Pull reads a named leg's action
+even when nothing else needs it; a named leg not in the snapshot gives a note, so its line can be removed. Named legs of
+one action are one delete entry, first in the plan, whatever `--only` says (a note says so), with the reason, values and
+comments in `plan.md`, and a warning if Summ's matcher changed the action: such an entry may be guarding a pairing. The
+entry's txids include those its comments name. It is filed if any of its legs is.
+
+Only an entry that will go excuses anything. Another manual entry in its action, or a `hold` on its ID or txid, leaves it
+held, and its event held with it. A run that would leave a named entry in Summ stops before writing anything: it needs
+`--approve-deletes`, and `--approve-filed` for a filed entry, while one already gone stops nothing. Named entries run as
+any delete: a split from what stays, a fresh read compared with the plan, two reads that agree, the journal and the
+pre-image. Any other manual entry still holds its event in the plan and stops apply. Summ has no undo for a delete; a
+pre-image is what it can be entered again from.
 
 **Manual entries.** Before a delete entry's split, and before the reads that agree on its
 delete, apply lists the actions holding a manual entry (`importType` filter, every page) and reads

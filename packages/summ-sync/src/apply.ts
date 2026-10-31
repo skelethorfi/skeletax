@@ -821,7 +821,7 @@ export async function applyPlan(
     return same(c.field, now, c.desired) ? "after" : "other";
   }
 
-  // The manual entries this apply deletes, the first of its deletes; without the approval they are as any other
+  // The manual entries this apply deletes, the first of its deletes; a run that would leave one stops first (below)
   const namedManual = new Set((opts.approveDeletes ? deletes : []).filter((e) => e.manual).flatMap((e) => e.legIds));
   // The legs this apply's deletes remove or ignore: another delete's own entry checks them
   const deleting = new Set(
@@ -1064,6 +1064,16 @@ export async function applyPlan(
   }
 
   // ---- The run: entries in order, each finished before a signal is looked at
+  // The plan excused what a named manual entry held only because the entry goes first: a run that leaves one stays out
+  for (const entry of plan.delete.filter((e) => e.manual)) {
+    if (opts.approveDeletes && deletes.includes(entry)) continue;
+    if ((await lookUpAll(entry.legIds)).some((f) => f !== null))
+      conflict(
+        `delete-${plan.delete.indexOf(entry)}`,
+        entry.id,
+        `manual entry ${entry.summId} must go first, and this run would leave it: it needs --approve-deletes${entry.filed ? " and --approve-filed" : ", without --approve-filed"}`,
+      );
+  }
   if (deletes.length && !opts.approveDeletes) say(`Deletes: ${deletes.length} not applied (needs --approve-deletes)`);
   else if (deletes.length) say(`Deletes: ${deletes.length}`);
   for (const entry of opts.approveDeletes ? deletes : []) {
