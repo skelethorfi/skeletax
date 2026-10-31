@@ -11,7 +11,7 @@ import { join, resolve } from "node:path";
 import { extraDirsOf, loadConfig } from "./config.ts";
 import { type Change, makePlan, type EditEntry, parseScope, type Plan } from "./plan.ts";
 import { parseCsvLine, readRun, type Row, type RunFile } from "./run.ts";
-import { latestSnapshot, readSnapshot, readSnapshotFile } from "./snapshot.ts";
+import { latestSnapshot, type PullRange, readSnapshot, readSnapshotFile } from "./snapshot.ts";
 import { readAdopted, readApplyLog, readOverrides } from "./state.ts";
 
 const show = (v: unknown) => (v === null || v === "" || v === undefined ? "–" : String(v));
@@ -218,6 +218,12 @@ export function writePlan(stateDir: string, runDir: string, only?: string): stri
   const pulled = readSnapshotFile(snapshotDir);
   if (pulled.version === 2 && pulled.run !== resolve(runDir))
     throw new Error(`The latest snapshot was pulled for ${pulled.run ?? "no run"}, not ${resolve(runDir)}: pull again`);
+  if (
+    pulled.version === 2 &&
+    JSON.stringify([pulled.managedSources, pulled.managedChains]) !==
+      JSON.stringify([config.managedSources, config.managedChains])
+  )
+    throw new Error("managedSources or managedChains changed since the latest snapshot: pull again");
   const now = new Date().toISOString();
   const { plan, rows: planned } = makePlan({
     files,
@@ -234,11 +240,23 @@ export function writePlan(stateDir: string, runDir: string, only?: string): stri
     scope,
   });
 
-  // A row's leg dated outside the range is not in the snapshot, so the row would look missing: an upload needs the proof
-  if (pulled.range && plan.upload.length)
-    throw new Error(
-      `This plan would upload ${plan.upload.reduce((n, u) => n + u.ids.length, 0)} rows, but the snapshot covers only part of the history, so a row's leg could be outside it and an upload could count it twice. Pull with --all and plan again.`,
+  // A leg dated outside the range is not in the snapshot, so a row could look missing, or a tx's other copy go unseen.
+  // Only an edit of a leg the plan can see, in a current year, rests on nothing it cannot see
+  if (pulled.range) {
+    const wider = [
+      plan.upload.length ? `${plan.upload.reduce((n, u) => n + u.ids.length, 0)} uploads` : "",
+      plan.delete.length ? `${plan.delete.length} deletes` : "",
+      plan.categorise.length ? `${plan.categorise.length} categorisations` : "",
+      plan.edit.some((e) => e.filed) ? `edits in filed years` : "",
+    ].filter(Boolean);
+    if (wider.length)
+      throw new Error(
+        `This plan has ${wider.join(", ")}, but the snapshot covers only ${(pulled.range as PullRange).from} to ${(pulled.range as PullRange).to}, and these rest on legs outside it. Pull with --all and plan again.`,
+      );
+    plan.notes.unshift(
+      `The snapshot covers only ${(pulled.range as PullRange).from} to ${(pulled.range as PullRange).to}: reports can miss or misstate a tx with legs outside it`,
     );
+  }
 
   const dir = join(stateDir, "plans", now.slice(0, 19).replace(/:/g, "-"));
   mkdirSync(join(dir, "upload"), { recursive: true });

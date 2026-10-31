@@ -119,25 +119,32 @@ slow (minutes for a year, half an hour for the whole history), so it is resumabl
 
 With a run dir the pull covers the run's periods with a day's margin each side
 (`range` in the snapshot, in the account's timezone); `--all`, or no run dir, covers
-the whole history. Plan refuses a snapshot pulled for another run. It also refuses,
-when the snapshot covers part of the history and the plan has uploads: a row's leg
-dated outside the range would look missing and an upload would count it twice, so
-such a plan needs `pull --all`. A change outside the range is not seen.
+the whole history. A leg dated outside the range is not in the snapshot, so a row
+could look missing, or a tx's other copy go unseen. So a plan from a partial snapshot
+may hold only edits of managed rows in current years. Uploads, deletes,
+categorisations and filed-year edits make plan refuse, and ask for `pull --all`; and
+`plan.md` says its reports can miss or misstate a tx with legs outside the range.
+
+Plan refuses a snapshot pulled for another run or none, or under other
+`managedSources` or `managedChains`.
 
 **Details file.** Each detail goes on a line of `<time>.details.jsonl` as it is read
 (`a`: the action id, `at`, `action`, `history`; the first line records the run, range
 and sources). So each pull's state stays on record, under the action id it was read
 by. A stopped pull leaves this file and no `<time>.json`. The next pull of the same
-run, range and sources within a day goes on from it, reading only what is left; a
-line cut off by the stop is read again.
+run, range and sources goes on from it, reading what is left, a line cut off by the
+stop, and any detail read over an hour ago, since an edit can keep its id. A stopped
+pull over a day old, or older than a write apply logged, starts afresh.
 
-**Snapshot file.** `version: 2`, `takenAt` (when the pull started, so a write during
+**Snapshot file.** Named by the time it finished, so the latest is the last to
+finish. `version: 2`, `takenAt` (when the pull started, so a write during
 it counts as after it), the counts, `run`, `range`, `rounds`, then one entry per
 listed action: `id`, `txHash`, `category`, `tags`, and `detail: true` for the actions
 the plan needs. It is written whole, last. It is written only when the pull
 **settled**: a round had nothing left to read and listed exactly what the round
 before it did, the list's count equals its unique ids, every action of a managed
-source is in the list, and no leg is in two actions. Otherwise the pull lists again,
+source is in the list, and no leg is in two actions (those actions are read again).
+Otherwise the pull lists again,
 up to five rounds, then stops and keeps what it read. A recalculation during a pull
 rebuilds every id, so everything is read again.
 
@@ -620,7 +627,7 @@ error):
    store already holds that id), and the log line names the file. A deleted row comes back by
    uploading its CSV line again; the saved file shows what Summ held.
 3. Edits and categorisation. Before each action, look it up again by leg
-   `_id` (action ids change after every write) and check the leg still
+   `_id` (an action id can change on any write) and check the leg still
    holds the plan's "Summ value"; a leg that changed since the pull is
    skipped and reported. All changes of one action go in one
    `edit_transaction`. A price change sends `price` with

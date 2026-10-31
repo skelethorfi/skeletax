@@ -7,7 +7,7 @@
 //
 // Every detail is read on every pull: an action can change and keep its id. The range defaults to the run's periods.
 
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { nextDay, startOfDay } from "./dates.ts";
 import { McpClient } from "./mcp.ts";
@@ -29,8 +29,10 @@ const PAGE_SIZE = 250;
 const DAY_MS = 86_400_000;
 /** Lists until two rounds in a row agree; beyond this Summ is not settling. */
 const MAX_ROUNDS = 5;
-/** Details older than this are not resumed: too much could have changed under ids they read. */
+/** A stopped pull older than this starts afresh. */
 const RESUME_MS = DAY_MS;
+/** A detail read longer ago than this is read again on resuming: an edit can keep its id. */
+const FRESH_MS = 3_600_000;
 
 type Client = Pick<McpClient, "connect" | "callTool">;
 
@@ -104,6 +106,20 @@ interface Header {
   run: string | null;
   range: PullRange | null;
   managedSources: string[];
+  managedChains: string[];
+}
+
+/** The time of the last write apply logged, or 0. */
+function lastWrite(stateDir: string): number {
+  const file = join(stateDir, "apply-log.jsonl");
+  if (!existsSync(file)) return 0;
+  const times = readFileSync(file, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as { call?: string; time?: string })
+    .filter((l) => l.call !== "skip" && l.time)
+    .map((l) => Date.parse(l.time as string));
+  return times.length ? Math.max(...times) : 0;
 }
 
 /** The newest stopped pull of the same run, range and sources, and recent enough to resume. */
@@ -128,6 +144,8 @@ function resumable(
     }
     const { startedAt, ...same } = header;
     if (JSON.stringify(same) !== JSON.stringify(want) || now - Date.parse(startedAt) > RESUME_MS) continue;
+    // A write since it started: apply would refuse this snapshot anyway
+    if (lastWrite(stateDir) >= Date.parse(startedAt)) continue;
     return { name: f.replace(".details.jsonl", ""), header };
   }
   return null;
@@ -142,18 +160,27 @@ export async function pull(
   const run = runDir ? readRun(runDir, extraDirsOf(stateDir, config)) : null;
   const txids = run ? categorisedTxids(run.rows, config) : null;
   const range = run && !all ? rangeOf(run.files, config.timezone) : null;
-  const want = { run: runDir ? resolve(runDir) : null, range, managedSources: config.managedSources };
+  const want = {
+    run: runDir ? resolve(runDir) : null,
+    range,
+    managedSources: config.managedSources,
+    managedChains: config.managedChains,
+  };
+  const started = Date.now();
+  const clock = () => new Date(now + Date.now() - started).toISOString();
 
   // A stopped pull goes on from what it read; otherwise a new one starts
   mkdirSync(join(stateDir, "snapshots"), { recursive: true });
   const earlier = resumable(stateDir, want, now);
   const startedAt = earlier?.header.startedAt ?? new Date(now).toISOString();
-  const name = earlier?.name ?? startedAt.slice(0, 19).replace(/:/g, "-");
-  const file = join(stateDir, "snapshots", `${name}.json`);
-  const details = detailsFile(file);
+  const stamp = (time: string) => time.slice(0, 19).replace(/:/g, "-");
+  const name = earlier?.name ?? stamp(startedAt);
+  let details = detailsFile(join(stateDir, "snapshots", `${name}.json`));
   if (!earlier) appendFileSync(details, JSON.stringify({ startedAt, ...want }) + "\n");
   else if (!readFileSync(details, "utf8").endsWith("\n")) appendFileSync(details, "\n");
-  const read = new Set(readDetails(details).keys());
+  const read = new Set(
+    [...readDetails(details)].filter(([, d]) => now - Date.parse(d.at as string) <= FRESH_MS).map(([id]) => id),
+  );
   if (earlier) console.log(`Resuming the pull of ${startedAt}: ${read.size} actions read so far`);
   console.log(range ? `Range: ${range.from} to ${range.to}, with a day's margin` : "Range: the whole history");
   await client.connect();
@@ -198,10 +225,7 @@ export async function pull(
         gone++;
         continue;
       }
-      appendFileSync(
-        details,
-        JSON.stringify({ a: actionId, at: new Date().toISOString(), ...parseDetail(text) }) + "\n",
-      );
+      appendFileSync(details, JSON.stringify({ a: actionId, at: clock(), ...parseDetail(text) }) + "\n");
       read.add(actionId);
       process.stdout.write(`\r  ${i + 1}/${todo.length}   `);
     }
@@ -214,25 +238,36 @@ export async function pull(
     if (!settled) continue;
 
     const stored = readDetails(details);
+    // A leg in two actions: one was read before a rebuild moved the leg. Both are read again
     const owner = new Map<string, string>();
+    const clash = new Set<string>();
     for (const id of needed) {
       for (const leg of legsOf(stored.get(id) as never)) {
         const other = owner.get(leg.legId);
-        if (other && other !== id)
-          throw new Error(
-            `Leg ${leg.legId} is in actions ${other} and ${id}: Summ changed while it was read. No snapshot written; pull again to go on.`,
-          );
+        if (other && other !== id) for (const a of [other, id]) clash.add(a);
         owner.set(leg.legId, id);
       }
     }
+    if (clash.size) {
+      console.log(`  A leg is in two of ${[...clash].join(", ")}: reading them again`);
+      for (const id of clash) read.delete(id);
+      previous = null;
+      continue;
+    }
+    // Named by its finish, so the latest snapshot is always the last one to finish
+    const finished = clock();
+    const file = join(stateDir, "snapshots", `${stamp(finished)}.json`);
+    if (detailsFile(file) !== details) renameSync(details, detailsFile(file));
+    details = detailsFile(file);
     writeSnapshot(file, {
       version: 2,
       takenAt: startedAt,
-      finishedAt: new Date().toISOString(),
+      finishedAt: finished,
       total,
       parsed: actions.length,
       unique,
       managedSources: config.managedSources,
+      managedChains: config.managedChains,
       run: want.run,
       range,
       rounds: round,
@@ -246,6 +281,6 @@ export async function pull(
     return file;
   }
   throw new Error(
-    `Summ's list kept changing over ${MAX_ROUNDS} rounds (a recalculation or an import running?). No snapshot written; what was read is kept, and pull goes on from it.`,
+    `Summ kept changing over ${MAX_ROUNDS} rounds (a recalculation or an import running?). No snapshot written; what was read is kept, and pull goes on from it.`,
   );
 }

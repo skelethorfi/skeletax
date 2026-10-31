@@ -16,7 +16,7 @@ export type LegSide = "incoming" | "outgoing" | "fees";
 export interface Leg {
   /** The leg's database id: stable across edits. */
   legId: string;
-  /** The action's id: changes on every write. */
+  /** The action's id: can change on any write or recalculation, and can stay across an edit. */
   actionId: string;
   side: LegSide;
   /** Summ's "Tx Hash": the CSV row's ID, or the on-chain txid of Summ's own imports. */
@@ -125,17 +125,17 @@ export interface PullRange {
 export const detailsFile = (file: string): string => file.replace(/\.json$/, ".details.jsonl");
 
 /** A pull's details by action id. The latest line of an id wins; a line cut off by a stop is left out. */
-export function readDetails(file: string): Map<string, ActionDetail> {
-  const details = new Map<string, ActionDetail>();
+export function readDetails(file: string): Map<string, ActionDetail & { at?: string }> {
+  const details = new Map<string, ActionDetail & { at?: string }>();
   for (const line of readFileSync(file, "utf8").split("\n").slice(1)) {
     if (!line) continue;
-    let parsed: { a: string; action: ActionDetail["action"]; history: string[] };
+    let parsed: { a: string; at: string; action: ActionDetail["action"]; history: string[] };
     try {
       parsed = JSON.parse(line);
     } catch {
       continue;
     }
-    details.set(parsed.a, { action: parsed.action, history: parsed.history });
+    details.set(parsed.a, { at: parsed.at, action: parsed.action, history: parsed.history });
   }
   return details;
 }

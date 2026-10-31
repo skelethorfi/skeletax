@@ -10,7 +10,7 @@ import { writePlan } from "../src/write-plan.ts";
 
 const USAGE = `Usage:
   summ-sync login <state dir> [--write]   authorise in the browser (read, or read and write)
-  summ-sync pull  <state dir> [<run dir>] [--full]  snapshot Summ into <state dir>/snapshots/
+  summ-sync pull  <state dir> [<run dir>] [--all]  snapshot Summ into <state dir>/snapshots/
   summ-sync plan  <state dir> <run dir> [--only <scope file>]
                                           compare a run with the latest snapshot (calls nothing); with
                                           --only, only the rows the file's entries match
@@ -25,13 +25,15 @@ const [command, stateDir, ...rest] = process.argv.slice(2);
 try {
   if (!stateDir) throw new Error(USAGE);
   if (command === "login") await login(stateDir, rest.includes("--write") ? WRITE_SCOPE : READ_SCOPE);
-  else if (command === "pull")
+  else if (command === "pull") {
+    const unknown = rest.find((a) => a.startsWith("--") && a !== "--all");
+    if (unknown) throw new Error(`pull: unknown option ${unknown}`);
     await pull(
       stateDir,
       rest.find((a) => !a.startsWith("--")),
       { all: rest.includes("--all") },
     );
-  else if (command === "plan") {
+  } else if (command === "plan") {
     const at = rest.indexOf("--only");
     const only = at >= 0 ? rest[at + 1] : undefined;
     if (at >= 0 && (only === undefined || only.startsWith("--"))) throw new Error("--only needs a scope file");

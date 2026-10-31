@@ -2170,25 +2170,34 @@ test("plan refuses a version 2 snapshot pulled for another run", () => {
   mkdirSync(join(run, "csv"));
   const header =
     "Timestamp (UTC),Type,Base Currency,Base Amount,Quote Currency (Optional),Quote Amount (Optional),Fee Currency (Optional),Fee Amount (Optional),From (Optional),To (Optional),Blockchain (Optional),ID (Optional),Description (Optional)";
-  writeFileSync(join(run, "csv", "2025-07-01_2026-06-30_THOR_abc_Wallet.csv"), `${header}\n`);
+  writeFileSync(join(run, "csv", "2023-07-01_2024-06-30_THOR_abc_Wallet.csv"), `${header}\n`);
   const file = join(state, "snapshots", "2026-01-01T00-00-00.json");
   writeSnapshot(file, { version: 2, takenAt: "", total: 0, run: "/elsewhere", range: null, actions: [] });
   writeFileSync(file.replace(".json", ".details.jsonl"), "{}\n");
   assert.throws(() => writePlan(state, run), /pulled for \/elsewhere/);
 });
 
-test("plan refuses an upload from a snapshot of part of the history", () => {
+test("plan refuses wider changes from a snapshot of part of the history", () => {
   const state = mkdtempSync(join(tmpdir(), "summ-sync-"));
   writeFileSync(join(state, "summ-sync.json"), JSON.stringify({ managedSources: ["csv-source"] }));
   const run = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
   mkdirSync(join(run, "csv"));
   const header =
     "Timestamp (UTC),Type,Base Currency,Base Amount,Quote Currency (Optional),Quote Amount (Optional),Fee Currency (Optional),Fee Amount (Optional),From (Optional),To (Optional),Blockchain (Optional),ID (Optional),Description (Optional)";
-  const line = `2025-08-01T00:00:00.000Z,send,RUNE,1,,,,,a,b,THORChain,2025-08-01T00:00:00.000Z.out.aaaaaaaaaaaa,x`;
-  writeFileSync(join(run, "csv", "2025-07-01_2026-06-30_THOR_abc_Wallet.csv"), `${header}\n${line}\n`);
+  const line = `2023-08-01T00:00:00.000Z,send,RUNE,1,,,,,a,b,THORChain,2023-08-01T00:00:00.000Z.out.aaaaaaaaaaaa,x`;
+  writeFileSync(join(run, "csv", "2023-07-01_2024-06-30_THOR_abc_Wallet.csv"), `${header}\n${line}\n`);
   const file = join(state, "snapshots", "2026-01-01T00-00-00.json");
-  const range = { from: "2025-07-01", to: "2026-06-30", after: 0, before: 1 };
-  writeSnapshot(file, { version: 2, takenAt: "", total: 0, run: resolve(run), range, actions: [] });
+  const range = { from: "2023-07-01", to: "2024-06-30", after: 0, before: 1 };
+  writeSnapshot(file, {
+    version: 2,
+    takenAt: "",
+    total: 0,
+    run: resolve(run),
+    range,
+    managedSources: ["csv-source"],
+    managedChains: DEFAULTS.managedChains,
+    actions: [],
+  });
   writeFileSync(file.replace(".json", ".details.jsonl"), "{}\n");
   assert.throws(() => writePlan(state, run), /Pull with --all/);
 });

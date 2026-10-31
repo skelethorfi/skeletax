@@ -4,7 +4,14 @@ import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } fr
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { actionsWithTxids, pull, rangeOf } from "../src/pull.ts";
-import { legsOf, type PullRange, readSnapshot, readSnapshotFile, snapshotNames } from "../src/snapshot.ts";
+import {
+  latestSnapshot,
+  legsOf,
+  type PullRange,
+  readSnapshot,
+  readSnapshotFile,
+  snapshotNames,
+} from "../src/snapshot.ts";
 
 test("actionsWithTxids finds listed actions by tx hash, in any case and with or without 0x", () => {
   const txid = "ab".repeat(32);
@@ -180,23 +187,84 @@ test("an action only the source query lists never settles into a snapshot", () =
     await assert.rejects(pull(stateDir, undefined, { client: summ.client, now: T0 }), /kept changing/);
   }));
 
-test("a leg in two actions writes no snapshot", () =>
+test("a leg in two actions is read again, and writes no snapshot until it settles", () =>
+  quiet(async () => {
+    const leg = { _id: "l", quantity: 1 };
+    const stuck = stateDirOf();
+    const summ = fakeSumm(["a1", "a2"], { a1: [leg], a2: [leg] });
+    await assert.rejects(pull(stuck, undefined, { client: summ.client, now: T0 }), /kept changing/);
+    assert.deepEqual(snapshotNames(stuck), []);
+    // Settled later: the stale read is replaced
+    const settles = stateDirOf();
+    const moved = fakeSumm(["a1", "a2"], { a1: [leg], a2: [leg] });
+    let reads = 0;
+    moved.state.before = () => {
+      if (++reads === 3) moved.state.legs.a1 = [];
+    };
+    const file = await pull(settles, undefined, { client: moved.client, now: T0 });
+    assert.deepEqual(
+      readSnapshot(file).legs.map((l) => l.actionId),
+      ["a2"],
+    );
+  }));
+
+test("a detail read over an hour ago is read again on resuming", () =>
   quiet(async () => {
     const stateDir = stateDirOf();
-    const leg = { _id: "l", quantity: 1 };
-    const summ = fakeSumm(["a1", "a2"], { a1: [leg], a2: [leg] });
-    await assert.rejects(pull(stateDir, undefined, { client: summ.client, now: T0 }), /in actions a1 and a2/);
-    assert.deepEqual(snapshotNames(stateDir), []);
+    const summ = fakeSumm(["a1", "a2"]);
+    summ.state.before = (id) => {
+      if (id === "a2") throw new Error("stopped");
+    };
+    await assert.rejects(pull(stateDir, undefined, { client: summ.client, now: T0 }), /stopped/);
+    summ.state.before = () => {};
+    summ.inspected.length = 0;
+    await pull(stateDir, undefined, { client: summ.client, now: T0 + 2 * HOUR });
+    assert.deepEqual(summ.inspected.sort(), ["a1", "a2"]);
+  }));
+
+test("a stopped pull is not resumed over a later write", () =>
+  quiet(async () => {
+    const stateDir = stateDirOf();
+    const summ = fakeSumm(["a1", "a2"]);
+    summ.state.before = (id) => {
+      if (id === "a2") throw new Error("stopped");
+    };
+    await assert.rejects(pull(stateDir, undefined, { client: summ.client, now: T0 }), /stopped/);
+    writeFileSync(
+      join(stateDir, "apply-log.jsonl"),
+      JSON.stringify({ call: "edit_transaction", time: new Date(T0 + 1000).toISOString() }) + "\n",
+    );
+    summ.state.before = () => {};
+    summ.inspected.length = 0;
+    const file = await pull(stateDir, undefined, { client: summ.client, now: T0 + 2000 });
+    assert.deepEqual(summ.inspected.sort(), ["a1", "a2"]);
+    assert.equal(readSnapshotFile(file).takenAt, new Date(T0 + 2000).toISOString());
+  }));
+
+test("a resumed pull that finishes last is the latest snapshot, though it started first", () =>
+  quiet(async () => {
+    const stateDir = stateDirOf();
+    const summ = fakeSumm(["a1", "a2"]);
+    summ.state.before = (id) => {
+      if (id === "a2") throw new Error("stopped");
+    };
+    await assert.rejects(pull(stateDir, undefined, { client: summ.client, now: T0 }), /stopped/);
+    summ.state.before = () => {};
+    const other = await pull(stateDir, runDirOf(), { client: summ.client, now: T0 + 60_000 });
+    const resumed = await pull(stateDir, undefined, { client: summ.client, now: T0 + 120_000 });
+    assert.notEqual(other, resumed);
+    assert.equal(latestSnapshot(stateDir), resumed);
+    assert.equal(readSnapshotFile(resumed).takenAt, new Date(T0).toISOString());
   }));
 
 test("rangeOf covers the run's periods with a day's margin", () => {
   const range = rangeOf(
-    [{ period: { from: "2025-07-01", to: "2026-06-30" } }, { period: { from: "2024-07-01", to: "2025-06-30" } }],
+    [{ period: { from: "2023-07-01", to: "2024-06-30" } }, { period: { from: "2022-07-01", to: "2023-06-30" } }],
     "UTC",
   );
-  assert.deepEqual([range.from, range.to], ["2024-07-01", "2026-06-30"]);
-  assert.equal(range.after, Date.parse("2024-06-30T00:00:00Z"));
-  assert.equal(range.before, Date.parse("2026-07-02T00:00:00Z"));
+  assert.deepEqual([range.from, range.to], ["2022-07-01", "2024-06-30"]);
+  assert.equal(range.after, Date.parse("2022-06-30T00:00:00Z"));
+  assert.equal(range.before, Date.parse("2024-07-02T00:00:00Z"));
 });
 
 const HEADER =
@@ -204,7 +272,7 @@ const HEADER =
 function runDirOf(): string {
   const dir = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
   mkdirSync(join(dir, "csv"));
-  writeFileSync(join(dir, "csv", "2025-07-01_2026-06-30_THOR_abc_Wallet.csv"), HEADER + "\n");
+  writeFileSync(join(dir, "csv", "2023-07-01_2024-06-30_THOR_abc_Wallet.csv"), HEADER + "\n");
   return dir;
 }
 
@@ -217,7 +285,7 @@ test("with a run, a pull asks for the run's range; --all asks for everything", (
     assert.ok(ranged.filters.every(after));
     assert.deepEqual(
       [(readSnapshotFile(file).range as PullRange).from, readSnapshotFile(file).run],
-      ["2025-07-01", resolve(runDir)],
+      ["2023-07-01", resolve(runDir)],
     );
     const all = fakeSumm(["a1"]);
     const whole = await pull(stateDirOf(), runDir, { client: all.client, now: T0, all: true });

@@ -51,7 +51,8 @@ Filed years go in a separate apply with `--approve-filed`.
   `<state dir>/snapshots/<time>.details.jsonl` as it is read. Given a run dir,
   it also reads each action whose tx hash is a txid of the run's categorised
   rows (chains not in `managedChains`), and covers only the run's periods;
-  `--all` covers the whole history, and is needed before a plan with uploads.
+  `--all` covers the whole history, which a plan needs for uploads, deletes,
+  categorising or filed years. `plan` needs a pull made with its run.
   Every pull reads every detail, because an action can change and keep its
   id: minutes for a year, half an hour for everything. A stopped pull goes on
   from where it stopped when run again. Its snapshot is written only once
@@ -94,7 +95,7 @@ Filed years go in a separate apply with `--approve-filed`.
   files, then pull and plan again; recalculate in Summ before reading any
   figures.
 - `prune` removes the snapshots older than `--older-than` days (default
-  30; never the latest) and the stored actions no remaining snapshot lists
+  30; never the latest), with their details files, and the stored actions no remaining snapshot lists
   (except those apply saved before a delete), once they are committed (keep the state dir in git; git keeps the removed files). If
   any is not committed, it removes nothing and lists them.
 - `tools` lists the server's tools.
