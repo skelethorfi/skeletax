@@ -2060,6 +2060,38 @@ test("price: a crash after the edit is not taken for the user's edit; the edit i
   assert.deepEqual(p.overridden, []);
 });
 
+test("drift: an intent line alone, a crash during the edit, counts as the sync's own", () => {
+  const r = row();
+  const legs = legsOf(r, { trade: "outgoingGift" });
+  const history = new Map([["action1", ["2 Jan 2024 · user · Category: Send → Outgoing Gift"]]]);
+  const { plan: p } = plan({
+    rows: [r],
+    legs,
+    history,
+    applyLog: [{ legId: legs[0].legId, field: "trade", value: "outgoingGift", intent: true }],
+  });
+  assert.deepEqual(p.overridden, []);
+  assert.deepEqual(
+    p.edit[0].changes.map((c) => [c.field, c.desired]),
+    [["trade", "withdrawal"]],
+  );
+});
+
+test("price: intent lines of an edit's other fields do not count as price edits", () => {
+  const r = priced();
+  const legs = pricedLegs(r);
+  const applyLog = [
+    { legId: legs[0].legId, field: "trade", value: "income", intent: true },
+    { legId: legs[0].legId, field: "quantity", value: 1, intent: true },
+    ...priceLine(legs[0].legId, 2.5, null),
+  ];
+  // Two price lines in the history against one edit: foreign, as with one intent and nothing else
+  const two = plan({ rows: [r], legs, history: priceHistory(USER_PRICE, USER_PRICE), applyLog }).plan;
+  assert.equal(two.overridden[0]?.kind, "captured");
+  const one = plan({ rows: [r], legs, history: priceHistory(USER_PRICE), applyLog }).plan;
+  assert.deepEqual(one.overridden, []);
+});
+
 test("price: retainUserEdit no is honoured with no history and an upload file at the run's price", () => {
   const r = priced();
   const legs = pricedLegs(r, { priceValueCurrency: "USD" });

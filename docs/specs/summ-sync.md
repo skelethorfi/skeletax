@@ -108,8 +108,8 @@ in this repo. It is meant to be kept in git (prune relies on it).
 
     snapshots/<time>.json       one finished pull: counts, one entry per listed action
     snapshots/<time>.details.jsonl  each action detail that pull read
-    actions/<action id>.json    details read before pulls kept their own, and actions apply saved
-    plans/<time>/               plan.json, plan.md, upload/
+    actions/<action id>.json    details read before pulls kept their own, and actions older applies saved
+    plans/<time>/               plan.json, plan.md, upload/, pre/ (apply's pre-images)
     adopted.csv, overrides.json, apply-log.jsonl, summ-sync.json
 
 **Pull.** Every pull reads the detail of every action the plan needs. There is
@@ -152,15 +152,17 @@ This is not a point-in-time copy, which Summ cannot give. An edit that keeps its
 to an action already read, is not seen by this pull. Apply's re-read of each leg
 before writing it catches that for the plan's own legs.
 
-**Action store.** `actions/` is no longer written by pull, and older snapshots still
-read from it. Apply saves there each action it just inspected before deleting it.
+**Action store.** `actions/` is no longer written, and older snapshots and older log
+lines (`saved`) still name it.
 
 **Prune** removes snapshot files older than `--older-than` days (default
 30, by the time in their name; never the latest), with their details files, and store files that no
-remaining snapshot lists, except actions apply saved before deleting them
-(named in `apply-log.jsonl`), but only files git tracks with no uncommitted
+remaining snapshot lists, but only files git tracks with no uncommitted
 changes (git keeps them); otherwise it removes nothing and lists the files.
-Plans keep their snapshot's name.
+It keeps what a rollback needs: every action `apply-log.jsonl` names (a delete's
+`actionIds`, any `saved` file), and the snapshot and details file of every plan
+with a `pre` line, and so what that snapshot lists. A plan with `pre` lines whose
+`plan.json` is gone stops the prune. Plans, with their pre-images, are never removed.
 
 ## Inputs
 
@@ -384,7 +386,7 @@ behind. So the sync cannot read the USD price back from Summ, and does not
 convert anything itself: an FX rate would add a source, and a threshold to
 hide its noise.
 
-**The recorded price.** Apply writes a `price` line (`intent`) before each price
+**The recorded price.** Apply writes a `price` line (`intent`, Journal) before each price
 edit, so a crash or a lost answer leaves the edit unconfirmed rather than
 unrecorded. It then reads the leg from the rebuilt actions the edit's result
 names, since only Summ's search lags a write, and logs a second line with the local
@@ -621,11 +623,8 @@ error):
    filter: Summ's `id` filter lists the leg's action but can list
    unrelated actions too, even with `showAssociated: 0`, so a look-up
    inspects each action it lists and keeps only the one holding the leg.
-   Summ cannot undo a delete, so apply first saves each action as it
-   just inspected it (the shared action before the split edit, the
-   split-off one before the delete) to the store (`actions/<action id>.json`, unless the
-   store already holds that id), and the log line names the file. A deleted row comes back by
-   uploading its CSV line again; the saved file shows what Summ held.
+   Summ cannot undo a delete; a deleted row comes back by uploading its CSV line
+   again, and its pre-image (Journal) shows what Summ held.
 3. Edits and categorisation. Before each action, look it up again by leg
    `_id` (an action id can change on any write) and check the leg still
    holds the plan's "Summ value"; a leg that changed since the pull is
@@ -639,12 +638,43 @@ error):
    out of this: once Summ re-pairs the categorised leg with another
    (e.g. an uploaded bridge-trade-in), the edit's handle is stale.
 4. Print the upload files for the user to upload.
-5. Write `apply-log.jsonl` as it goes: each call, its result and its undo
+5. Write the journal as it goes (below): each call, its result and its undo
    handle, one line per changed field (`legId`, `field`, `value`) for
-   plan's drift check and recorded prices (a price edit has an `intent` line
-   before the call and a line after it with the local price read back, `after`;
-   its value is in USD),
-   and each skip.
+   plan's drift check and recorded prices (the line after a price edit holds the
+   local price read back, `after`; its value is in USD), and each skip.
+
+**Journal.** Every write to Summ (split edit, delete, edit, ignore), in this order:
+
+1. Read the action fresh. An action not read since an earlier write of the apply
+   is read again, as with the second action of a split.
+2. Save that read, the full action and its change history, as a pre-image:
+   `plans/<plan>/pre/<entry>.<step>.json`, through a temporary file and fsynced. It
+   always holds this read. It never replaces a file: if the name is taken (a stop
+   between this step and the next) the new read goes to `<entry>.<step>.2.json`.
+   `<entry>` is the plan's section and index (`delete-3`, `edit-12`, `categorise-4`),
+   `<step>` one of `split-<n>`, `delete`, `edit`, `ignore-<n>`.
+3. Append an `intent: true` line to `apply-log.jsonl`, fsynced: one per changed
+   field for an edit, one for a bulk call.
+4. Make the call.
+5. Append the result lines. A call that throws may still have landed: it gets a line
+   with `error`, then apply stops.
+
+Write lines carry `entry` and `pre` (the file, relative to the state dir); a skip
+carries `entry`. Lines of a delete or an ignore have `legIds`, not `legId` and
+`field`, and an `error` line has neither, so plan does not read them as edits.
+A stop therefore leaves a pre-image with no line (no write made) or an intent with no
+result (the write may have been made). An intent counts as a write for the refusal in
+step 1 and as the sync's own for drift: its value in Summ is not taken for the user's.
+Prices count `intent` lines of the `price` field only, so each edit counts once.
+
+A delete's pre-image also holds the row's exact line (`line`, `lineHeader`, `lineSource`:
+`run:<file>` or `upload:<file>`), found by the ID the legs carry and then the row's,
+in the run's wallet files and then the plan's upload files; all null when none has it,
+which stops nothing. A remade row's line is the run's version, which can differ
+from what Summ held; the pre-image's action is the record of that.
+
+Logs and plans from before the journal keep working: their lines have no `entry` or `pre`,
+and count as they did.
 
 While the plan has uploads (for the years this apply covers), apply holds
 back categorisation: Summ pairs a categorised leg with the other side of

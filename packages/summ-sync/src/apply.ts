@@ -6,24 +6,25 @@
 //      split off: edited alone to ignoreIn/ignoreOut, which Summ moves to an action of its own; if Summ does
 //      not, apply skips that entry there (the leg stays ignored) and reports it with the undo handle. A
 //      receive Summ made up to pair the leg as a transfer is ignored once the leg is deleted.
-//      Summ's delete has no undo, so each action is first saved as just inspected (the detail and change
-//      history) to the action store, <state dir>/actions/<action id>.json, unless the store holds that id
+//      Summ's delete has no undo: its pre-image also holds the row's CSV line when one can be found
 //   3. edits and categorisation, each action looked up again by leg _id and checked against the plan's Summ value;
 //      then the receive Summ made up to pair a categorised send as a transfer is ignored, once it is alone.
 //      Categorisation waits while the plan has uploads: Summ pairs a categorised leg with the uploaded other
 //      side of the swap only when that side is already there
 //   4. list the upload files for the user
-//   5. every call, its result and undo handle go to <state dir>/apply-log.jsonl as they happen
+//   5. each write: read fresh, save that as a pre-image (<plan dir>/pre/<entry>.<step>.json), log an intent, call, log
+//      the result and undo handle, in <state dir>/apply-log.jsonl (journal.ts)
 //   6. the legs the plan adopted and the overrides it captured are added to adopted.csv and overrides.json
 //      (not on a dry run)
 //
 // Filed-year entries are applied only with --approve-filed, and then only they: a separate apply.
 
-import { appendFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { type ActionDetail, parseActions, parseDetail } from "./parse.ts";
 import { type Change, type DeleteEntry, type EditEntry, type Plan, same } from "./plan.ts";
-import { type Leg, latestSnapshot, legsOf, readSnapshotFile, storeAction } from "./snapshot.ts";
+import { appendLogLine, logPath, type PreImage, type RowLine, rowLines, writePreImage } from "./journal.ts";
+import { type Leg, latestSnapshot, legsOf, readSnapshotFile } from "./snapshot.ts";
 import { mergeTables } from "./state.ts";
 
 export const WRITE_TOOLS = ["edit_transaction", "bulk_edit_transactions"];
@@ -46,6 +47,12 @@ export interface LogLine {
   plan: string;
   call: string;
   [key: string]: unknown;
+}
+
+/** Where an apply keeps its journal. */
+export interface ApplyDirs {
+  stateDir: string;
+  planDir: string;
 }
 
 export interface ApplyResult {
@@ -160,17 +167,63 @@ export async function applyPlan(
   say: (text: string) => void = console.log,
   /** Summ rebuilds actions and refreshes its search a few seconds after a write. */
   settleMs = 3000,
-  /** The state dir, whose action store keeps each action before it is deleted. */
-  stateDir: string | null = null,
+  dirs: ApplyDirs | null = null,
 ): Promise<ApplyResult> {
   const edited = new Set<string>();
   const result: ApplyResult = { deleted: 0, split: 0, edited: 0, heldBack: 0, skipped: [], uploads: [] };
   const write = opts.dryRun ? null : log;
-  const skip = (id: string | null, reason: string, extra: Record<string, unknown> = {}): false => {
+  const skip = (entry: string, id: string | null, reason: string, extra: Record<string, unknown> = {}): false => {
     result.skipped.push({ id, reason });
     say(`  skipped ${id ?? "(no row)"}: ${reason}`);
-    write?.({ call: "skip", id, reason, ...extra });
+    write?.({ call: "skip", entry, id, reason, ...extra });
     return false;
+  };
+
+  /** Saves what was just read, before the intent line and the write; returns the file as the log names it. */
+  const savePre = (
+    entry: string,
+    step: string,
+    id: string | null,
+    actions: ActionDetail[],
+    line?: RowLine | null,
+  ): string => {
+    if (!dirs) throw new Error("apply needs the state and plan dirs to save the state before a write");
+    const image: PreImage = {
+      plan: basename(dirs.planDir),
+      entry,
+      step,
+      id,
+      capturedAt: new Date().toISOString(),
+      actions,
+      ...(line === undefined
+        ? {}
+        : { line: line?.line ?? null, lineHeader: line?.lineHeader ?? null, lineSource: line?.lineSource ?? null }),
+    };
+    return logPath(dirs.stateDir, writePreImage(dirs.planDir, image));
+  };
+
+  /** A write. If it throws it may still have landed, so the failure gets a result line; it carries no legId or field,
+   * so it never reads back as an edit. */
+  const callWrite = async (
+    log: (line: Omit<LogLine, "time" | "plan">) => void,
+    tool: string,
+    args: Record<string, unknown>,
+    tag: Record<string, unknown>,
+  ): Promise<string> => {
+    try {
+      return await client.callTool(tool, args);
+    } catch (e) {
+      log({ call: tool, ...tag, error: e instanceof Error ? e.message : String(e) });
+      throw e;
+    }
+  };
+
+  // Read when the first delete needs them
+  let lines: Map<string, RowLine> | null = null;
+  const lineOf = (entry: DeleteEntry): RowLine | null => {
+    if (!dirs) return null;
+    lines ??= rowLines(plan.run, dirs.planDir);
+    return lines.get(entry.summId) ?? (entry.id === null ? undefined : lines.get(entry.id)) ?? null;
   };
 
   // ---- Deletes
@@ -180,6 +233,7 @@ export async function applyPlan(
   for (const entry of opts.approveDeletes ? deletes : []) await applyDelete(entry);
 
   async function applyDelete(entry: DeleteEntry) {
+    const key = `delete-${plan.delete.indexOf(entry)}`;
     const lookUpAll = async (): Promise<Map<string, Found> | string> => {
       const found = new Map<string, Found>();
       for (const legId of entry.legIds) {
@@ -192,7 +246,7 @@ export async function applyPlan(
     const sharing = (found: Map<string, Found>) =>
       [...found.values()].filter((f) => f.legs.some((l) => !entry.legIds.includes(l.legId)));
     let found = await lookUpAll();
-    if (typeof found === "string") return skip(entry.id, found, { legIds: entry.legIds });
+    if (typeof found === "string") return skip(key, entry.id, found, { legIds: entry.legIds });
 
     // A leg that shares its action with legs that stay is split off first: edited alone to an ignore type
     // (undoable, and it no longer counts), which Summ moves to an action of its own. Never a delete by filter.
@@ -205,56 +259,62 @@ export async function applyPlan(
     if (shared.size) {
       if (!write)
         return say(`  would split ${entry.legIds.length} legs of ${entry.summId} off their actions, then delete them`);
-      if (!stateDir) throw new Error("apply needs the state dir to save actions to before splitting them");
       const undos: string[] = [];
-      for (const f of shared.values()) {
-        const saved = storeAction(stateDir, f.detail);
+      for (const [n, first] of [...shared.values()].entries()) {
+        // The look-up above is out of date once another of this entry's actions has been written to
+        const legId = first.legs.find((l) => entry.legIds.includes(l.legId))?.legId as string;
+        const f = n === 0 ? first : await lookUp(client, legId);
+        if (!f) return skip(key, entry.id, `leg ${legId} is no longer in Summ`, { legIds: entry.legIds });
         // An edit to the type a leg already has changes nothing, so Summ would not split it
         const legs = f.legs.filter((l) => entry.legIds.includes(l.legId) && !isIgnored(l));
         if (!legs.length)
-          return skip(entry.id, `leg already ignored but still shares action ${f.actionId} with other legs`, {
+          return skip(key, entry.id, `leg already ignored but still shares action ${f.actionId} with other legs`, {
             legIds: entry.legIds,
           });
         const edits = legs.map((l) => ({
           transactionId: l.legId,
           updates: { trade: l.side === "incoming" ? "ignoreIn" : "ignoreOut" },
         }));
-        const text = await client.callTool("edit_transaction", { actionId: f.actionId, edits });
+        const tag = {
+          kind: "split",
+          entry: key,
+          pre: savePre(key, `split-${n}`, entry.id, [f.detail]),
+          id: entry.id,
+          actionId: f.actionId,
+        };
+        const line = (l: Leg, i: number) => ({
+          call: "edit_transaction",
+          ...tag,
+          legId: l.legId,
+          field: "trade",
+          from: l.trade,
+          value: edits[i].updates.trade,
+        });
+        for (const [i, l] of legs.entries()) write({ ...line(l, i), intent: true });
+        const text = await callWrite(write, "edit_transaction", { actionId: f.actionId, edits }, tag);
         result.split++;
         const undo = undoHandle(text);
         if (undo) undos.push(undo);
-        for (const [i, l] of legs.entries()) {
-          write({
-            call: "edit_transaction",
-            kind: "split",
-            id: entry.id,
-            actionId: f.actionId,
-            legId: l.legId,
-            field: "trade",
-            from: l.trade,
-            value: edits[i].updates.trade,
-            undo,
-            saved,
-          });
-        }
-        write({ call: "edit_transaction", kind: "split", id: entry.id, actionId: f.actionId, undo, result: text });
+        for (const [i, l] of legs.entries()) write({ ...line(l, i), undo });
+        write({ call: "edit_transaction", ...tag, undo, result: text });
       }
       for (let attempt = 0; attempt < 5; attempt++) {
         await sleep(settleMs);
         found = await lookUpAll();
-        if (typeof found === "string") return skip(entry.id, `${found} after the split`, { legIds: entry.legIds });
+        if (typeof found === "string") return skip(key, entry.id, `${found} after the split`, { legIds: entry.legIds });
         if (!sharing(found).length) break;
       }
       // Once more after Summ has settled: a split-off action is deleted only when two look-ups agree it is alone
       if (!sharing(found as Map<string, Found>).length) {
         await sleep(settleMs);
         found = await lookUpAll();
-        if (typeof found === "string") return skip(entry.id, `${found} after the split`, { legIds: entry.legIds });
+        if (typeof found === "string") return skip(key, entry.id, `${found} after the split`, { legIds: entry.legIds });
       }
       const still = sharing(found);
       if (still.length) {
         const others = still.flatMap((f) => f.legs.filter((l) => !entry.legIds.includes(l.legId))).length;
         return skip(
+          key,
           entry.id,
           `Summ did not split the legs off (still with ${others} other legs); left ignored, undo ${undos.join(", ")}`,
           { legIds: entry.legIds },
@@ -265,21 +325,20 @@ export async function applyPlan(
     // By the actions just inspected, which hold only the entry's legs: never by a filter
     const args = { actionIds: [...actions.keys()], operation: { type: "delete" } };
     if (!write) return say(`  would delete ${entry.legIds.length} legs of ${entry.summId}`);
-    if (!stateDir) throw new Error("apply needs the state dir to save actions to before deleting them");
-    const saved = [...actions.values()].map((detail) => storeAction(stateDir, detail));
-    const text = await client.callTool("bulk_edit_transactions", args);
-    result.deleted++;
-    write({
-      call: "bulk_edit_transactions",
+    const tag = {
       operation: "delete",
+      entry: key,
+      pre: savePre(key, "delete", entry.id, [...actions.values()], lineOf(entry)),
       id: entry.id,
       summId: entry.summId,
       legIds: entry.legIds,
       actionIds: [...actions.keys()],
-      saved,
-      result: text,
-    });
-    for (const legId of madeUp) await ignoreMadeUp(entry.id, legId, true);
+    };
+    write({ call: "bulk_edit_transactions", ...tag, intent: true });
+    const text = await callWrite(write, "bulk_edit_transactions", args, tag);
+    result.deleted++;
+    write({ call: "bulk_edit_transactions", ...tag, result: text });
+    for (const [n, legId] of madeUp.entries()) await ignoreMadeUp(key, `ignore-${n}`, entry.id, legId, true);
   }
 
   // ---- Edits, then categorisation: the same call on a managed row's legs or on Summ's own leg
@@ -296,13 +355,15 @@ export async function applyPlan(
   if (edits.length) say(`Edits and categorisation: ${edits.length}`);
   for (const [kind, entry] of edits) await applyEdit(kind, entry);
 
-  async function applyEdit(kind: string, entry: EditEntry) {
-    if (entry.changes.length && !(await editLegs(kind, entry))) return;
-    for (const legId of entry.ignore ?? []) await ignoreMadeUp(entry.id, legId, entry.changes.length > 0);
+  async function applyEdit(kind: "edit" | "categorise", entry: EditEntry) {
+    const key = `${kind}-${plan[kind].indexOf(entry)}`;
+    if (entry.changes.length && !(await editLegs(kind, key, entry))) return;
+    for (const [n, legId] of (entry.ignore ?? []).entries())
+      await ignoreMadeUp(key, `ignore-${n}`, entry.id, legId, entry.changes.length > 0);
   }
 
   /** Summ's made-up other side of a transfer, once the categorised leg is split off: ignored, by action id. */
-  async function ignoreMadeUp(id: string | null, legId: string, afterEdit: boolean) {
+  async function ignoreMadeUp(key: string, step: string, id: string | null, legId: string, afterEdit: boolean) {
     if (!write) return say(`  would ignore the made-up leg ${legId} of ${id}`);
     let found: Found | null = null;
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -310,43 +371,49 @@ export async function applyPlan(
       found = await lookUp(client, legId);
       if (found && found.legs.length === 1) break;
     }
-    if (!found) return skip(id, `made-up leg ${legId} is no longer in Summ`);
+    if (!found) return skip(key, id, `made-up leg ${legId} is no longer in Summ`);
     const leg = found.legs.find((l) => l.legId === legId) as Leg;
     if (found.legs.length !== 1)
-      return skip(id, `made-up leg ${legId} still shares its action with ${found.legs.length - 1} other legs`);
-    if (leg.importType !== "soft-transfer") return skip(id, `leg ${legId} is not a made-up leg (${leg.importType})`);
+      return skip(key, id, `made-up leg ${legId} still shares its action with ${found.legs.length - 1} other legs`);
+    if (leg.importType !== "soft-transfer")
+      return skip(key, id, `leg ${legId} is not a made-up leg (${leg.importType})`);
     if (leg.trade === "ignoreIn" || leg.trade === "ignoreOut")
       return say(`  made-up leg ${legId} of ${id} is already ignored`);
-    const text = await client.callTool("bulk_edit_transactions", {
-      actionIds: [found.actionId],
-      operation: { type: "ignore" },
-    });
-    const undo = undoHandle(text);
-    write({
-      call: "bulk_edit_transactions",
+    // No legId or field: as ever, plan does not read an ignore as an edit
+    const tag = {
       operation: "ignore",
+      entry: key,
+      pre: savePre(key, step, id, [found.detail]),
       id,
       legIds: [legId],
       actionIds: [found.actionId],
-      undo,
-      result: text,
-    });
+    };
+    write({ call: "bulk_edit_transactions", ...tag, intent: true });
+    const text = await callWrite(
+      write,
+      "bulk_edit_transactions",
+      { actionIds: [found.actionId], operation: { type: "ignore" } },
+      tag,
+    );
+    const undo = undoHandle(text);
+    write({ call: "bulk_edit_transactions", ...tag, undo, result: text });
     say(`  ignored the made-up leg of ${id}${undo ? ` (undo ${undo})` : ""}`);
   }
 
   /** True when the edit was made. */
-  async function editLegs(kind: string, entry: EditEntry): Promise<boolean> {
+  async function editLegs(kind: string, key: string, entry: EditEntry): Promise<boolean> {
     // Summ's search lags a write: another row of an action just edited could be read, and edited, as it was
     if (edited.has(entry.actionId)) await sleep(settleMs);
     const found = await lookUp(client, entry.changes[0].legId);
-    if (!found) return skip(entry.id, `leg ${entry.changes[0].legId} is no longer in Summ`);
+    if (!found) return skip(key, entry.id, `leg ${entry.changes[0].legId} is no longer in Summ`);
     for (const change of entry.changes) {
       const leg = found.legs.find((l) => l.legId === change.legId);
       if (!leg)
-        return skip(entry.id, `leg ${change.legId} is no longer in the action of leg ${entry.changes[0].legId}`);
+        return skip(key, entry.id, `leg ${change.legId} is no longer in the action of leg ${entry.changes[0].legId}`);
       const now = leg[change.field as keyof Leg] as string | number;
       if (!same(change.field, now, change.summ)) {
         return skip(
+          key,
           entry.id,
           `${change.field} of leg ${change.legId} is ${JSON.stringify(now)} in Summ, the plan expected ${JSON.stringify(change.summ)}`,
         );
@@ -371,40 +438,33 @@ export async function applyPlan(
       say(`  would ${kind} ${entry.id}: ${summary}`);
       return true;
     }
-    // Written before the edit: a crash or a lost answer leaves a price edit unconfirmed, not unrecorded
-    const priced = entry.changes.find((c) => c.field === "price");
-    if (priced)
-      write({
-        call: "edit_transaction",
-        kind,
-        id: entry.id,
-        actionId: found.actionId,
-        legId: priced.legId,
-        field: "price",
-        from: priced.summ,
-        value: priced.desired,
-        intent: true,
-      });
-    const text = await client.callTool("edit_transaction", args);
-    result.edited++;
-    const undo = undoHandle(text);
-    // One line per change, in the shape plan reads back (legId, field, value) to tell the sync's own edits from drift
-    const line = (c: Change) => ({
-      call: "edit_transaction",
+    const tag = {
       kind,
+      entry: key,
+      pre: savePre(key, "edit", entry.id, [found.detail]),
       id: entry.id,
       actionId: found.actionId,
+    };
+    // One line per change, in the shape plan reads back (legId, field, value) to tell the sync's own edits from drift.
+    // Each is written before the edit too: a crash or a lost answer leaves it unconfirmed, not unrecorded
+    const line = (c: Change) => ({
+      call: "edit_transaction",
+      ...tag,
       legId: c.legId,
       field: c.field,
       from: c.summ,
       value: c.desired,
-      undo,
     });
-    for (const c of entry.changes) if (c !== priced) write(line(c));
-    write({ call: "edit_transaction", kind, id: entry.id, actionId: found.actionId, undo, result: text });
+    for (const c of entry.changes) write({ ...line(c), intent: true });
+    const text = await callWrite(write, "edit_transaction", args, tag);
+    result.edited++;
+    const undo = undoHandle(text);
+    const priced = entry.changes.find((c) => c.field === "price");
+    for (const c of entry.changes) if (c !== priced) write({ ...line(c), undo });
+    write({ call: "edit_transaction", ...tag, undo, result: text });
     if (priced) {
       const before = found.legs.find((l) => l.legId === priced.legId)?.updatedAt;
-      write({ ...line(priced), after: await readBackPrice(client, text, priced.legId, before, settleMs) });
+      write({ ...line(priced), undo, after: await readBackPrice(client, text, priced.legId, before, settleMs) });
     }
     edited.add(entry.actionId);
     say(`  ${kind} ${entry.id}: ${summary}${undo ? ` (undo ${undo})` : ""}`);
@@ -421,20 +481,21 @@ export async function runApply(
   stateDir: string,
   planPath: string,
   opts: ApplyOptions,
+  settleMs = 3000,
 ): Promise<ApplyResult> {
   const { dir, plan } = readPlanFile(planPath);
   checkFresh(stateDir, plan);
   const planName = basename(dir);
   const logFile = join(stateDir, "apply-log.jsonl");
   const log = (line: Omit<LogLine, "time" | "plan">) =>
-    appendFileSync(logFile, JSON.stringify({ time: new Date().toISOString(), plan: planName, ...line }) + "\n");
+    appendLogLine(logFile, { time: new Date().toISOString(), plan: planName, ...line });
   console.log(
     `${opts.dryRun ? "Dry run of" : "Applying"} ${planName} (${opts.approveFiled ? "filed years only" : "current years only"})`,
   );
   await client.connect();
   let result: ApplyResult;
   try {
-    result = await applyPlan(client, plan, opts, log, console.log, 3000, stateDir);
+    result = await applyPlan(client, plan, opts, log, console.log, settleMs, { stateDir, planDir: dir });
   } catch (e) {
     // Stop at the first failure; a failed write may still have changed Summ, so it counts as a write
     if (!opts.dryRun) log({ call: "error", error: e instanceof Error ? e.message : String(e) });

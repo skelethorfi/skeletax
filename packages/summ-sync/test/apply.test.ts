@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   affectedActions,
   applyPlan,
@@ -15,6 +15,7 @@ import {
   undoHandle,
 } from "../src/apply.ts";
 import type { DeleteEntry, EditEntry } from "../src/plan.ts";
+import { readApplyLog } from "../src/state.ts";
 
 // Every value below is made up.
 const OPTS: ApplyOptions = { approveDeletes: false, approveFiled: false, dryRun: false };
@@ -37,6 +38,9 @@ class FakeSumm implements ToolCaller {
   actions = new Map<string, FakeLeg[]>();
   calls: { name: string; args: Record<string, unknown> }[] = [];
   splits = true;
+  /** Summ with its computation paused: an edit keeps the action's id. */
+  paused = false;
+  history = new Map<string, string[]>();
   private n = 0;
 
   add(actionId: string, legs: FakeLeg[]) {
@@ -54,10 +58,12 @@ class FakeSumm implements ToolCaller {
       return hits.map(([actionId], i) => `## ${i + 1}. Send\n- **Action ID**: \`${actionId}\`\n`).join("\n");
     }
     if (name === "inspect_transaction") {
-      const legs = this.actions.get(args.actionId as string) ?? [];
+      const legs = this.actions.get(args.actionId as string);
+      if (!legs) throw new Error(`inspect_transaction: ${String(args.actionId)} not found`);
       const side = (s: string) => legs.filter((l) => (l.side ?? "incoming") === s).map(({ side: _, ...l }) => l);
       const action = { _id: args.actionId, incoming: side("incoming"), outgoing: side("outgoing"), fees: side("fees") };
-      return `# Action\n\`\`\`json\n${JSON.stringify(action)}\n\`\`\`\n## Change History\n`;
+      const history = (this.history.get(args.actionId as string) ?? []).join("\n");
+      return `# Action\n\`\`\`json\n${JSON.stringify(action)}\n\`\`\`\n## Change History\n${history}\n`;
     }
     if (name === "edit_transaction") {
       const legs = this.actions.get(args.actionId as string) as FakeLeg[];
@@ -66,6 +72,8 @@ class FakeSumm implements ToolCaller {
           updatedAt: new Date(Date.UTC(2026, 0, 2, 0, 0, this.n)).toISOString(),
         });
       }
+      if (this.paused)
+        return `Edited 1 action.\nAffected Action IDs: ${String(args.actionId)}\n- **Bulk Edit ID**: \`undo${++this.n}abcdef\``;
       this.actions.delete(args.actionId as string);
       const next = `rebuilt${++this.n}`;
       // Like Summ: a categorised send no longer pairs with the receive it made up, which is left on its own,
@@ -90,6 +98,12 @@ class FakeSumm implements ToolCaller {
     throw new Error(`unexpected tool ${name}`);
   }
 }
+
+/** The pre-image a log line names (state dir relative; the fake's plan folder is plans/p). */
+const preOf = (planDir: string, line?: { pre?: unknown }) => {
+  assert.match(String(line?.pre), /^plans\/p\/pre\//);
+  return JSON.parse(readFileSync(join(planDir, "pre", basename(String(line?.pre))), "utf8"));
+};
 
 const edit = (over: Partial<EditEntry> = {}): EditEntry => ({
   id: "row-1",
@@ -138,6 +152,7 @@ function planFile(over: Partial<PlanFile> = {}): PlanFile {
 async function run(summ: FakeSumm, plan: PlanFile, opts: Partial<ApplyOptions> = {}) {
   const log: Omit<LogLine, "time" | "plan">[] = [];
   const state = mkdtempSync(join(tmpdir(), "summ-sync-state-"));
+  const planDir = join(state, "plans", "p");
   const result = await applyPlan(
     summ,
     plan,
@@ -145,9 +160,9 @@ async function run(summ: FakeSumm, plan: PlanFile, opts: Partial<ApplyOptions> =
     (l) => log.push(l),
     () => {},
     0,
-    state,
+    { stateDir: state, planDir },
   );
-  return { result, log, state };
+  return { result, log, state, planDir };
 }
 
 test("an edit looks the leg up again, edits it in its current action and logs the change with its undo handle", async () => {
@@ -160,7 +175,7 @@ test("an edit looks the leg up again, edits it in its current action and logs th
     actionId: "current-action",
     edits: [{ transactionId: "leg-1", updates: { trade: "bridgeTradeOut" } }],
   });
-  const change = log.find((l) => l.legId === "leg-1");
+  const change = log.find((l) => l.legId === "leg-1" && !l.intent);
   assert.deepEqual([change?.field, change?.value, change?.undo], ["trade", "bridgeTradeOut", "undo1abcdef"]);
 });
 
@@ -282,7 +297,7 @@ test("after categorising, the receive Summ made up is ignored by its own action 
   const ignore = summ.calls.find((c) => c.name === "bulk_edit_transactions");
   assert.deepEqual(ignore?.args, { actionIds: ["alone1"], operation: { type: "ignore" } });
   assert.equal(summ.actions.get("alone1")?.[0].trade, "ignoreIn");
-  const line = log.find((l) => l.operation === "ignore");
+  const line = log.find((l) => l.operation === "ignore" && !l.intent);
   assert.deepEqual([line?.legIds, line?.undo, line?.field], [["made-up"], "ignore2abcdef", undefined]);
 });
 
@@ -372,19 +387,11 @@ test("a delete looks its legs up by _id and deletes only the actions that hold n
   assert.equal(log[0].operation, "delete");
 });
 
-test("a deleted action is first saved to the store as it was just inspected, and the log names the file", async () => {
+test("a dry run saves no pre-image", async () => {
   const summ = new FakeSumm();
-  summ.add("d", [{ _id: "leg-9", trade: "withdrawal", quantity: "1.5" }]);
-  const { log, state } = await run(summ, planFile({ delete: [del()] }), { approveDeletes: true });
-  const file = join(state, "actions", "d.json");
-  assert.deepEqual(log[0].saved, [file]);
-  const saved = JSON.parse(readFileSync(file, "utf8"));
-  assert.deepEqual([saved.action._id, saved.action.incoming[0].quantity], ["d", "1.5"]);
-  // a dry run saves nothing
-  const summ2 = new FakeSumm();
-  summ2.add("d", [{ _id: "leg-9", trade: "withdrawal", quantity: "1" }]);
-  const dry = await run(summ2, planFile({ delete: [del()] }), { approveDeletes: true, dryRun: true });
-  assert.equal(existsSync(join(dry.state, "actions")), false);
+  summ.add("d", [{ _id: "leg-9", trade: "withdrawal", quantity: "1" }]);
+  const dry = await run(summ, planFile({ delete: [del()] }), { approveDeletes: true, dryRun: true });
+  assert.equal(existsSync(join(dry.planDir, "pre")), false);
 });
 
 test("a leg that shares its action is split off by an ignore edit, then its own action is deleted", async () => {
@@ -393,7 +400,7 @@ test("a leg that shares its action is split off by an ignore edit, then its own 
     { _id: "leg-9", trade: "fee", quantity: "0.02", side: "fees" },
     { _id: "their-leg", trade: "deposit", quantity: "1" },
   ]);
-  const { result, log, state } = await run(summ, planFile({ delete: [del({ otherLegs: 1 })] }), {
+  const { result, log, planDir } = await run(summ, planFile({ delete: [del({ otherLegs: 1 })] }), {
     approveDeletes: true,
   });
   assert.deepEqual([result.split, result.deleted], [1, 1]);
@@ -407,11 +414,20 @@ test("a leg that shares its action is split off by an ignore edit, then its own 
   // the legs that stay are untouched, in their rebuilt action
   assert.deepEqual([...summ.actions.values()], [[{ _id: "their-leg", trade: "deposit", quantity: "1" }]]);
   // both actions saved: the shared one before the edit, the split-off one before the delete
-  assert.deepEqual(log.find((l) => l.legId === "leg-9")?.saved, join(state, "actions", "d.json"));
-  assert.deepEqual(log.at(-1)?.saved, [join(state, "actions", "ignored1.json")]);
   assert.deepEqual(
-    log.filter((l) => l.field).map((l) => [l.call, l.kind, l.legId, l.field, l.from, l.value, l.undo]),
-    [["edit_transaction", "split", "leg-9", "trade", "fee", "ignoreOut", "undo1abcdef"]],
+    preOf(
+      planDir,
+      log.find((l) => l.legId === "leg-9"),
+    ).actions[0].action._id,
+    "d",
+  );
+  assert.deepEqual(preOf(planDir, log.at(-1)).actions[0].action._id, "ignored1");
+  assert.deepEqual(
+    log.filter((l) => l.field).map((l) => [l.call, l.kind, l.legId, l.field, l.from, l.value, l.intent, l.undo]),
+    [
+      ["edit_transaction", "split", "leg-9", "trade", "fee", "ignoreOut", true, undefined],
+      ["edit_transaction", "split", "leg-9", "trade", "fee", "ignoreOut", undefined, "undo1abcdef"],
+    ],
   );
 });
 
@@ -523,6 +539,7 @@ test("a failing call stops the apply", async () => {
   const plan = planFile({
     categorise: [edit(), edit({ id: "row-2", changes: [{ ...edit().changes[0], legId: "leg-2" }] })],
   });
+  const state = mkdtempSync(join(tmpdir(), "summ-sync-state-"));
   await assert.rejects(
     applyPlan(
       failing,
@@ -531,6 +548,7 @@ test("a failing call stops the apply", async () => {
       () => {},
       () => {},
       0,
+      { stateDir: state, planDir: join(state, "plans", "p") },
     ),
     /rejected/,
   );
@@ -618,4 +636,319 @@ test("runApply adds the plan's adoptions to adopted.csv, but not on a dry run", 
     assert.equal(existsSync(join(dir, "adopted.csv")), !dryRun);
     if (!dryRun) assert.equal(readFileSync(join(dir, "adopted.csv"), "utf8"), "Leg,ID\nleg-old,row-1\n");
   }
+});
+
+// ---- The journal: each write preceded by a saved state and a line
+
+const WRITES = ["edit_transaction", "bulk_edit_transactions"];
+const logLines = (dir: string): LogLine[] =>
+  readFileSync(join(dir, "apply-log.jsonl"), "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l));
+
+/** Every kind of write, in a plan of their own: name, the Summ to apply it to, the plan, and its steps' pre-images. */
+const WRITE_STEPS: { name: string; summ: () => FakeSumm; plan: () => Partial<PlanFile>; pre: string[] }[] = [
+  {
+    name: "edit",
+    summ: () => withLegs({ a: [{ _id: "leg-1", trade: "withdrawal", quantity: "1" }] }),
+    plan: () => ({ edit: [edit()] }),
+    pre: ["edit-0.edit.json"],
+  },
+  {
+    name: "price edit",
+    summ: () => withLegs({ a: [pricedLeg()] }),
+    plan: () => ({ edit: [edit({ changes: priceChange() })] }),
+    pre: ["edit-0.edit.json"],
+  },
+  {
+    name: "categorisation, then its ignore",
+    summ: () => withLegs({ a: [{ _id: "leg-1", trade: "withdrawal", quantity: "1" }, { ...MADE_UP }] }),
+    plan: () => ({ categorise: [edit({ ignore: ["made-up"] })] }),
+    pre: ["categorise-0.edit.json", "categorise-0.ignore-0.json"],
+  },
+  {
+    name: "delete",
+    summ: () => withLegs({ d: [{ _id: "leg-9", trade: "withdrawal", quantity: "1" }] }),
+    plan: () => ({ delete: [del()] }),
+    pre: ["delete-0.delete.json"],
+  },
+  {
+    name: "split, delete, then the ignore of the made-up leg",
+    summ: () =>
+      withLegs({
+        d: [
+          { _id: "leg-9", trade: "withdrawal", quantity: "1", side: "outgoing" },
+          { ...MADE_UP, _id: "made-up" },
+        ],
+      }),
+    plan: () => ({
+      delete: [del({ otherLegs: 1 })],
+    }),
+    pre: ["delete-0.split-0.json", "delete-0.delete.json", "delete-0.ignore-0.json"],
+  },
+];
+
+function withLegs(actions: Record<string, FakeLeg[]>): FakeSumm {
+  const summ = new FakeSumm();
+  for (const [id, legs] of Object.entries(actions)) summ.add(id, legs);
+  return summ;
+}
+
+function applyDir(plan: PlanFile): { dir: string; planDir: string } {
+  const dir = stateDir([[plan.snapshot, "2024-01-02T00:00:00.000Z"]]);
+  const planDir = join(dir, "plans", "p");
+  mkdirSync(planDir, { recursive: true });
+  writeFileSync(join(planDir, "plan.json"), JSON.stringify(plan));
+  return { dir, planDir };
+}
+
+const SNAP = "2024-01-02T00-00-00";
+
+for (const { name, summ: makeSumm, plan: planOf, pre } of WRITE_STEPS) {
+  for (const landed of [false, true]) {
+    for (const [n, file] of pre.entries()) {
+      test(`${name}: a ${landed ? "lost answer" : "failure"} at write ${n + 1} leaves its pre-image and intent on disk`, async () => {
+        const { dir, planDir } = applyDir(planFile({ snapshot: SNAP, ...planOf() }));
+        const summ = makeSumm();
+        const real = summ.callTool.bind(summ);
+        let writes = 0;
+        // The state the failing write was given, read when it is called: on disk by then, or the order is wrong
+        let onDisk: LogLine[] = [];
+        let preThere = false;
+        const client = Object.assign(summ, {
+          connect: async () => {},
+          callTool: async (tool: string, args: Record<string, unknown>) => {
+            if (WRITES.includes(tool) && writes++ === n) {
+              onDisk = logLines(dir);
+              preThere = existsSync(join(planDir, "pre", file));
+              if (landed) await real(tool, args);
+              throw new Error("server gone");
+            }
+            return real(tool, args);
+          },
+        });
+        await assert.rejects(runApply(client, dir, planDir, { ...OPTS, approveDeletes: true }, 0), /server gone/);
+        assert.ok(preThere, `${file} exists before the call`);
+        const intent = onDisk.at(-1) as LogLine;
+        assert.equal(intent.intent, true);
+        assert.equal(intent.pre, join("plans", "p", "pre", file));
+        // Then a result line, and the plan's refusal counts all of it as a write
+        const lines = logLines(dir);
+        const failed = lines.find((l) => l.error === "server gone" && l.pre === intent.pre);
+        assert.equal(failed?.entry, intent.entry);
+        assert.equal(failed?.legId, undefined, "a failure must not read back as an edit");
+        assert.throws(() => checkFresh(dir, planFile({ snapshot: SNAP })), /since snapshot/);
+        assert.deepEqual(readdirSync(join(planDir, "pre")).sort(), [...pre.slice(0, n + 1)].sort());
+      });
+    }
+  }
+
+  test(`${name}: every write line carries entry and pre, an intent comes before its call and a result after`, async () => {
+    const { dir, planDir } = applyDir(planFile({ snapshot: SNAP, ...planOf() }));
+    const summ = Object.assign(makeSumm(), { connect: async () => {} });
+    await runApply(summ, dir, planDir, { ...OPTS, approveDeletes: true }, 0);
+    const lines = logLines(dir);
+    assert.equal(summ.calls.filter((c) => WRITES.includes(c.name)).length, pre.length);
+    for (const [n, file] of pre.entries()) {
+      const own = lines.filter((l) => l.pre === join("plans", "p", "pre", file));
+      assert.ok(own.length >= 2, file);
+      assert.equal(own[0].intent, true);
+      assert.ok(own.at(-1)?.intent === undefined, file);
+      assert.ok(own.every((l) => typeof l.entry === "string"));
+      assert.ok(existsSync(join(planDir, "pre", file)), `step ${n}`);
+    }
+    assert.ok(lines.every((l) => l.pre));
+  });
+}
+
+test("a pre-image that cannot be written stops the write, and an intent line that cannot be written too", async () => {
+  const summ = withLegs({ a: [{ _id: "leg-1", trade: "withdrawal", quantity: "1" }] });
+  const state = mkdtempSync(join(tmpdir(), "summ-sync-state-"));
+  // A file where the plan's folder should be
+  writeFileSync(join(state, "plans"), "");
+  const dirs = { stateDir: state, planDir: join(state, "plans", "p") };
+  const say = () => {};
+  await assert.rejects(applyPlan(summ, planFile({ edit: [edit()] }), OPTS, () => {}, say, 0, dirs));
+  assert.equal(summ.calls.filter((c) => WRITES.includes(c.name)).length, 0);
+  const noLog = () => {
+    throw new Error("disk full");
+  };
+  const state2 = mkdtempSync(join(tmpdir(), "summ-sync-state-"));
+  const dirs2 = { stateDir: state2, planDir: join(state2, "plans", "p") };
+  await assert.rejects(applyPlan(summ, planFile({ edit: [edit()] }), OPTS, noLog, say, 0, dirs2), /disk full/);
+  assert.equal(summ.calls.filter((c) => WRITES.includes(c.name)).length, 0);
+});
+
+test("a pre-image holds the full action and its history, as read just before the write", async () => {
+  const summ = withLegs({ a: [{ _id: "leg-1", trade: "withdrawal", quantity: "1" }] });
+  summ.history.set("a", ["2 Jan 2024 · user · Quantity: 2 → 1"]);
+  const { log, planDir } = await run(summ, planFile({ edit: [edit()] }));
+  const image = preOf(planDir, log[0]);
+  assert.deepEqual([image.plan, image.entry, image.step, image.id], ["p", "edit-0", "edit", "row-1"]);
+  assert.deepEqual(image.actions[0].action.incoming, [{ _id: "leg-1", trade: "withdrawal", quantity: "1" }]);
+  assert.deepEqual(image.actions[0].history, ["2 Jan 2024 · user · Quantity: 2 → 1"]);
+  assert.deepEqual(log[0].entry, "edit-0");
+});
+
+test("two edits of an action whose id stays each save the state before them", async () => {
+  const summ = withLegs({
+    a: [
+      { _id: "leg-1", trade: "withdrawal", quantity: "1" },
+      { _id: "leg-2", trade: "withdrawal", quantity: "1" },
+    ],
+  });
+  summ.paused = true;
+  const plan = planFile({
+    edit: [edit(), edit({ id: "row-2", changes: [{ ...edit().changes[0], legId: "leg-2" }] })],
+  });
+  const { log, planDir } = await run(summ, plan);
+  const trades = (entry: string) =>
+    preOf(
+      planDir,
+      log.find((l) => l.entry === entry),
+    ).actions[0].action.incoming.map((l: FakeLeg) => l.trade);
+  assert.deepEqual(trades("edit-0"), ["withdrawal", "withdrawal"]);
+  assert.deepEqual(trades("edit-1"), ["bridgeTradeOut", "withdrawal"]);
+});
+
+test("a delete's pre-image is read now, whatever the action store holds under that id; the store is left alone", async () => {
+  const summ = withLegs({ d: [{ _id: "leg-9", trade: "withdrawal", quantity: "1.5" }] });
+  const { dir, planDir } = applyDir(planFile({ snapshot: SNAP, delete: [del()] }));
+  const stale = join(dir, "actions", "d.json");
+  mkdirSync(join(dir, "actions"));
+  writeFileSync(stale, '{"action":{"_id":"d","incoming":[{"quantity":"9"}]},"history":[]}\n');
+  const before = readFileSync(stale, "utf8");
+  await runApply(Object.assign(summ, { connect: async () => {} }), dir, planDir, { ...OPTS, approveDeletes: true }, 0);
+  const image = JSON.parse(readFileSync(join(planDir, "pre", "delete-0.delete.json"), "utf8"));
+  assert.equal(image.actions[0].action.incoming[0].quantity, "1.5");
+  assert.equal(readFileSync(stale, "utf8"), before);
+});
+
+test("the second action of a split is read again after the first was written to", async () => {
+  const summ = withLegs({
+    d: [
+      { _id: "leg-9", trade: "withdrawal", quantity: "1" },
+      { _id: "their-leg", trade: "deposit", quantity: "1" },
+    ],
+    e: [
+      { _id: "leg-8", trade: "withdrawal", quantity: "1" },
+      { _id: "their-leg-2", trade: "deposit", quantity: "1" },
+    ],
+  });
+  const real = summ.callTool.bind(summ);
+  summ.callTool = async (name, args) => {
+    const text = await real(name, args);
+    // Something moves the other action's leg while the first is written to
+    if (name === "edit_transaction" && args.actionId === "d") (summ.actions.get("e") as FakeLeg[])[0].quantity = "7";
+    return text;
+  };
+  const { log, planDir } = await run(summ, planFile({ delete: [del({ legIds: ["leg-9", "leg-8"], otherLegs: 2 })] }), {
+    approveDeletes: true,
+  });
+  const second = log.find((l) => String(l.pre).endsWith("delete-0.split-1.json"));
+  assert.equal(preOf(planDir, second).actions[0].action.incoming[0].quantity, "7");
+});
+
+test("a pre-image never replaces one already there: the new read goes beside it, and the line names it", async () => {
+  const summ = withLegs({ a: [{ _id: "leg-1", trade: "withdrawal", quantity: "1" }] });
+  const { dir, planDir } = applyDir(planFile({ snapshot: SNAP, edit: [edit()] }));
+  mkdirSync(join(planDir, "pre"));
+  writeFileSync(join(planDir, "pre", "edit-0.edit.json"), "earlier\n");
+  await runApply(Object.assign(summ, { connect: async () => {} }), dir, planDir, OPTS, 0);
+  assert.equal(readFileSync(join(planDir, "pre", "edit-0.edit.json"), "utf8"), "earlier\n");
+  assert.equal(logLines(dir)[0].pre, join("plans", "p", "pre", "edit-0.edit.2.json"));
+  assert.ok(existsSync(join(planDir, "pre", "edit-0.edit.2.json")));
+});
+
+const HEADER =
+  "Timestamp (UTC),Type,Base Currency,Base Amount,Quote Currency (Optional),Quote Amount (Optional),Fee Currency (Optional),Fee Amount (Optional),From (Optional),To (Optional),Blockchain (Optional),ID (Optional),Description (Optional)";
+const csvLine = (id: string) => `2024-01-01 00:00:00,send,AAA,1,,,,,x,y,THOR,${id},"made up, quoted"`;
+const WALLET = "2024-01-01_2024-12-31_THOR_w_a.csv";
+
+async function deleteLine(over: Partial<DeleteEntry>, files: { run?: string[]; upload?: string[] }) {
+  const runDir = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
+  const { dir, planDir } = applyDir(planFile({ snapshot: SNAP, run: runDir, delete: [del(over)] }));
+  if (files.run) {
+    mkdirSync(join(runDir, "csv"));
+    writeFileSync(join(runDir, "csv", WALLET), [HEADER, ...files.run].join("\n") + "\n");
+    writeFileSync(join(runDir, "csv", "all.csv"), "not a wallet file\n");
+  }
+  if (files.upload) {
+    mkdirSync(join(planDir, "upload"));
+    writeFileSync(join(planDir, "upload", WALLET), [HEADER, ...files.upload].join("\n") + "\n");
+  }
+  const summ = withLegs({ d: [{ _id: "leg-9", trade: "withdrawal", quantity: "1" }] });
+  await runApply(Object.assign(summ, { connect: async () => {} }), dir, planDir, { ...OPTS, approveDeletes: true }, 0);
+  return JSON.parse(readFileSync(join(planDir, "pre", "delete-0.delete.json"), "utf8"));
+}
+
+test("a delete's pre-image holds the row's exact CSV line and where it came from", async () => {
+  const image = await deleteLine({ summId: "row-gone" }, { run: [csvLine("other"), csvLine("row-gone")] });
+  assert.deepEqual([image.line, image.lineHeader, image.lineSource], [csvLine("row-gone"), HEADER, `run:${WALLET}`]);
+});
+
+test("a delete's line: under the row's ID when Summ's differs, else from the plan's upload files, else none", async () => {
+  const byRow = await deleteLine({ id: "row-new", summId: "old.csv:7" }, { run: [csvLine("row-new")] });
+  assert.equal(byRow.line, csvLine("row-new"));
+  const upload = await deleteLine({ summId: "row-gone" }, { run: [csvLine("other")], upload: [csvLine("row-gone")] });
+  assert.deepEqual([upload.line, upload.lineSource], [csvLine("row-gone"), `upload:${WALLET}`]);
+  const none = await deleteLine({ summId: "row-gone" }, { run: [csvLine("other")] });
+  assert.deepEqual([none.line, none.lineHeader, none.lineSource], [null, null, null]);
+  // A run that has moved stops nothing
+  const moved = await deleteLine({ summId: "row-gone" }, {});
+  assert.equal(moved.lineSource, null);
+  assert.equal(moved.actions[0].action._id, "d");
+});
+
+test("an edit's pre-image has no line fields", async () => {
+  const summ = withLegs({ a: [{ _id: "leg-1", trade: "withdrawal", quantity: "1" }] });
+  const { log, planDir } = await run(summ, planFile({ edit: [edit()] }));
+  assert.equal("lineSource" in preOf(planDir, log[0]), false);
+});
+
+test("old log lines, with no entry or pre, still count as writes and read as the sync's edits", () => {
+  const snap: [string, string] = [SNAP, "2024-01-02T00:00:00.000Z"];
+  const old = {
+    time: "2024-01-03T00:00:00.000Z",
+    plan: "old",
+    call: "edit_transaction",
+    legId: "leg-1",
+    field: "trade",
+    value: "withdrawal",
+    saved: "/somewhere/actions/x.json",
+  };
+  const dir = stateDir([snap], [JSON.stringify(old)]);
+  assert.throws(() => checkFresh(dir, planFile({ snapshot: SNAP })), /1 writes since snapshot/);
+  assert.deepEqual(
+    readApplyLog(dir).map((l) => l.value),
+    ["withdrawal"],
+  );
+});
+
+test("an edit logs one price intent however many other fields it changes, read back through readApplyLog", async () => {
+  const { dir, planDir } = applyDir(
+    planFile({
+      snapshot: SNAP,
+      edit: [
+        edit({
+          changes: [
+            { leg: "base", legId: "leg-1", field: "trade", summ: "income", desired: "fee" },
+            { leg: "base", legId: "leg-1", field: "quantity", summ: 1, desired: 2 },
+            ...priceChange(),
+          ],
+        }),
+      ],
+    }),
+  );
+  const summ = Object.assign(withLegs({ a: [pricedLeg()] }), { connect: async () => {} });
+  await runApply(summ, dir, planDir, OPTS, 0);
+  const lines = readApplyLog(dir);
+  assert.equal(lines.filter((l) => l.intent && l.field === "price").length, 1);
+  assert.equal(lines.filter((l) => l.field === "price" && !l.intent).length, 1);
+  assert.equal(lines.filter((l) => l.intent).length, 3);
+  assert.deepEqual(
+    lines.filter((l) => !l.intent).map((l) => l.field),
+    ["trade", "quantity", "price"],
+  );
 });

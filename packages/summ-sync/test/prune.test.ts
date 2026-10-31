@@ -75,6 +75,65 @@ test("prune keeps the actions apply saved before a delete, and ignores files tha
   assert.ok(existsSync(join(state, "actions", "b.json")));
 });
 
+test("prune keeps every action a log line names as saved, a list or one file, wherever the state dir was then", () => {
+  const state = repo({ [S1]: ["a", "b", "c"], [S3]: ["d"] });
+  writeFileSync(
+    join(state, "apply-log.jsonl"),
+    [
+      { call: "edit_transaction", kind: "split", saved: "/elsewhere/actions/b.json" },
+      { call: "bulk_edit_transactions", operation: "delete", saved: ["/elsewhere/actions/c.json"] },
+    ]
+      .map((l) => JSON.stringify(l))
+      .join("\n") + "\n",
+  );
+  git(state, "add", ".");
+  git(state, "commit", "-q", "-m", "state");
+  assert.deepEqual(prune(state, 14, NOW).removed, [`snapshots/${S1}.json`, "actions/a.json"]);
+  assert.ok(existsSync(join(state, "actions", "b.json")));
+  assert.ok(existsSync(join(state, "actions", "c.json")));
+});
+
+/** A plan folder on snapshot S1, with one pre-image. */
+function planWithPre(state: string, line: object): string {
+  const pre = join(state, "plans", "p", "pre");
+  mkdirSync(pre, { recursive: true });
+  writeFileSync(join(state, "plans", "p", "plan.json"), JSON.stringify({ snapshot: S1 }));
+  writeFileSync(join(pre, "edit-0.edit.json"), "{}\n");
+  writeFileSync(join(state, "apply-log.jsonl"), JSON.stringify(line) + "\n");
+  return join(pre, "edit-0.edit.json");
+}
+
+test("prune keeps the snapshot of a plan with pre-images, its details file, what it lists, and the pre-images", () => {
+  const state = repo({ [S1]: ["a"], [S3]: ["b"] });
+  const details = join(state, "snapshots", `${S1}.details.jsonl`);
+  writeFileSync(details, "{}\n");
+  const pre = planWithPre(state, { plan: "p", call: "edit_transaction", pre: "plans/p/pre/edit-0.edit.json" });
+  git(state, "add", ".");
+  git(state, "commit", "-q", "-m", "state");
+  assert.deepEqual(prune(state, 14, NOW), { removed: [], uncommitted: [] });
+  for (const file of [join(state, "snapshots", `${S1}.json`), details, join(state, "actions", "a.json"), pre])
+    assert.ok(existsSync(file), file);
+});
+
+test("a plan with only lines from before pre-images keeps no snapshot; a plan folder is never pruned", () => {
+  const state = repo({ [S1]: ["a"], [S3]: ["b"] });
+  const pre = planWithPre(state, { plan: "p", call: "edit_transaction" });
+  git(state, "add", ".");
+  git(state, "commit", "-q", "-m", "state");
+  assert.deepEqual(prune(state, 14, NOW).removed, [`snapshots/${S1}.json`, "actions/a.json"]);
+  assert.ok(existsSync(pre));
+});
+
+test("prune stops when a plan with pre-images has lost its plan file: it cannot say which snapshot to keep", () => {
+  const state = repo({ [S1]: ["a"], [S3]: ["b"] });
+  planWithPre(state, { plan: "p", call: "edit_transaction", pre: "plans/p/pre/edit-0.edit.json" });
+  rmSync(join(state, "plans", "p", "plan.json"));
+  git(state, "add", ".");
+  git(state, "commit", "-q", "-m", "state");
+  assert.throws(() => prune(state, 14, NOW), /plan\.json is gone/);
+  assert.ok(existsSync(join(state, "snapshots", `${S1}.json`)));
+});
+
 test("prune refuses with no snapshot, and outside git", () => {
   const state = repo({ [S1]: ["a"] });
   git(state, "add", ".");
