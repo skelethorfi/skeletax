@@ -1,0 +1,175 @@
+{
+  "description": "refund success: [BTC.BTC] -> [BTC.BTC, ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599]",
+  "source": "midgard",
+  "wallet": "bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn",
+  "data": {
+    "date": "1792873936491921702",
+    "height": "28382477",
+    "in": [
+      {
+        "address": "bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn",
+        "coins": [
+          {
+            "amount": "130136345",
+            "asset": "BTC.BTC"
+          }
+        ],
+        "txID": "1B0368432D8B98DC1B208606BE618336CDC8123E859A3F6986FD797DEAC887D5"
+      }
+    ],
+    "metadata": {
+      "refund": {
+        "affiliateAddress": "sto",
+        "affiliateFee": "0",
+        "memo": "=:ETH.WBTC:0x66467249ACbcb7d9b72ca0d87349E6347D9Ea103:224493478/0/135:sto:0",
+        "networkFees": [
+          {
+            "amount": "311",
+            "asset": "ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599"
+          },
+          {
+            "amount": "1096",
+            "asset": "BTC.BTC"
+          }
+        ],
+        "reason": "emit asset 1662118 less than price limit 1662462",
+        "txType": "swap"
+      }
+    },
+    "out": [
+      {
+        "address": "bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn",
+        "coins": [
+          {
+            "amount": "130135249",
+            "asset": "BTC.BTC"
+          }
+        ],
+        "height": "28382555",
+        "txID": "3C11493982801735FA2D9102FCCAA0C403093A4C8338BC21971FB70A2E1947A4"
+      },
+      {
+        "address": "0x66467249acbcb7d9b72ca0d87349e6347d9ea103",
+        "coins": [
+          {
+            "amount": "94821139",
+            "asset": "ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599"
+          }
+        ],
+        "height": "28382613",
+        "txID": "C12519640F6352C777540C3EA755DF65B8320DF0DEB7FC52B5081BC1C9A559D6"
+      }
+    ],
+    "pools": [],
+    "status": "success",
+    "type": "refund"
+  },
+  "thornodeTxs": [
+    {
+      "tx": {
+        "id": "1B0368432D8B98DC1B208606BE618336CDC8123E859A3F6986FD797DEAC887D5",
+        "chain": "BTC",
+        "from_address": "bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn",
+        "to_address": "bc1qd5gsu875lekewcel0p6wvuev25ynn7ee79g3lf",
+        "coins": [
+          {
+            "asset": "BTC.BTC",
+            "amount": "225236000"
+          }
+        ],
+        "gas": [
+          {
+            "asset": "BTC.BTC",
+            "amount": "1485"
+          }
+        ],
+        "memo": "=:ETH.WBTC:0x66467249ACbcb7d9b72ca0d87349E6347D9Ea103:224493478/0/135:sto:0"
+      },
+      "planned_out_txs": [
+        {
+          "chain": "ETH",
+          "to_address": "0x66467249ACbcb7d9b72ca0d87349E6347D9Ea103",
+          "coin": {
+            "asset": "ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599",
+            "amount": "94821139"
+          },
+          "refund": false
+        },
+        {
+          "chain": "BTC",
+          "to_address": "bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn",
+          "coin": {
+            "asset": "BTC.BTC",
+            "amount": "130135249"
+          },
+          "refund": true
+        }
+      ],
+      "out_txs": [
+        {
+          "id": "3C11493982801735FA2D9102FCCAA0C403093A4C8338BC21971FB70A2E1947A4",
+          "chain": "BTC",
+          "from_address": "bc1qd5gsu875lekewcel0p6wvuev25ynn7ee79g3lf",
+          "to_address": "bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn",
+          "coins": [
+            {
+              "asset": "BTC.BTC",
+              "amount": "130135249"
+            }
+          ],
+          "gas": [
+            {
+              "asset": "BTC.BTC",
+              "amount": "1000"
+            }
+          ],
+          "memo": "REFUND:1B0368432D8B98DC1B208606BE618336CDC8123E859A3F6986FD797DEAC887D5"
+        },
+        {
+          "id": "C12519640F6352C777540C3EA755DF65B8320DF0DEB7FC52B5081BC1C9A559D6",
+          "chain": "ETH",
+          "from_address": "0x51649cf810ea9f1f61165044b7149070c67f79c8",
+          "to_address": "0x66467249ACbcb7d9b72ca0d87349E6347D9Ea103",
+          "coins": [
+            {
+              "asset": "ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599",
+              "amount": "94821139"
+            }
+          ],
+          "gas": [
+            {
+              "asset": "ETH.ETH",
+              "amount": "14833"
+            }
+          ],
+          "memo": "OUT:1B0368432D8B98DC1B208606BE618336CDC8123E859A3F6986FD797DEAC887D5"
+        }
+      ],
+      "stages": {
+        "inbound_observed": {
+          "final_count": 108,
+          "completed": true
+        },
+        "inbound_confirmation_counted": {
+          "remaining_confirmation_seconds": 0,
+          "completed": true
+        },
+        "inbound_finalised": {
+          "completed": true
+        },
+        "swap_status": {
+          "pending": false
+        },
+        "swap_finalised": {
+          "completed": true
+        },
+        "outbound_delay": {
+          "completed": true
+        },
+        "outbound_signed": {
+          "completed": true
+        }
+      }
+    }
+  ]
+}

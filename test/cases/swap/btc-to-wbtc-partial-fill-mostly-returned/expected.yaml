@@ -1,0 +1,29 @@
+wallet: bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn
+timestamp: 2026-10-24T21:45:30.970Z
+type: bridge-trade-out
+baseCurrency: BTC
+baseAmount: "0.05001098"
+quoteCurrency: WBTC
+quoteAmount: "0.04990774"
+feeCurrency: BTC
+feeAmount: "0.00001135"
+from: bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn
+to: thorchain
+blockchain: BTC
+referencePricePerUnit: "80772.72985332416"
+referencePriceCurrency: USD
+description: 1/2 - Swap 0.05001098 BTC to 0.04990774 WBTC (0.94998902 BTC returned unfilled); 3A5FE8FA45896852D1ACB43C6FE7FC5D226EC772A149409F1B227552A1AED088
+id: 2026-10-24T21:45:30.970Z.out.231fe586de14
+---
+wallet: "0x66467249acbcb7d9b72ca0d87349e6347d9ea103"
+timestamp: 2026-10-24T21:45:40.970Z
+type: bridge-trade-in
+baseCurrency: WBTC
+baseAmount: "0.04990774"
+from: thorchain
+to: "0x66467249acbcb7d9b72ca0d87349e6347d9ea103"
+blockchain: ETH
+referencePricePerUnit: "81074.0659071343"
+referencePriceCurrency: USD
+description: 2/2 - Swap 0.05001098 BTC to 0.04990774 WBTC; 3A5FE8FA45896852D1ACB43C6FE7FC5D226EC772A149409F1B227552A1AED088; paid out in 64849EA970274ADDCF9B194B80883F400D536CA9899F962FB4EB6CC3C5C81143
+id: 2026-10-24T21:45:30.970Z.in.6545436a1cbf

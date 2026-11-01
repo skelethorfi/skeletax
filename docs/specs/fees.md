@@ -305,14 +305,51 @@ THORNode data the row is kept.
 
 A streaming swap can fill only partly and return the unfilled input to the
 sender. That part was never swapped, so it is not a fee: the `BridgeTradeOut`
-amount is the input minus what was returned (`maya.md`). The fee is still the
-inbound fee.
+amount is what was sent minus what was returned (`maya.md`). The fee is still
+the inbound fee.
+
+What was sent is the deposit. Midgard (both THORChain's and Maya's) lists only
+the part swapped (`streamingSwapMeta.inCoin`) as the swap's input, so netting
+the return off the input understated the trade, or made it negative when more
+was returned than swapped (#113). The deposit is, in order:
+
+1. `streamingSwapMeta.depositedCoin`, when it is in the input's asset and larger
+   than the input (seen on every partial fill sampled back to 2024-07; on a full
+   fill it equals the input);
+2. THORNode's inbound coin, when the bundle has it and it is larger than the
+   input;
+3. where Midgard leaves the meta blank (all zero, seen on Maya): the input plus
+   the return plus the return's outbound fee (`networkFees` in the input
+   asset), which is what the refund's input equals;
+4. otherwise the input, with a warning when the meta is blank: the return is
+   then netted off the input, as for an action listed with no meta at all.
+
+A swap whose return is the whole of what was sent fails rather than export
+nothing or less.
 
 Midgard also reports a `refund` action for the unfilled part, with the same
-txid, whose outputs include the swap's output in another asset. No row is
-exported for it: the swap's rows already account for everything sent and
-returned, including the outbound fee on the returned part, and its
-`BridgeTradeOut` carries the inbound fee.
+txid, whose input is that part (deposit − part swapped) and whose outputs
+include the swap's output in another asset. No row is exported for it: the
+swap's rows already account for everything sent and returned, including the
+outbound fee on the returned part, and its `BridgeTradeOut` carries the
+inbound fee.
+
+The return goes back to the sender, so a swap to the sender's own address
+(e.g. TRON.USDT to TRON.TRX, or between trade assets) pays that address twice:
+the swap's output is the one in another asset than the input, whichever Midgard
+lists first.
+
+**A trade or secured asset sent from a THORChain or Maya address** is not
+returned: its unfilled part is credited back to the sender on the chain, and
+its refund stays `pending` with no outputs. The swap exports the part swapped,
+which is all that left the wallet, with no warning.
+
+**An L1 return not paid yet.** The swap lists no return output, so it exports
+only the part swapped, with a warning. Once paid, the swap's next export nets
+the return off the deposit (the row keeps its ID). The pending refund is
+covered by the successful swap of its txid (`pending.md`), and its outputs
+list the swap's output, so it is never exported: a return that is never paid
+gives no row, and the warning asks for its loss to be entered by hand.
 
 ## Tests
 
@@ -328,6 +365,13 @@ returned, including the outbound fee on the returned part, and its
     (`refund/btc-price-limit`), or no fee when Midgard lists none
     (`refund/rune-price-limit`); the outbound is not exported
   - a refund of an affiliate's cut has no row (`refund/affiliate-fee-swap`)
+  - a partially filled swap trades out the deposit less the return, whichever
+    way Midgard lists the deposit (`swap/btc-to-wbtc-partial-fill-more-returned`,
+    `swap/btc-to-wbtc-partial-fill-mostly-returned`,
+    `maya/swap-btc-to-eth-partial-fill`, `maya/swap-rune-partial-fill-blank-meta`),
+    to the sender's own address (`swap/tron-usdt-to-trx-partial-fill-to-sender`)
+    or credited back as a trade asset (`swap/trade-partial-fill-credited`); its
+    refund has no row (`refund/btc-partial-fill`)
   - `networkFees` (except for refunds), `liquidityFee` and affiliate outputs are
     never used as fees
 - Golden cases in `test/cases/` carry the expected fee in each row.

@@ -1,0 +1,29 @@
+wallet: thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55
+timestamp: 2025-12-07T22:03:00.908Z
+type: bridge-trade-out
+baseCurrency: USDT
+baseAmount: "1262.9112513"
+quoteCurrency: LTC
+quoteAmount: "15.53186189"
+feeCurrency: RUNE
+feeAmount: "0.02"
+from: thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55
+to: thorchain
+blockchain: THORChain
+referencePricePerUnit: "1.000556271294482"
+referencePriceCurrency: USD
+description: 1/2 - Swap 1262.9112513 ETH~USDT to 15.53186189 LTC~LTC; 535E8A8DA0B14F1D339E78D3526E1F41E3B254D397E6F0AC1DDD8B89BE527288
+id: 2025-12-07T22:03:00.908Z.out.203e0899ec6a
+---
+wallet: thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55
+timestamp: 2025-12-07T22:03:10.908Z
+type: bridge-trade-in
+baseCurrency: LTC
+baseAmount: "15.53186189"
+from: thorchain
+to: thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55
+blockchain: THORChain
+referencePricePerUnit: "81.2255374523298"
+referencePriceCurrency: USD
+description: 2/2 - Swap 1262.9112513 ETH~USDT to 15.53186189 LTC~LTC; 535E8A8DA0B14F1D339E78D3526E1F41E3B254D397E6F0AC1DDD8B89BE527288
+id: 2025-12-07T22:03:00.908Z.in.c0abb604ef74

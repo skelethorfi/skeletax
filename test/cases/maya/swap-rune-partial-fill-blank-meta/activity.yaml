@@ -1,0 +1,69 @@
+id: maya-midgard/swap.22592E65355AEFE8E1ED6DE28B3C85D31B1EFAC2F30E2E5EC04CD63EEA3E4A55
+protocol: maya
+kind: swap
+status: success
+time: 2026-11-01T09:51:02.990Z
+memo: =:ARB.USDC:0xe6da95bfb476fc587cd07b1e56c2b9657ea06b2e:272112574331/3/0:w1:50
+legs:
+  - direction: out
+    wallet: thor1rrs3u6ncspuv6rq0ded9xh3xkjchrxyuzd4s2e
+    asset:
+      notation: THOR.RUNE
+      kind: native
+    role: principal
+    basis: observed
+    txid: 22592E65355AEFE8E1ED6DE28B3C85D31B1EFAC2F30E2E5EC04CD63EEA3E4A55
+    amount: "4503"
+    decimals: 8
+  - direction: in
+    wallet: thor1rrs3u6ncspuv6rq0ded9xh3xkjchrxyuzd4s2e
+    asset:
+      notation: THOR.RUNE
+      kind: native
+    role: returned
+    basis: observed
+    txid: A5A57E48711EB1170433AB78A5F57CC2C6D3023D75C4663C4B1928D3A6162673
+    amount: "630.82858876"
+    decimals: 8
+  - direction: in
+    wallet: "0xe6da95bfb476fc587cd07b1e56c2b9657ea06b2e"
+    asset:
+      notation: ARB.USDC-0XAF88D065E77C8CC2239327C5EDB3A432268E5831
+      kind: token
+    role: principal
+    basis: observed
+    txid: 0B86551CE97CA6B172F1FA7DDEDA4C2ED7C145CD6D01E2FF1F145AA47451DB97
+    amount: "2344.672551"
+    decimals: 8
+  - direction: out
+    wallet: thor1rrs3u6ncspuv6rq0ded9xh3xkjchrxyuzd4s2e
+    asset:
+      notation: THOR.RUNE
+      kind: native
+    role: gas
+    basis: default
+    txid: 22592E65355AEFE8E1ED6DE28B3C85D31B1EFAC2F30E2E5EC04CD63EEA3E4A55
+    amount: "0.02"
+    decimals: 8
+prices:
+  - asset:
+      notation: THOR.RUNE
+      kind: native
+    usd: "0.6234541798889475"
+    source: midgard:swap.inPriceUSD
+  - asset:
+      notation: ARB.USDC-0XAF88D065E77C8CC2239327C5EDB3A432268E5831
+      kind: token
+    usd: "0.995716094568943"
+    source: midgard:swap.outPriceUSD
+  - asset:
+      notation: THOR.RUNE
+      kind: native
+    usd: "0.6808752356183645"
+    source: midgard:history.rune
+  - asset:
+      notation: ARB.USDC-0XAF88D065E77C8CC2239327C5EDB3A432268E5831
+      kind: token
+    usd: "1.0051528179158864"
+    source: maya-midgard:history.depths
+details: {}

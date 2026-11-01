@@ -1,0 +1,29 @@
+wallet: thor1rrs3u6ncspuv6rq0ded9xh3xkjchrxyuzd4s2e
+timestamp: 2026-11-01T09:51:02.990Z
+type: bridge-trade-out
+baseCurrency: RUNE
+baseAmount: "3872.17141124"
+quoteCurrency: USDC
+quoteAmount: "2344.672551"
+feeCurrency: RUNE
+feeAmount: "0.02"
+from: thor1rrs3u6ncspuv6rq0ded9xh3xkjchrxyuzd4s2e
+to: mayaprotocol
+blockchain: THORChain
+referencePricePerUnit: "0.6234541798889475"
+referencePriceCurrency: USD
+description: 1/2 - Swap 3872.17141124 RUNE to 2344.672551 USDC (630.82858876 RUNE returned unfilled); 22592E65355AEFE8E1ED6DE28B3C85D31B1EFAC2F30E2E5EC04CD63EEA3E4A55
+id: 2026-11-01T09:51:02.990Z.out.2130b81e7a85
+---
+wallet: "0xe6da95bfb476fc587cd07b1e56c2b9657ea06b2e"
+timestamp: 2026-11-01T09:51:12.990Z
+type: bridge-trade-in
+baseCurrency: USDC
+baseAmount: "2344.672551"
+from: mayaprotocol
+to: "0xe6da95bfb476fc587cd07b1e56c2b9657ea06b2e"
+blockchain: ARB
+referencePricePerUnit: "0.995716094568943"
+referencePriceCurrency: USD
+description: 2/2 - Swap 3872.17141124 RUNE to 2344.672551 USDC; 22592E65355AEFE8E1ED6DE28B3C85D31B1EFAC2F30E2E5EC04CD63EEA3E4A55; paid out in 0B86551CE97CA6B172F1FA7DDEDA4C2ED7C145CD6D01E2FF1F145AA47451DB97
+id: 2026-11-01T09:51:02.990Z.in.ae6110468ca8

@@ -1,0 +1,63 @@
+id: midgard/swap.535E8A8DA0B14F1D339E78D3526E1F41E3B254D397E6F0AC1DDD8B89BE527288
+protocol: thorchain
+kind: swap
+status: success
+time: 2025-12-07T22:03:00.908Z
+memo: =:LTC~LTC:thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55:13977890289/1/9
+legs:
+  - direction: out
+    wallet: thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55
+    asset:
+      notation: ETH~USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7
+      kind: trade
+    role: principal
+    basis: observed
+    txid: 535E8A8DA0B14F1D339E78D3526E1F41E3B254D397E6F0AC1DDD8B89BE527288
+    amount: "1262.9112513"
+    decimals: 8
+  - direction: in
+    wallet: thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55
+    asset:
+      notation: LTC~LTC
+      kind: trade
+    role: principal
+    basis: observed
+    amount: "15.53186189"
+    decimals: 8
+  - direction: out
+    wallet: thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55
+    asset:
+      notation: THOR.RUNE
+      kind: native
+    role: gas
+    basis: default
+    txid: 535E8A8DA0B14F1D339E78D3526E1F41E3B254D397E6F0AC1DDD8B89BE527288
+    amount: "0.02"
+    decimals: 8
+prices:
+  - asset:
+      notation: ETH~USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7
+      kind: trade
+    usd: "1.000556271294482"
+    source: midgard:swap.inPriceUSD
+  - asset:
+      notation: LTC~LTC
+      kind: trade
+    usd: "81.2255374523298"
+    source: midgard:swap.outPriceUSD
+  - asset:
+      notation: ETH~USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7
+      kind: trade
+    usd: "1.00073981870919"
+    source: midgard:history.depths
+  - asset:
+      notation: LTC~LTC
+      kind: trade
+    usd: "81.27424960580865"
+    source: midgard:history.depths
+  - asset:
+      notation: THOR.RUNE
+      kind: native
+    usd: "0.6681285516953245"
+    source: midgard:history.rune
+details: {}

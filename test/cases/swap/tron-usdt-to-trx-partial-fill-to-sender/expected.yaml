@@ -1,0 +1,29 @@
+wallet: TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF
+timestamp: 2026-10-31T11:57:56.947Z
+type: bridge-trade-out
+baseCurrency: USDT
+baseAmount: "703.087773"
+quoteCurrency: TRX
+quoteAmount: "2219.317417"
+feeCurrency: TRX
+feeAmount: "1.414"
+from: TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF
+to: thorchain
+blockchain: TRON
+referencePricePerUnit: "0.9908564671712805"
+referencePriceCurrency: USD
+description: 1/2 - Swap 703.087773 USDT to 2219.317417 TRX (2796.912227 USDT returned unfilled); 04EE218E412C40113A7FC8A56DEA1286B318AA44486217BB4DE0F544392582FF
+id: 2026-10-31T11:57:56.947Z.out.390b5ce7fcc5
+---
+wallet: TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF
+timestamp: 2026-10-31T11:58:06.947Z
+type: bridge-trade-in
+baseCurrency: TRX
+baseAmount: "2219.317417"
+from: thorchain
+to: TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF
+blockchain: TRON
+referencePricePerUnit: "0.318276937015767"
+referencePriceCurrency: USD
+description: 2/2 - Swap 703.087773 USDT to 2219.317417 TRX; 04EE218E412C40113A7FC8A56DEA1286B318AA44486217BB4DE0F544392582FF; paid out in 973E797ED58A953459F35EB735F99C13BB5E836948D1D42D8A76377C5C252ED5
+id: 2026-10-31T11:57:56.947Z.in.bb6a0b4edcef

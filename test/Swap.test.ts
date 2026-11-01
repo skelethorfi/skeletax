@@ -466,6 +466,140 @@ describe("swap", () => {
     assert.throws(() => swap(action), /swap: no matching out tx/);
   });
 
+  // A streaming swap of 0.5 BTC that filled 0.3 BTC: Midgard lists the 0.3 swapped as the input and the deposit as
+  // streamingSwapMeta.depositedCoin ("blank": the all-zero meta Maya's Midgard can give); `returned` adds the unfilled part
+  // paid back to the sender, net of its outbound fee `fee` (networkFees); `inbound` is THORNode's inbound coin
+  const partialFill = ({
+    deposited,
+    returned,
+    fee,
+    inbound,
+    asset = "BTC.BTC",
+    toSender = false,
+  }: {
+    deposited?: number | "blank";
+    returned?: number;
+    fee?: number;
+    inbound?: number;
+    asset?: string;
+    toSender?: boolean;
+  }) => {
+    const sender = asset.includes("~") ? "thor1sender" : "bc1sender";
+    const action = createMockAction({
+      inputAsset: asset,
+      inputAmount: 0.3,
+      outputAsset: "ETH.ETH",
+      outputAmount: 4,
+      inputAddress: sender,
+      outputAddress: toSender ? sender : "0xreceiver",
+      txID: "tx-partial",
+    });
+    const coin = (amount: number, coinAsset = asset) => ({ asset: coinAsset, amount: "" + Math.round(amount * 1e8) });
+
+    if (deposited !== undefined) {
+      action.metadata.swap!.streamingSwapMeta = {
+        depositedCoin: deposited === "blank" ? { asset: "", amount: "0" } : coin(deposited),
+        inCoin: deposited === "blank" ? { asset: "", amount: "0" } : coin(0.3),
+      } as any;
+    }
+
+    if (fee !== undefined) {
+      action.metadata.swap!.networkFees = [coin(fee, "ETH.ETH"), coin(fee)];
+    }
+
+    if (returned !== undefined) {
+      action.out.unshift({ address: sender, coins: [coin(returned)], txID: "tx-return" } as Transaction);
+    }
+
+    const thornodeTxs: any[] = inbound !== undefined ? [{ tx: { id: "tx-partial", coins: [coin(inbound)] } }] : [];
+    return runBundle(
+      { source: "midgard", protocol: THORCHAIN.id, wallet: "", data: action, thornodeTxs, cosmosTxs: [] },
+      THORCHAIN,
+    );
+  };
+
+  test("a partly filled streaming swap sends its deposit and nets off the return, also when more is returned than swapped", () => {
+    const [tradeOut] = partialFill({ deposited: 0.5, returned: 0.19999 }).rows;
+
+    assert.equal(tradeOut.baseAmount, "0.30001");
+    assert.equal(tradeOut.description, "1/2 - Swap 0.30001 BTC to 4 ETH (0.19999 BTC returned unfilled); tx-partial");
+
+    // 0.3 swapped of 1.0: the old netting of the return off the input gave -0.39999
+    assert.equal(partialFill({ deposited: 1, returned: 0.69999 }).rows[0].baseAmount, "0.30001");
+  });
+
+  test("a deposit in another asset, or not larger than the input, is not the amount sent", () => {
+    assert.equal(partialFill({ deposited: 0.3, returned: 0.1 }).rows[0].baseAmount, "0.2");
+    assert.equal(partialFill({ deposited: 0.2, returned: 0.1 }).rows[0].baseAmount, "0.2");
+  });
+
+  test("with the deposit blank, THORNode's inbound coin is the amount sent, else the input with the return and its outbound fee", () => {
+    assert.equal(partialFill({ deposited: "blank", returned: 0.19999, inbound: 0.5 }).rows[0].baseAmount, "0.30001");
+    // Maya's Midgard: no node data in the bundle; the refund's input is the return plus its fee
+    const maya = partialFill({ deposited: "blank", returned: 0.19999, fee: 0.00001 });
+    assert.equal(maya.rows[0].baseAmount, "0.30001");
+    assert.deepEqual(maya.issues, []);
+  });
+
+  test("with the deposit blank and no fee to rebuild it, the return is netted off the input with a warning", () => {
+    const { rows, issues } = partialFill({ deposited: "blank", returned: 0.1 });
+
+    assert.equal(rows[0].baseAmount, "0.2");
+    assert.deepEqual(issues, [
+      {
+        kind: "warning",
+        message: "partly filled swap with no deposit listed: the return is netted off the input; check the amount sent",
+      },
+    ]);
+  });
+
+  test("a return with no meta at all is netted off the input, unless THORNode's inbound shows more was sent", () => {
+    assert.equal(partialFill({ returned: 0.1 }).rows[0].baseAmount, "0.2");
+    assert.equal(partialFill({ returned: 0.1, inbound: 0.5 }).rows[0].baseAmount, "0.4");
+  });
+
+  test("an L1 partial fill whose return is not paid yet exports the part swapped, with a warning", () => {
+    const { rows, issues } = partialFill({ deposited: 0.5 });
+
+    assert.equal(rows[0].baseAmount, "0.3");
+    assert.deepEqual(issues, [
+      {
+        kind: "warning",
+        message:
+          "streaming swap filled only partly and its unfilled 0.2 BTC.BTC is not returned yet: only the part swapped is exported; if it is never returned, enter its loss by hand",
+      },
+    ]);
+  });
+
+  test("a trade asset's unfilled part is credited back on THORChain, never returned: the part swapped, with no warning", () => {
+    const { rows, issues } = partialFill({ deposited: 0.5, asset: "BTC~BTC" });
+
+    assert.equal(rows[0].baseAmount, "0.3");
+    assert.deepEqual(issues, []);
+  });
+
+  test("a swap to the sender's own address takes its output, not the unfilled part, whichever is listed first", () => {
+    const { rows } = partialFill({ deposited: 0.5, returned: 0.19999, asset: "BTC~BTC", toSender: true });
+
+    assert.equal(rows[0].baseAmount, "0.30001");
+    assert.equal(rows[0].quoteCurrency, "ETH");
+    assert.equal(rows[1].baseCurrency, "ETH");
+  });
+
+  test("a swap that returned all it was sent is a failure, never a row of nothing or less", () => {
+    const failed = (result: ReturnType<typeof partialFill>) =>
+      result.issues.find((issue) => issue.kind === "failed")?.message;
+
+    assert.match(
+      failed(partialFill({ returned: 0.3 })) ?? "",
+      /swap: returned 30000000 of 30000000 sent, so nothing was swapped/,
+    );
+    assert.match(
+      failed(partialFill({ deposited: 0.5, returned: 0.5 })) ?? "",
+      /swap: returned 50000000 of 50000000 sent/,
+    );
+  });
+
   test("Maya: a CACAO input without node data falls back to the 0.2 CACAO native fee", () => {
     const action = createMockAction({
       inputAsset: "MAYA.CACAO",

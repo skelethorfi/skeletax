@@ -1,0 +1,69 @@
+id: midgard/swap.04EE218E412C40113A7FC8A56DEA1286B318AA44486217BB4DE0F544392582FF
+protocol: thorchain
+kind: swap
+status: success
+time: 2026-10-31T11:57:56.947Z
+memo: =<:TRON.TRX:TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF:1109364929293/1800/5
+legs:
+  - direction: out
+    wallet: TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF
+    asset:
+      notation: TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T
+      kind: token
+    role: principal
+    basis: observed
+    txid: 04EE218E412C40113A7FC8A56DEA1286B318AA44486217BB4DE0F544392582FF
+    amount: "3500"
+    decimals: 8
+  - direction: in
+    wallet: TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF
+    asset:
+      notation: TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T
+      kind: token
+    role: returned
+    basis: observed
+    txid: 6400AA20D294116E4D6ECA9DFB676DD75E6EE6542244C4DB7EAED38E95379582
+    amount: "2796.912227"
+    decimals: 8
+  - direction: in
+    wallet: TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF
+    asset:
+      notation: TRON.TRX
+      kind: native
+    role: principal
+    basis: observed
+    txid: 973E797ED58A953459F35EB735F99C13BB5E836948D1D42D8A76377C5C252ED5
+    amount: "2219.317417"
+    decimals: 8
+  - direction: out
+    wallet: TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF
+    asset:
+      notation: TRON.TRX
+      kind: native
+    role: gas
+    basis: observed
+    txid: 04EE218E412C40113A7FC8A56DEA1286B318AA44486217BB4DE0F544392582FF
+    amount: "1.414"
+    decimals: 8
+prices:
+  - asset:
+      notation: TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T
+      kind: token
+    usd: "0.9908564671712805"
+    source: midgard:swap.inPriceUSD
+  - asset:
+      notation: TRON.TRX
+      kind: native
+    usd: "0.318276937015767"
+    source: midgard:swap.outPriceUSD
+  - asset:
+      notation: TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T
+      kind: token
+    usd: "0.9825740343339484"
+    source: midgard:history.depths
+  - asset:
+      notation: TRON.TRX
+      kind: native
+    usd: "0.3189638522038643"
+    source: midgard:history.depths
+details: {}

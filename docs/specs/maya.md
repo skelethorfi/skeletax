@@ -66,13 +66,18 @@ fee is part of what the input bought.
 
 **Partially filled swaps.** A streaming swap that fills only partly returns the
 unfilled part of the input to the sender. Midgard reports this as two actions
-with the same txid: a `swap` whose outputs include the returned part (to the
-sender, in the input asset), and a `refund` for that part.
-That output is netted off the `BridgeTradeOut` amount: the row shows what was
-actually swapped, and its description notes the amount returned. For example,
-1000 CACAO in, 25 CACAO returned and 200 RUNE out becomes a trade-out of
-975 CACAO for 200 RUNE. The `refund` action has no rows: the swap's rows
-already account for what was sent and returned (`fees.md`).
+with the same txid: a `swap` whose input is the part swapped, with the deposit
+in `streamingSwapMeta.depositedCoin`, and whose outputs include the returned
+part (to the sender, in the input asset); and a `refund` for that part.
+That output is netted off the deposit for the `BridgeTradeOut` amount: the row
+shows what was actually swapped (with the return's outbound fee), and its
+description notes the amount returned. For example, 1000 CACAO deposited, 975
+swapped, 24.9 CACAO returned and 200 RUNE out becomes a trade-out of 975.1
+CACAO for 200 RUNE. Maya's Midgard can leave the meta blank; the deposit is
+then rebuilt from the return and its fee (`fees.md`, Partially filled swaps;
+`maya/swap-btc-to-eth-partial-fill`, `maya/swap-rune-partial-fill-blank-meta`). The `refund` action
+has no rows: the swap's rows already account for what was sent and returned
+(`fees.md`, Partially filled swaps).
 
 ### Add liquidity
 
