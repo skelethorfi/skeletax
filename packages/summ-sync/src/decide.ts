@@ -28,7 +28,8 @@ export function runDecide(stateDir: string, planPath: string, choices: string[])
   const hold = [...((config.hold as Hold[] | undefined) ?? [])];
   const said: string[] = [];
   const seen = new Set<string>();
-  const filedKinds = new Set<boolean>();
+  // What the plan already deletes by name counts, since the next plan refuses filed and current-year entries together
+  const filedKinds = new Set(plan.delete.filter((d) => d.manual).map((d) => d.filed));
   let added = 0;
   for (const choice of choices) {
     const [, id, key] = /^(d\d+):([a-z])$/.exec(choice) ?? [];
@@ -40,9 +41,15 @@ export function runDecide(stateDir: string, planPath: string, choices: string[])
     const option = decision.options.find((o) => o.key === key);
     if (!option) throw new Error(`decide: ${id} has no option ${key}`);
     const entries = option.config.deleteManualEntries ?? [];
+    if (option.spans)
+      throw new Error(
+        `decide: ${id}'s entries span filed and current years, and a plan takes one kind at a time: add each kind's lines to summ-sync.json by hand`,
+      );
     if (entries.length) filedKinds.add(decision.filed);
     if (filedKinds.size > 1)
-      throw new Error("decide: these name both filed and current-year entries, and a plan takes one kind at a time");
+      throw new Error(
+        `decide: ${id} would name both filed and current-year entries, and a plan takes one kind at a time: apply those already named first`,
+      );
     const before = manual.length + hold.length;
     for (const m of entries) if (!manual.some((x) => x.legId === m.legId)) manual.push(m);
     for (const h of option.config.hold ?? []) if (!hold.some((x) => x.id === h.id)) hold.push(h);

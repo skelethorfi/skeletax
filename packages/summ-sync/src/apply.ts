@@ -25,6 +25,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { configSha } from "./config.ts";
 import { type ActionDetail, isLegAbsent, parseActions, parseDetail, parsePageHeader } from "./parse.ts";
 import {
   type Change,
@@ -180,6 +181,9 @@ export function startState(
   const starts = lines.filter((l) => l.plan === planName && l.call === "apply-start");
   if (!starts.length) {
     checkFresh(stateDir, plan);
+    // A plan made before summ-sync.json changed may do what a choice since then takes back. Once begun, it goes on
+    if (plan.configSha !== undefined && plan.configSha !== configSha(stateDir))
+      throw new Error("summ-sync.json changed since this plan was made: plan again");
     return "first";
   }
   const last = starts[starts.length - 1];

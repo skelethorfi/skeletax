@@ -576,23 +576,25 @@ effect after a recalculation.
 
 A leg is _added back_ by a row this plan uploads, or a kept leg that counts, with the same currency and amount within a
 day, or about the amount (within 1%, a fee apart) within 5 minutes. A row uploaded with the same amount under another
-ticker within 5 minutes counts too. What counts goes by type. For a disposal: a type that disposes, not a send, bridge, failed
-send, fee or approval. A kept leg goes by its type after this plan's edit or categorisation, and not by what the run has, since
-an override or a scope can keep its type. For something coming in: anything but spam or a failed receive, and a kept plain
-receive only with no send kept beside it, since it is then half of a transfer. A held row adds nothing, nor does a row outside
-the scope, a made-up or ignored leg, a fee leg, or a bridge's quote, which only names the other asset. A decision is opened by:
+ticker within 5 minutes counts too. Each row side or kept leg adds back one leg, in time order, the nearest first. What counts
+goes by type. For a disposal: a type that disposes, not a send, bridge, failed send, fee, approval, or a move into staking,
+collateral, a position or a repayment, whose treatment is Summ's. A kept leg goes by its type after this plan's edit or
+categorisation, and not by what the run has, since an override or a scope can keep its type. For something coming in: anything
+but spam or a failed receive; a kept plain receive only with no send kept beside it, and a row's only with no row going ahead
+sending the same, since it is then half of a transfer. A held row adds nothing, nor does a row outside the scope, a made-up or
+ignored leg, a fee leg, or a bridge's quote, which only names the other asset. A decision is opened by:
 
 - a disposal removed with nothing to add it back: its gain or loss goes;
 - a removed incoming leg with nothing to add it back, when a kept manual leg sends on the same currency and amount, from 5
   minutes before to a day after: it disposes from nothing, a false gain;
 - a row going ahead whose type acquires what a kept manual leg of an acquiring type also holds, within a day: acquired twice.
 
-What is linked to it joins one decision per event: deletes moving the same amounts within 5 minutes, rows naming them within 5
-minutes and rows sharing their txids, manual legs of those amounts (within a day of a delete or a row, within 5 minutes of
+What is linked to it joins one decision per event: deletes moving the same amounts within 5 minutes, rows naming them within 5 minutes, rows that add them back, every row their txids chain to, manual legs of those amounts (within a day of a delete or a row, within 5 minutes of
 another manual leg) with the rest of their actions, and manual legs those rows are held for or whose text names their txids. A
 manual leg joins one decision only. An old trade whose sold side is a row of the run, while the rows' incoming side has neither
 its bought currency nor its amount, is shown as a changed swap. The decision also says when rows are held while deletes of the
-same event go, why when they name no txid, and when an override keeps a row's type.
+same event go, why when they name no txid, when an override keeps a row's type, and which entries named in
+`deleteManualEntries` go beside it.
 
 Each decision has two options, each with the config to add to `summ-sync.json` before planning again:
 
@@ -606,12 +608,11 @@ A decision is filed by the entries option a names, or with none by its legs.
 
 `decide <state dir> <plan dir> d1:a [d2:b ...]` adds what the options name to `summ-sync.json`, all or none, leaving what is
 already there, and prints what the next plan does. It refuses a choice the plan does not have, a decision chosen twice, filed and current-year
-entries together, a plan not from the latest snapshot or with a write to Summ since it, and a plan not made from
+entries together (with those of the same option, or with those the plan already deletes), a plan not from the latest snapshot or with a write to Summ since it, and a plan not made from
 `summ-sync.json` as it is now (`plan.json` holds its `configSha`): a decision's number means something only in its plan, so after
-a choice, plan again before choosing more. It writes nothing to Summ: the entries still go through a plan and apply's approvals. To undo a choice, remove the lines from `summ-sync.json`.
+a choice, plan again before choosing more. It writes nothing to Summ: the entries still go through a plan and apply's approvals. Apply refuses to start a plan whose `configSha` is not the config's now, so that a choice is not overtaken by an older plan. To undo a choice, remove the lines from `summ-sync.json`.
 
-Or neither: change the entries in Summ or the run, then pull and plan. `checks` lists the other removed acquisitions with
-nothing to add them back that have kept outgoing legs of that asset within a week: nothing links them but the asset. An
+Or neither: change the entries in Summ or the run, then pull and plan. `checks` lists the other removed acquisitions, a named manual entry's included, with nothing to add them back that have kept outgoing legs of that asset within a week: nothing links them but the asset. An
 agent or a person decides; a plan never picks.
 
 **Filed years.** An entry whose row or leg is dated before `filedBefore` is

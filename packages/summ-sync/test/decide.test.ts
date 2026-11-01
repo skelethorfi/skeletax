@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -14,6 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configSha, loadConfig } from "../src/config.ts";
+import { readPlanFile, startState } from "../src/apply.ts";
 import { runDecide } from "../src/decide.ts";
 import { writeSnapshot } from "../src/snapshot.ts";
 
@@ -62,7 +64,7 @@ function state(
   mkdirSync(planDir, { recursive: true });
   writeFileSync(
     join(planDir, "plan.json"),
-    JSON.stringify({ snapshot, run: "/run", configSha: configSha(dir), decisions: DECISIONS, ...plan }),
+    JSON.stringify({ snapshot, run: "/run", configSha: configSha(dir), decisions: DECISIONS, delete: [], ...plan }),
   );
   return { dir, plan: planDir };
 }
@@ -226,4 +228,50 @@ test("decide refuses a plan apply would call out of date", () => {
     `${JSON.stringify({ time: "2024-08-02T00:00:00.000Z", plan: "q", call: "edit_transaction", kind: "edit", entry: "e", result: "ok" })}\n`,
   );
   assert.throws(() => runDecide(dir, plan, ["d1:a"]), /pull and plan again/);
+});
+
+test("what the plan already deletes by name counts, and an option spanning both is refused", () => {
+  const named = {
+    id: null,
+    summId: "m",
+    filed: true,
+    legIds: ["x"],
+    actionIds: [],
+    reason: "r",
+    otherLegs: 0,
+    manual: true,
+  };
+  const { dir, plan } = state(undefined, SNAPSHOT, { delete: [named] });
+  assert.throws(() => runDecide(dir, plan, ["d1:a"]), /apply those already named first/);
+  const decisions = [{ ...DECISIONS[0], options: [{ ...DECISIONS[0].options[0], spans: true }] }];
+  const spanning = state(undefined, SNAPSHOT, { decisions });
+  assert.throws(() => runDecide(spanning.dir, spanning.plan, ["d1:a"]), /span filed and current years/);
+});
+
+test("apply refuses to start a plan from an older config, and goes on with one begun", () => {
+  const { dir, plan } = state();
+  const { plan: file, sha } = readPlanFile(plan);
+  const flags = { approveDeletes: false, approveFiled: false };
+  assert.equal(startState(dir, file, "p", sha, flags), "first");
+  runDecide(dir, plan, ["d1:a"]);
+  assert.throws(() => startState(dir, file, "p", sha, flags), /summ-sync\.json changed since this plan was made/);
+  writeFileSync(
+    join(dir, "apply-log.jsonl"),
+    `${JSON.stringify({ time: "2024-07-31T00:00:00.000Z", plan: "p", run: "r", call: "apply-start", planSha: sha, flags })}\n`,
+  );
+  assert.equal(startState(dir, file, "p", sha, flags), "resume");
+});
+
+test("the command line runs it", () => {
+  const { dir, plan } = state();
+  const out = execFileSync(
+    process.execPath,
+    [join(import.meta.dirname, "..", "bin", "summ-sync.ts"), "decide", dir, plan, "d1:a"],
+    {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    },
+  );
+  assert.match(out, /Nothing is written to Summ/);
+  assert.equal(loadConfig(dir).deleteManualEntries.length, 1);
 });
