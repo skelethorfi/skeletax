@@ -81,7 +81,7 @@ export function getBundleType(bundle: RawBundle): { type: string; subtype?: stri
       }
 
       if ((action.type as string) === "contract") {
-        return { type: action.type, subtype: (action.metadata as any).contract?.contractType };
+        return { type: action.type, subtype: action.metadata.contract?.contractType };
       }
 
       return { type: action.type };

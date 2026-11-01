@@ -13,7 +13,7 @@ export function getActionDate(action: Action): Date {
 // A Rujira liquid bond of bRUNE needs RUNE's price: bRUNE is worth one RUNE but has no market price
 // (docs/specs/rujira.md)
 export function needsRunePrice(action: Action): boolean {
-  const contract = (action.metadata as any)?.contract;
+  const contract = action.metadata?.contract;
   return contract?.contractType === "wasm-rujira-staking/liquid.bond" && /^\d+x\/brune$/.test(contract.funds ?? "");
 }
 

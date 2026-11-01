@@ -18,7 +18,7 @@ import type { TcyClaimData } from "../tcy/TcyClaimService.ts";
 // (also by pool), and Maya's donate adds.
 export function midgardActionKey(action: Action): string {
   const txId = action.in.find((tx) => tx.txID)?.txID || action.out.find((tx) => tx.txID)?.txID;
-  const contractType = (action.metadata as any).contract?.contractType;
+  const contractType = action.metadata.contract?.contractType;
   const members = action.in.map((tx) => tx.address || "-").join("+");
 
   if (isGenesisPlaceholder(action)) {
