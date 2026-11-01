@@ -390,3 +390,356 @@ test("plan.md leads with the decisions, and says nothing with none", () => {
   assert.deepEqual(decisionLines([], []), []);
   assert.equal(plan({ rows, legs }).counts.decisions, 1);
 });
+
+const manual = { source: "manual", importType: "manual" };
+const at = (time: string) => `2024-03-01T${time}.000Z`;
+const wallet = { from: "another", to: "another" };
+const decided = (over: Partial<PlanInput>) => plan(over).decisions ?? [];
+/** A removed trade selling AAA for BBB, in a wallet no row of these tests adopts. */
+const oldTrade = () =>
+  oldLegs()
+    .slice(1, 3)
+    .map((l) => ({ ...l, ...wallet }));
+const soldBack = (over: Partial<Row>) =>
+  rowOf({
+    timestamp: at("10:04:00"),
+    id: "2024-03-01T10:04:00.000Z.out.dddddddddddd",
+    txids: ["5".repeat(64)],
+    ...over,
+  });
+
+test("option a names a manual fee leg and an ignored leg of its action, or the plan would hold the entry", () => {
+  const { rows, legs, m } = swapChanged();
+  const fee = leg({
+    ...manual,
+    id: "m-trade",
+    actionId: m.trade[0].actionId,
+    side: "fees",
+    trade: "fee",
+    currency: "BBB",
+    quantity: 0.1,
+    timestamp: at("10:00:50"),
+  });
+  const ignored = leg({
+    ...manual,
+    id: "m-other",
+    actionId: m.send.actionId,
+    trade: "ignoreOut",
+    currency: "TKN",
+    quantity: 1,
+    timestamp: at("10:00:51"),
+  });
+  const all = [...legs, fee, ignored];
+  const entries = plan({ rows, legs: all }).decisions![0].options[0].config.deleteManualEntries!;
+  assert.ok(entries.some((e) => e.legId === fee.legId));
+  assert.ok(entries.some((e) => e.legId === ignored.legId));
+  const next = plan({ rows, legs: all, config: { ...CONFIG, deleteManualEntries: entries } });
+  assert.equal(next.decisions, undefined);
+  assert.equal(next.held.length, 0);
+});
+
+test("a row adds back only what its type does: a send is no disposal, spam acquires nothing", () => {
+  for (const r of [
+    soldBack({ type: "send", quoteCurrency: "", quoteAmount: "" }),
+    soldBack({ type: "failed-out", quoteCurrency: "", quoteAmount: "" }),
+  ])
+    assert.equal(decided({ rows: [r], legs: oldTrade() })[0]?.kind, "lost-disposal", r.type);
+  const sell = leg({
+    ...manual,
+    id: "m",
+    actionId: "am",
+    trade: "sell",
+    currency: "BBB",
+    quantity: 2,
+    timestamp: at("10:00:50"),
+  });
+  const spam = soldBack({ type: "spam", baseCurrency: "BBB", baseAmount: "2", quoteCurrency: "", quoteAmount: "" });
+  const fine = soldBack({ baseCurrency: "AAA", type: "sell", quoteCurrency: "CCC", quoteAmount: "7" });
+  const d = decided({ rows: [spam, fine], legs: [...oldTrade(), sell] });
+  assert.ok(d[0].lines.some((l) => l.startsWith("Left behind: manual sell 2 BBB")));
+  const received = soldBack({
+    type: "receive",
+    baseCurrency: "BBB",
+    baseAmount: "2",
+    quoteCurrency: "",
+    quoteAmount: "",
+  });
+  assert.ok(
+    !decided({ rows: [received, fine], legs: [...oldTrade(), sell] }).some((x) =>
+      x.lines.some((l) => l.includes("Left behind")),
+    ),
+  );
+});
+
+test("a kept leg adds back only what it counts as: lone spam no, a lone receive yes, a retained send no", () => {
+  const sell = leg({
+    ...manual,
+    id: "m",
+    actionId: "am",
+    trade: "sell",
+    currency: "BBB",
+    quantity: 2,
+    timestamp: at("10:00:50"),
+  });
+  const lone = (trade: string) =>
+    leg({
+      source: "wallet",
+      importType: "wallet",
+      id: "w",
+      actionId: "aw",
+      side: "incoming",
+      trade,
+      currency: "BBB",
+      quantity: 2,
+      timestamp: at("10:00:30"),
+    });
+  const buy = oldTrade().find((l) => l.trade === "buy") as Leg;
+  const only = [{ ...buy, actionId: "x" }];
+  assert.ok(decided({ legs: [...only, sell, lone("spamIn")] })[0].lines.some((l) => l.includes("Left behind")));
+  assert.equal(decided({ legs: [...only, sell, lone("deposit")] }).length, 0);
+  assert.equal(decided({ legs: [...only, sell, lone("buy")] }).length, 0);
+  // A made-up leg, or a fee, counts for nothing
+  assert.ok(
+    decided({ legs: [...only, sell, { ...lone("deposit"), importType: "soft-transfer" }] })[0].lines.some((l) =>
+      l.includes("Left behind"),
+    ),
+  );
+  const sold = oldTrade().filter((l) => l.trade === "sell");
+  const keptSend = leg({
+    source: "wallet",
+    importType: "wallet",
+    id: "s",
+    actionId: "as",
+    timestamp: at("10:00:30"),
+    ...wallet,
+  });
+  assert.equal(decided({ legs: [...sold, keptSend] })[0]?.kind, "lost-disposal");
+  const keptFee = { ...keptSend, side: "fees" as const, trade: "sell" };
+  assert.equal(decided({ legs: [...sold, keptFee] })[0]?.kind, "lost-disposal");
+  assert.equal(decided({ legs: [...sold, { ...keptSend, trade: "sell" }] }).length, 0);
+});
+
+test("the times: a removed acquisition is sent on from 5 minutes before to a day after", () => {
+  const buy = {
+    ...(oldTrade().find((l) => l.trade === "buy") as Leg),
+    actionId: "x",
+    timestamp: "2024-03-01T10:00:00.000Z",
+  };
+  const sell = (timestamp: string) =>
+    leg({ ...manual, id: "m", actionId: "am", trade: "sell", currency: "BBB", quantity: 2, timestamp });
+  const sent = (timestamp: string) =>
+    decided({ legs: [buy, sell(timestamp)] }).some((d) => d.lines.some((l) => l.includes("Left behind")));
+  assert.equal(sent("2024-03-01T09:55:00.000Z"), true);
+  assert.equal(sent("2024-03-01T09:54:59.000Z"), false);
+  assert.equal(sent("2024-03-02T10:00:00.000Z"), true);
+  assert.equal(sent("2024-03-02T10:00:01.000Z"), false);
+});
+
+test("the amounts: a fee apart counts within 1% and 5 minutes, the same amount within a day", () => {
+  const sold = oldTrade().filter((l) => l.trade === "sell");
+  const row = (timestamp: string, baseAmount: string) =>
+    soldBack({
+      timestamp,
+      id: `${timestamp}.out.eeeeeeeeeeee`,
+      type: "sell",
+      baseAmount,
+      quoteCurrency: "CCC",
+      quoteAmount: "7",
+    });
+  const asks = (r: Row) => decided({ rows: [r], legs: sold }).length > 0;
+  assert.equal(asks(row(at("10:05:10"), "99")), false);
+  assert.equal(asks(row(at("10:05:10"), "98.9")), true);
+  assert.equal(asks(row(at("10:05:11"), "99")), true);
+  assert.equal(asks(row("2024-03-02T10:00:10.000Z", "100")), false);
+  assert.equal(asks(row("2024-03-02T10:00:11.000Z", "100")), true);
+  // Another name counts only at the same amount and close by
+  const named = (timestamp: string) => row(timestamp, "100");
+  const renamed = (timestamp: string) => ({ ...named(timestamp), baseCurrency: "Renamed.AAA" });
+  assert.equal(asks(renamed(at("10:05:10"))), false);
+  assert.equal(asks(renamed(at("10:05:11"))), true);
+});
+
+test("option b also holds a row going ahead: else the old disposal stays and the row makes a second", () => {
+  const sell = leg({
+    ...manual,
+    id: "m",
+    actionId: "am",
+    trade: "sell",
+    currency: "BBB",
+    quantity: 2,
+    timestamp: at("10:00:50"),
+  });
+  const r = soldBack({ timestamp: at("10:04:00"), type: "bridge-trade-out", quoteCurrency: "CCC", quoteAmount: "7" });
+  const legs = [...oldTrade(), sell];
+  const first = plan({ rows: [r], legs });
+  assert.deepEqual(
+    first.upload.flatMap((u) => u.ids),
+    [r.id],
+  );
+  const hold = first.decisions![0].options[1].config.hold!;
+  assert.ok(hold.some((h) => h.id === r.id));
+  const next = plan({ rows: [r], legs, config: { ...CONFIG, hold } });
+  assert.deepEqual(next.upload, []);
+  assert.deepEqual(next.delete, []);
+  assert.equal(next.decisions, undefined);
+  assert.deepEqual(next.notes, []);
+});
+
+test("acquired twice needs a row that acquires, and a manual leg that does; its hold is the row", () => {
+  const buy = leg({
+    ...manual,
+    id: "m",
+    actionId: "am",
+    side: "incoming",
+    trade: "buy",
+    currency: "TKN",
+    quantity: 50,
+    timestamp: at("10:01:00"),
+  });
+  const row = (type: string, timestamp = at("10:04:00")) =>
+    soldBack({
+      timestamp,
+      type,
+      baseCurrency: "TKN",
+      baseAmount: "50",
+      quoteCurrency: "",
+      quoteAmount: "",
+      id: `${timestamp}.in.ffffffffffff`,
+    });
+  assert.equal(decided({ rows: [row("receive")], legs: [buy] }).length, 0);
+  const d = decided({ rows: [row("bridge-trade-in")], legs: [buy] })[0];
+  assert.equal(d.kind, "acquired-twice");
+  assert.equal(d.title, "2024-03-01: TKN is acquired twice");
+  assert.equal(d.options[1].config.hold?.length, 1);
+  assert.equal(decided({ rows: [row("bridge-trade-in", "2024-03-02T10:01:00.000Z")], legs: [buy] }).length, 1);
+  assert.equal(decided({ rows: [row("bridge-trade-in", "2024-03-02T10:01:01.000Z")], legs: [buy] }).length, 0);
+  assert.equal(decided({ rows: [row("bridge-trade-in")], legs: [{ ...buy, trade: "deposit" }] }).length, 0);
+});
+
+test("a removed plain receive sent on is named as a receive", () => {
+  const receive = leg({
+    id: "old.csv:8",
+    actionId: "x",
+    side: "incoming",
+    trade: "deposit",
+    currency: "BBB",
+    quantity: 2,
+  });
+  const send = leg({ ...manual, id: "m", actionId: "am", currency: "BBB", quantity: 2, timestamp: at("10:01:00") });
+  const d = decided({ legs: [receive, send] })[0];
+  assert.equal(d.kind, "lost-acquisition");
+  assert.match(d.title, /a receive of BBB is removed and sent on/);
+  assert.ok(d.lines.some((l) => l.startsWith("Receive removed")));
+});
+
+test("one amount does not swell a decision: a manual leg reaches no further by a day, and belongs to one decision", () => {
+  const sold = oldTrade().filter((l) => l.trade === "sell");
+  const buys = ["2024-03-01T20:00:00.000Z", "2024-03-02T16:00:00.000Z", "2024-03-03T12:00:00.000Z"].map(
+    (timestamp, i) => leg({ ...manual, id: `m${i}`, actionId: `am${i}`, side: "incoming", trade: "buy", timestamp }),
+  );
+  const d = decided({ legs: [...sold, ...buys] });
+  assert.deepEqual(
+    d[0].options[0].config.deleteManualEntries?.map((e) => e.legId),
+    [buys[0].legId],
+  );
+  // Two sells of one amount, far enough apart to be two decisions, and one manual leg between them
+  const a = { ...sold[0], actionId: "a1", id: "old.csv:21", timestamp: "2024-03-01T10:00:00.000Z" };
+  const b = { ...sold[0], legId: "other-leg", actionId: "a2", id: "old.csv:22", timestamp: "2024-03-01T20:00:00.000Z" };
+  const shared = leg({
+    ...manual,
+    id: "s",
+    actionId: "as",
+    side: "incoming",
+    trade: "buy",
+    timestamp: "2024-03-01T15:00:00.000Z",
+  });
+  const both = decided({ legs: [a, b, shared] });
+  const names = both.flatMap((x) => x.options[0].config.deleteManualEntries ?? []).map((e) => e.legId);
+  assert.equal(names.length, new Set(names).size);
+});
+
+test("a retained type does not count as what the run has, and the decision says whose value it is", () => {
+  const sold = oldTrade().filter((l) => l.trade === "sell");
+  const r = rowOf({
+    file: FILES[1].name,
+    chain: "BTC",
+    type: "bridge-trade-out",
+    quoteCurrency: "",
+    quoteAmount: "",
+    timestamp: at("10:00:05"),
+    id: "2024-03-01T10:00:05.000Z.out.abababababab",
+    txids: [OUT_TX],
+  });
+  const walletSend = leg({
+    source: "wallet",
+    importType: "wallet",
+    id: OUT_TX,
+    actionId: "aw",
+    timestamp: at("10:00:05"),
+    blockchain: "btc",
+  });
+  const legs = [...sold, walletSend];
+  // The categorise makes it a disposal, so the old sell has its replacement
+  const ahead = plan({ rows: [r], legs });
+  assert.ok(ahead.categorise.length);
+  assert.equal(ahead.decisions, undefined);
+  const overrides: PlanInput["overrides"] = [
+    {
+      id: r.id,
+      leg: "base",
+      field: "trade",
+      run: "bridgeTradeOut",
+      summ: "withdrawal",
+      seenAt: "2024-07-01T00:00:00.000Z",
+      reason: "x",
+      retainUserEdit: "undecided",
+    },
+  ];
+  const kept = plan({ rows: [r], legs, overrides });
+  assert.equal(kept.categorise.length, 0);
+  const text = kept.decisions![0].lines.join("\n");
+  assert.match(text, /Your value stays on row `.*abababababab`: type withdrawal, where the run has bridgeTradeOut/);
+});
+
+test("filed: a decision is filed by the entries it names, and says when they span both", () => {
+  const { rows, legs, m } = swapChanged();
+  const filedBefore = "2024-03-01";
+  const config = { ...CONFIG, filedBefore };
+  assert.equal(plan({ rows, legs, config }).decisions![0].filed, false);
+  assert.equal(plan({ rows, legs, config: { ...CONFIG, filedBefore: "2024-04-01" } }).decisions![0].filed, true);
+  const earlier = { ...m.send, timestamp: "2024-02-29T23:00:00.000Z" };
+  const spanning = plan({ rows, legs: legs.map((l) => (l === m.send ? earlier : l)), config }).decisions![0];
+  assert.match(spanning.options[0].result, /span filed and current years/);
+});
+
+test("the checks: only what acquires, within a week after it, and not what a decision already covers", () => {
+  const removed = (trade: string) =>
+    leg({ id: "old.csv:7", side: "incoming", trade, currency: "BBB", quantity: 2, actionId: "x" });
+  const out = (timestamp: string) =>
+    leg({ source: "wallet", importType: "wallet", id: "w", actionId: "y", currency: "BBB", quantity: 1, timestamp });
+  const has = (trade: string, timestamp: string) =>
+    (plan({ legs: [removed(trade), out(timestamp)] }).checks ?? []).length === 1;
+  assert.equal(has("buy", "2024-03-08T10:00:00.000Z"), true);
+  assert.equal(has("buy", "2024-03-08T10:00:01.000Z"), false);
+  assert.equal(has("buy", "2024-03-01T09:59:59.000Z"), false);
+  assert.equal(has("deposit", "2024-03-02T10:00:00.000Z"), false);
+  assert.equal(has("spamIn", "2024-03-02T10:00:00.000Z"), false);
+});
+
+test("the swap: another asset at another amount is a changed swap; the same amount or asset is not", () => {
+  const { legs } = swapChanged();
+  const kinds = (quoteCurrency: string, baseCurrency: string, baseAmount: string) =>
+    plan({ rows: [outRow({ quoteCurrency }), inRow({ baseCurrency, baseAmount })], legs }).decisions?.[0]?.kind;
+  assert.equal(kinds("TKN", "TKN", "50"), "swap-changed");
+  assert.notEqual(kinds("BBB", "BBB", "3"), "swap-changed");
+  assert.notEqual(kinds("TKN", "TKN", "2"), "swap-changed");
+});
+
+test("deletes naming a txid are not said to name none", () => {
+  const { rows, legs } = swapChanged();
+  assert.match(plan({ rows, legs }).decisions![0].lines.join("\n"), /they name no txid/);
+  const named = legs.map((l) =>
+    l.id === "old.csv:3" || l.id === "old.csv:2" ? { ...l, description: `${"6".repeat(64)}` } : l,
+  );
+  assert.doesNotMatch(plan({ rows, legs: named }).decisions![0].lines.join("\n"), /they name no txid/);
+});
