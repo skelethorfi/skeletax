@@ -248,17 +248,20 @@ test("what the plan already deletes by name counts, and an option spanning both 
   assert.throws(() => runDecide(spanning.dir, spanning.plan, ["d1:a"]), /span filed and current years/);
 });
 
-test("apply refuses to start a plan from an older config, and goes on with one begun", () => {
+test("apply refuses a plan from an older config until it has written, and goes on after", () => {
   const { dir, plan } = state();
   const { plan: file, sha } = readPlanFile(plan);
-  const flags = { approveDeletes: false, approveFiled: false };
+  const flags = { approveDeletes: true, approveFiled: false };
+  const start = { time: "2024-07-31T00:00:00.000Z", plan: "p", run: "r", call: "apply-start", planSha: sha, flags };
   assert.equal(startState(dir, file, "p", sha, flags), "first");
   runDecide(dir, plan, ["d1:a"]);
-  assert.throws(() => startState(dir, file, "p", sha, flags), /summ-sync\.json changed since this plan was made/);
-  writeFileSync(
-    join(dir, "apply-log.jsonl"),
-    `${JSON.stringify({ time: "2024-07-31T00:00:00.000Z", plan: "p", run: "r", call: "apply-start", planSha: sha, flags })}\n`,
-  );
+  const refused = /summ-sync\.json changed since this plan was made/;
+  assert.throws(() => startState(dir, file, "p", sha, flags), refused);
+  // Begun, but a run without its flag wrote nothing
+  writeFileSync(join(dir, "apply-log.jsonl"), `${JSON.stringify(start)}\n`);
+  assert.throws(() => startState(dir, file, "p", sha, flags), refused);
+  const wrote = { ...start, call: "edit_transaction", kind: "edit", entry: "e", result: "ok" };
+  writeFileSync(join(dir, "apply-log.jsonl"), `${JSON.stringify(start)}\n${JSON.stringify(wrote)}\n`);
   assert.equal(startState(dir, file, "p", sha, flags), "resume");
 });
 

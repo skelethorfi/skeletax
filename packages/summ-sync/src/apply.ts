@@ -179,11 +179,14 @@ export function startState(
 ): "first" | "resume" | "complete" {
   const lines = readLogLines<LogLine>(stateDir);
   const starts = lines.filter((l) => l.plan === planName && l.call === "apply-start");
-  if (!starts.length) {
-    checkFresh(stateDir, plan);
-    // A plan made before summ-sync.json changed may do what a choice since then takes back. Once begun, it goes on
+  // A plan made before summ-sync.json changed may do what a choice since then takes back. Once it has written, it goes on
+  const checkConfig = () => {
     if (plan.configSha !== undefined && plan.configSha !== configSha(stateDir))
       throw new Error("summ-sync.json changed since this plan was made: plan again");
+  };
+  if (!starts.length) {
+    checkFresh(stateDir, plan);
+    checkConfig();
     return "first";
   }
   const last = starts[starts.length - 1];
@@ -194,6 +197,7 @@ export function startState(
   const sameFlags = (was: Flags | undefined) =>
     was?.approveDeletes === flags.approveDeletes && was?.approveFiled === flags.approveFiled;
   const wrote = lines.find((l) => l.plan === planName && isWriteLine(l));
+  if (!wrote) checkConfig();
   if (wrote && !sameFlags(flagsOf(wrote.run)))
     throw new Error(
       `${planName} was applied with ${JSON.stringify(flagsOf(wrote.run))}, not ${JSON.stringify(flags)}: pull and plan again`,

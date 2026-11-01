@@ -610,7 +610,7 @@ A decision is filed by the entries option a names, or with none by its legs.
 already there, and prints what the next plan does. It refuses a choice the plan does not have, a decision chosen twice, filed and current-year
 entries together (with those of the same option, or with those the plan already deletes), a plan not from the latest snapshot or with a write to Summ since it, and a plan not made from
 `summ-sync.json` as it is now (`plan.json` holds its `configSha`): a decision's number means something only in its plan, so after
-a choice, plan again before choosing more. It writes nothing to Summ: the entries still go through a plan and apply's approvals. Apply refuses to start a plan whose `configSha` is not the config's now, so that a choice is not overtaken by an older plan. To undo a choice, remove the lines from `summ-sync.json`.
+a choice, plan again before choosing more. It writes nothing to Summ: the entries still go through a plan and apply's approvals. Apply refuses a plan whose `configSha` is not the config's now until that plan has written, so that a choice is not overtaken by an older plan. To undo a choice, remove the lines from `summ-sync.json`.
 
 Or neither: change the entries in Summ or the run, then pull and plan. `checks` lists the other removed acquisitions, a named manual entry's included, with nothing to add them back that have kept outgoing legs of that asset within a week: nothing links them but the asset. An
 agent or a person decides; a plan never picks.
