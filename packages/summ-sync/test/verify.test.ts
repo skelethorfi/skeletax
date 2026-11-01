@@ -639,7 +639,8 @@ test("a made-up leg carrying an upload's ID is no upload, and does not make its 
 test("a leg of the plan pairing is its own; a leg outside it joining one is said", () => {
   const before = [leg("a"), leg("b")];
   const after = [leg("a", { trade: "buy", actionId: "both" }), leg("b", { actionId: "both" })];
-  const v = run(before, after, plan({ edit: [edit("a", "trade", "sell", "buy")] }));
+  const ran = [start, log({ entry: "edit-0", legId: "a", field: "trade" }), done];
+  const v = run(before, after, plan({ edit: [edit("a", "trade", "sell", "buy")] }), ran);
   assert.deepEqual(
     v.pairing.map((p) => [p.leg.legId, p.beside]),
     [["b", true]],
@@ -662,7 +663,8 @@ test("a row's own fee moving with its edited leg is not reported", () => {
     leg("f", { ...moved, side: "fees", trade: "fee" }),
     leg("q", { actionId: "n" }),
   ];
-  const v = run(before, after, plan({ edit: [edit("a", "trade", "sell", "buy")] }));
+  const ran = [start, log({ entry: "edit-0", legId: "a", field: "trade" }), done];
+  const v = run(before, after, plan({ edit: [edit("a", "trade", "sell", "buy")] }), ran);
   assert.deepEqual(
     v.pairing.map((p) => p.leg.legId),
     ["q"],
