@@ -576,7 +576,7 @@ effect after a recalculation.
 
 A leg is _added back_ by a row this plan uploads, or a kept leg that counts, with the same currency and amount within a
 day, or about the amount (within 1%, a fee apart) within 5 minutes. A row uploaded with the same amount under another
-ticker within 5 minutes counts too. Each row side or kept leg adds back one leg, in time order, the nearest first. What counts
+ticker within 5 minutes counts too. Each row side or kept leg adds back one leg, the nearest first: disposals, then acquisitions, then plain receives, each in time order. What counts
 goes by type. For a disposal: a type that disposes, not a send, bridge, failed send, fee, approval, or a move into staking,
 collateral, a position or a repayment, whose treatment is Summ's. A kept leg goes by its type after this plan's edit or
 categorisation, and not by what the run has, since an override or a scope can keep its type. For something coming in: anything
