@@ -11,7 +11,13 @@ test("a client refuses tools it was not created with, before any request", async
 });
 
 test("the default tools are read-only", () => {
-  assert.deepEqual(READ_TOOLS, ["query_summ_transactions", "inspect_transaction", "get_filter_options"]);
+  assert.deepEqual(READ_TOOLS, [
+    "query_summ_transactions",
+    "inspect_transaction",
+    "get_filter_options",
+    "get_tax_report",
+    "summ_get_latest_portfolio_computation",
+  ]);
 });
 
 test("a read is retried once after a server error; a write and a client error are not", async (t) => {

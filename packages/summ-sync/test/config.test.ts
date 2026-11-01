@@ -25,6 +25,7 @@ test("a config overrides the defaults it names", () => {
     hold: [],
     deleteManualEntries: [],
     accept: [],
+    taxYearStart: null,
   });
 });
 

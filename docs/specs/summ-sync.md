@@ -101,6 +101,8 @@ nothing from it; the only link is the files below. It speaks MCP over
     summ-sync pull  <state dir> [<run dir>] [--all]  # writes a snapshot; resumes a stopped pull
     summ-sync plan  <state dir> <run dir> [--only <scope file>]  # reads files only; calls nothing
     summ-sync apply <state dir> <plan dir> [--dry-run] [--approve-deletes] [--approve-filed]
+    summ-sync figures <state dir>  # saves Summ's disposals and yearly totals; reads only
+    summ-sync compare <state dir> <before> <after>  # what moved between two figures files; calls nothing
     summ-sync prune <state dir> [--older-than <days>]  # removes old committed snapshots and actions
 
 The **state dir** holds the action store, snapshots, plans, apply logs, the
@@ -113,6 +115,7 @@ in this repo. It is meant to be kept in git (prune relies on it).
     snapshots/<time>.details.jsonl  each action detail that pull read
     actions/<action id>.json    details read before pulls kept their own, and actions older applies saved
     plans/<time>/               plan.json, plan.md, upload/, pre/ (apply's pre-images)
+    figures/<time>.json, figures/compare-<a>-<b>.md  After-check; prune leaves them
     adopted.csv, overrides.json, apply-log.jsonl, summ-sync.json, .lock (while an apply runs)
 
 **Pull.** Every pull reads the detail of every action the plan needs. There is
@@ -967,6 +970,58 @@ gains, cost bases and reports show the figures from before the change. The
 sync compares the rows' fields and recorded prices, not value or gain, so its
 plans are unaffected, but any tax figure is read only after a
 recalculation (which is safe: it changes no transaction).
+
+## After-check
+
+A plan links legs by currency, amount and time, which is not proof, and Summ warns of a zero cost only when a disposal
+exceeds what is held. So after an apply and a recalculation, the sync reports what moved in Summ's disposals. Each
+disposal's proceeds, cost base and gain are observed from Summ's report; the sync computes no tax, writes nothing to
+Summ, and gates nothing on this.
+
+Snapshots cannot carry it: their details hold only the actions a plan needs, a gain is kept per action, and action ids
+change on a recalculation. The `capital-gains` report has a row per parcel of every disposal, with the disposal's leg
+id (`sellUid`), and its rows sum to the report's totals.
+
+**`figures`** writes `figures/<time>.json`, last and whole, so a file means every check passed. It needs `taxYearStart`
+(`MM-DD`) in `summ-sync.json`, which has no default: a wrong one passes every check and mislabels every year. It refuses:
+
+- while `.lock` is held;
+- unless Summ's computation status is `success`, and its `updatedAt`, when that computation started, is later than the
+  apply log's last line of any kind (at worst, one needless recalculation). A write in Summ's own app is not in the
+  log, so only the status guards against one;
+- unless the status, `updatedAt` and log are the same after the read;
+- unless the rows' unique ids equal the report's count (rows can shift between pages, which a sum can miss);
+- unless each tax year's rows, by `sellTime`, sum to its `totalCapitalGains` within a cent, and its zero-cost rows by
+  symbol to `zeroCostBuysTop` (when none are hidden);
+- unless the years sum to the whole range's gains and income, within rounding.
+
+Rows are read once over the whole range, from the tax year holding 2009-01-01 to the end of the current one. A summary
+is read for every year in that range, from local midnight on its first day to one millisecond before the next year's
+(the report includes both ends), and the file keeps those with anything in them. A year is named by the calendar year
+it ends in. Row ids are not kept: they do not last across a recalculation.
+
+**`compare`** reads two figures files, writes `figures/compare-<a>-<b>.md` and prints it. It refuses files under other
+tax years or timezones and a pair the wrong way round, and says so when both read the same computation. Rows are summed
+by disposal leg. It reports:
+
+1. Each year's capital gain, income and expenses, with filed years marked, and the gain's change made up of disposals
+   gone, new, replaced, changed and under a cent. A change on no leg, beyond rounding, is flagged.
+2. Zero-cost parcels: each leg whose quantity with Summ's `zeroCostBuy` mark moved, as a leg can be only partly
+   zero-cost. By the mark, never by a cost of 0: some zero-cost rows carry a fee as cost, and some costless rows have no mark.
+3. Disposals gone and new. A new leg of the same currency, time and quantity as a gone one is shown as replaced, one to
+   one, with the gain difference: a hint, not proof.
+4. Kept disposals whose gain (by a cent), quantity, type or year moved, by currency, largest first.
+5. Acquisitions (`buyUid`) used before and not after, and the reverse: a hint at the cause.
+
+`figures` runs before an apply and again after recalculating. apply prints the latest figures' time and the log lines
+since, and gates nothing on it.
+
+Limits:
+
+- Past applies have no figures from before them, so they cannot be compared.
+- An acquisition lost on an asset not yet sold moves no disposal: nothing shows until it is sold.
+- Only zero-cost warnings are by leg. Missing prices and negative balances are not covered. Income and expenses are by year.
+- It says what moved, not why: Summ's own changes, such as a price, read the same as the plan's.
 
 ## Not done here
 

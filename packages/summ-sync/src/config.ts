@@ -23,6 +23,8 @@ export interface Config {
   deleteManualEntries: DeleteManualEntry[];
   /** Decisions of a plan the user has read and goes ahead with, by key. */
   accept: Accept[];
+  /** The first day of the tax year (MM-DD): figures and compare need it, with no default to mislabel every year. */
+  taxYearStart: string | null;
 }
 
 /** What a snippet in plan.md prints for the user's own reason: a config holding it was not finished. */
@@ -55,6 +57,7 @@ export const DEFAULTS: Config = {
   hold: [],
   deleteManualEntries: [],
   accept: [],
+  taxYearStart: null,
 };
 
 export function parseConfig(text: string): Config {
@@ -113,6 +116,13 @@ export function parseConfig(text: string): Config {
   if (new Set(named).size !== named.length) throw new Error("summ-sync.json: deleteManualEntries names a leg twice");
   if (config.filedBefore !== null && !/^\d{4}-\d{2}-\d{2}$/.test(config.filedBefore)) {
     throw new Error("summ-sync.json: filedBefore must be a date (YYYY-MM-DD) or null");
+  }
+  if (config.taxYearStart !== null) {
+    // In a year with no 29 February, so that every year has the day
+    const day = /^\d{2}-\d{2}$/.test(config.taxYearStart) ? new Date(`2023-${config.taxYearStart}T00:00:00Z`) : null;
+    if (!day || Number.isNaN(day.getTime()) || day.toISOString().slice(5, 10) !== config.taxYearStart) {
+      throw new Error("summ-sync.json: taxYearStart must be a day of the year (MM-DD) or null");
+    }
   }
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: config.timezone });

@@ -3,6 +3,7 @@
 
 import { runApply, WRITE_TOOLS } from "../src/apply.ts";
 import { login, READ_SCOPE, WRITE_SCOPE } from "../src/auth.ts";
+import { figures, runCompare } from "../src/figures.ts";
 import { McpClient, READ_TOOLS } from "../src/mcp.ts";
 import { runPrune } from "../src/prune.ts";
 import { pull } from "../src/pull.ts";
@@ -16,6 +17,9 @@ const USAGE = `Usage:
                                           --only, only the rows the file's entries match
   summ-sync apply <state dir> <plan dir> [--dry-run] [--approve-deletes] [--approve-filed]
                                           carry out a plan (needs login --write)
+  summ-sync figures <state dir>           save Summ's disposals and yearly totals, once its figures are current
+  summ-sync compare <state dir> <before> <after>
+                                          what moved between two figures files (calls nothing)
   summ-sync prune <state dir> [--older-than <days>]
                                           remove committed snapshots older than that (default 30, never the
                                           latest) and the stored actions only they list
@@ -53,6 +57,12 @@ try {
       approveDeletes: rest.includes("--approve-deletes"),
       approveFiled: rest.includes("--approve-filed"),
     });
+  } else if (command === "figures") {
+    if (rest.length) throw new Error(USAGE);
+    await figures(stateDir, { client: new McpClient(stateDir) });
+  } else if (command === "compare") {
+    if (rest.length !== 2) throw new Error(USAGE);
+    runCompare(stateDir, rest[0], rest[1]);
   } else if (command === "prune") {
     const at = rest.indexOf("--older-than");
     const days = at >= 0 ? rest[at + 1] : undefined;

@@ -3,7 +3,13 @@
 
 import { MCP_URL, accessToken } from "./auth.ts";
 
-export const READ_TOOLS = ["query_summ_transactions", "inspect_transaction", "get_filter_options"];
+export const READ_TOOLS = [
+  "query_summ_transactions",
+  "inspect_transaction",
+  "get_filter_options",
+  "get_tax_report",
+  "summ_get_latest_portfolio_computation",
+];
 
 const DELAY_MS = 400; // a human-level request rate
 const RETRY_MS = 10_000; // before the one retry of a read after a server error
