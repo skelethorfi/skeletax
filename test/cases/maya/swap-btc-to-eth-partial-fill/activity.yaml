@@ -13,7 +13,7 @@ legs:
     role: principal
     basis: observed
     txid: 0275FE2418BEC28ADF5D9F8635D0BC06359CC6BB835DC2485EB51DAEC4E1CBCB
-    amount: "0.03106666"
+    amount: "0.0466"
     decimals: 8
   - direction: in
     wallet: bc1qj2c8q8ex4te9ufp5afdfpwr4e7hz64esnddewp

@@ -52,6 +52,12 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
     .flatMap((out) => out.coins)
     .filter((coin) => coin.asset === inputCoin.asset)
     .reduce((sum, coin) => sum + BigInt(coin.amount), 0n);
+  const { sent, issues } = sentCoin(action, inputCoin, returned, protocol);
+
+  if (returned >= BigInt(sent.amount)) {
+    throw new Error(`swap: returned ${returned} of ${sent.amount} sent, so nothing was swapped`);
+  }
+
   const txid = input.txID ?? "";
   // The token an aggregator delivered, when the pool asset was only passing through (docs/specs/activity.md)
   const payout = bundle.tokenPayout?.token;
@@ -63,7 +69,7 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
       direction: "out",
       wallet: input.address,
       asset: inputAsset,
-      amount: amount(inputCoin),
+      amount: amount(sent),
       role: "principal",
       basis: "observed",
       txid,
@@ -107,16 +113,52 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
         details: payout ? { paidVia: `${formatAmount(amount(outputCoin))} ${outputCoin.asset}` } : {},
       },
     ],
-    issues:
-      bundle.tokenPayout && !payout
+    issues: [
+      ...issues,
+      ...(bundle.tokenPayout && !payout
         ? [
             {
-              kind: "warning",
+              kind: "warning" as const,
               message: `the memo names a final token but no such transfer reached the wallet: ${outputCoin.asset} is exported; check what ${output.txID} paid`,
             },
           ]
-        : [],
+        : []),
+    ],
   };
+}
+
+// What the wallet sent (docs/specs/fees.md, Partially filled swaps). A streaming swap that filled only partly lists as
+// its input only the part swapped; the deposit is streamingSwapMeta.depositedCoin, and a refund action of the same txid
+// returns the rest. Until that return is paid, only the part swapped is exported: the refund's own rows cover the rest.
+function sentCoin(
+  action: Action,
+  inputCoin: { asset: string; amount: string },
+  returned: bigint,
+  protocol: Protocol,
+): { sent: { asset: string; amount: string }; issues: Issue[] } {
+  const deposited = action.metadata.swap?.streamingSwapMeta?.depositedCoin;
+
+  if (!deposited || deposited.asset !== inputCoin.asset || BigInt(deposited.amount) <= BigInt(inputCoin.amount)) {
+    return { sent: inputCoin, issues: [] };
+  }
+
+  if (returned === 0n) {
+    const unfilled = parseAmount(
+      (BigInt(deposited.amount) - BigInt(inputCoin.amount)).toString(),
+      protocol.decimals(inputCoin.asset),
+    );
+    return {
+      sent: inputCoin,
+      issues: [
+        {
+          kind: "warning",
+          message: `streaming swap filled only partly and its unfilled ${formatAmount(unfilled)} ${inputCoin.asset} is not returned yet: only the part swapped is exported until the refund is paid`,
+        },
+      ],
+    };
+  }
+
+  return { sent: deposited, issues: [] };
 }
 
 // The token as Midgard would name it. A symbol that would read as another currency (UNI-V2 as UNI, LUNA as LUNC), or that a CSV

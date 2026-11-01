@@ -1,0 +1,277 @@
+{
+  "description": "swap/swap success: [BTC.BTC] -> [BTC.BTC, ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599]",
+  "source": "midgard",
+  "wallet": "bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn",
+  "data": {
+    "date": "1792878330970115013",
+    "height": "28383174",
+    "in": [
+      {
+        "address": "bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn",
+        "coins": [
+          {
+            "amount": "5000001",
+            "asset": "BTC.BTC"
+          }
+        ],
+        "txID": "3A5FE8FA45896852D1ACB43C6FE7FC5D226EC772A149409F1B227552A1AED088"
+      }
+    ],
+    "metadata": {
+      "swap": {
+        "affiliateAddress": "sto",
+        "affiliateFee": "0",
+        "inPriceUSD": "80772.72985332416",
+        "isStreamingSwap": true,
+        "liquidityFee": "1284336293",
+        "memo": "=:ETH.WBTC:0x66467249ACbcb7d9b72ca0d87349E6347D9Ea103:99729082/0/60:sto:0",
+        "networkFees": [
+          {
+            "amount": "311",
+            "asset": "ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599"
+          },
+          {
+            "amount": "1097",
+            "asset": "BTC.BTC"
+          }
+        ],
+        "outPriceUSD": "81074.0659071343",
+        "streamingSwapMeta": {
+          "count": "60",
+          "depositedCoin": {
+            "amount": "100000000",
+            "asset": "BTC.BTC"
+          },
+          "failedSwapReasons": [
+            "emit asset 1661985 less than price limit 1662070",
+            "emit asset 1661985 less than price limit 1662070",
+            "emit asset 1661985 less than price limit 1662070",
+            "emit asset 1661992 less than price limit 1662070",
+            "emit asset 1662005 less than price limit 1662070",
+            "emit asset 1662005 less than price limit 1662070",
+            "emit asset 1662005 less than price limit 1662070",
+            "emit asset 1662012 less than price limit 1662070",
+            "emit asset 1662012 less than price limit 1662070",
+            "emit asset 1662012 less than price limit 1662070"
+          ],
+          "failedSwaps": [
+            "1",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "12",
+            "13",
+            "14",
+            "15",
+            "16",
+            "17",
+            "18",
+            "19",
+            "20",
+            "21",
+            "22",
+            "23",
+            "24",
+            "25",
+            "26",
+            "27",
+            "28",
+            "29",
+            "30",
+            "31",
+            "32",
+            "33",
+            "34",
+            "35",
+            "36",
+            "37",
+            "38",
+            "39",
+            "40",
+            "41",
+            "42",
+            "43",
+            "44",
+            "45",
+            "46",
+            "47",
+            "48",
+            "49",
+            "50",
+            "51",
+            "52",
+            "53",
+            "54",
+            "55",
+            "56",
+            "57",
+            "58",
+            "59"
+          ],
+          "inCoin": {
+            "amount": "5000001",
+            "asset": "BTC.BTC"
+          },
+          "interval": "0",
+          "lastHeight": "28383233",
+          "outCoin": {
+            "amount": "4991085",
+            "asset": "ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599"
+          },
+          "outEstimation": "99929280",
+          "quantity": "60"
+        },
+        "swapSlip": "20",
+        "swapTarget": "1662152",
+        "txType": "swap"
+      }
+    },
+    "out": [
+      {
+        "address": "0x66467249acbcb7d9b72ca0d87349e6347d9ea103",
+        "coins": [
+          {
+            "amount": "4990774",
+            "asset": "ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599"
+          }
+        ],
+        "height": "28383238",
+        "txID": "64849EA970274ADDCF9B194B80883F400D536CA9899F962FB4EB6CC3C5C81143"
+      },
+      {
+        "address": "bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn",
+        "coins": [
+          {
+            "amount": "94998902",
+            "asset": "BTC.BTC"
+          }
+        ],
+        "height": "28383300",
+        "txID": "8074A4A678DCF2F3865080B882046B51E454E011DB02B50D64F45170DE443029"
+      }
+    ],
+    "pools": [
+      "BTC.BTC",
+      "ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599"
+    ],
+    "status": "success",
+    "type": "swap"
+  },
+  "thornodeTxs": [
+    {
+      "tx": {
+        "id": "3A5FE8FA45896852D1ACB43C6FE7FC5D226EC772A149409F1B227552A1AED088",
+        "chain": "BTC",
+        "from_address": "bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn",
+        "to_address": "bc1qrqrefwzvtv50r539hn7umufj84gm2xx9vz7ykw",
+        "coins": [
+          {
+            "asset": "BTC.BTC",
+            "amount": "100000000"
+          }
+        ],
+        "gas": [
+          {
+            "asset": "BTC.BTC",
+            "amount": "1135"
+          }
+        ],
+        "memo": "=:ETH.WBTC:0x66467249ACbcb7d9b72ca0d87349E6347D9Ea103:99729082/0/60:sto:0"
+      },
+      "planned_out_txs": [
+        {
+          "chain": "ETH",
+          "to_address": "0x66467249ACbcb7d9b72ca0d87349E6347D9Ea103",
+          "coin": {
+            "asset": "ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599",
+            "amount": "4990774"
+          },
+          "refund": false
+        },
+        {
+          "chain": "BTC",
+          "to_address": "bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn",
+          "coin": {
+            "asset": "BTC.BTC",
+            "amount": "94998902"
+          },
+          "refund": true
+        }
+      ],
+      "out_txs": [
+        {
+          "id": "64849EA970274ADDCF9B194B80883F400D536CA9899F962FB4EB6CC3C5C81143",
+          "chain": "ETH",
+          "from_address": "0x51649cf810ea9f1f61165044b7149070c67f79c8",
+          "to_address": "0x66467249ACbcb7d9b72ca0d87349E6347D9Ea103",
+          "coins": [
+            {
+              "asset": "ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599",
+              "amount": "4990774"
+            }
+          ],
+          "gas": [
+            {
+              "asset": "ETH.ETH",
+              "amount": "11225"
+            }
+          ],
+          "memo": "OUT:3A5FE8FA45896852D1ACB43C6FE7FC5D226EC772A149409F1B227552A1AED088"
+        },
+        {
+          "id": "8074A4A678DCF2F3865080B882046B51E454E011DB02B50D64F45170DE443029",
+          "chain": "BTC",
+          "from_address": "bc1qrqrefwzvtv50r539hn7umufj84gm2xx9vz7ykw",
+          "to_address": "bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn",
+          "coins": [
+            {
+              "asset": "BTC.BTC",
+              "amount": "94998902"
+            }
+          ],
+          "gas": [
+            {
+              "asset": "BTC.BTC",
+              "amount": "1000"
+            }
+          ],
+          "memo": "REFUND:3A5FE8FA45896852D1ACB43C6FE7FC5D226EC772A149409F1B227552A1AED088"
+        }
+      ],
+      "stages": {
+        "inbound_observed": {
+          "final_count": 108,
+          "completed": true
+        },
+        "inbound_confirmation_counted": {
+          "remaining_confirmation_seconds": 0,
+          "completed": true
+        },
+        "inbound_finalised": {
+          "completed": true
+        },
+        "swap_status": {
+          "pending": false
+        },
+        "swap_finalised": {
+          "completed": true
+        },
+        "outbound_delay": {
+          "completed": true
+        },
+        "outbound_signed": {
+          "completed": true
+        }
+      }
+    }
+  ],
+  "usdPrices": {
+    "BTC.BTC": "80256.29356494454",
+    "ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599": "80548.49540365984"
+  }
+}

@@ -305,14 +305,29 @@ THORNode data the row is kept.
 
 A streaming swap can fill only partly and return the unfilled input to the
 sender. That part was never swapped, so it is not a fee: the `BridgeTradeOut`
-amount is the input minus what was returned (`maya.md`). The fee is still the
-inbound fee.
+amount is what was sent minus what was returned (`maya.md`). The fee is still
+the inbound fee.
+
+What was sent is the deposit, `streamingSwapMeta.depositedCoin`. Midgard (both
+THORChain's and Maya's) lists only the part swapped (`streamingSwapMeta.inCoin`)
+as the swap's input, so netting the return off the input understated the trade,
+or made it negative when more was returned than swapped (#113). An action with
+no `depositedCoin` larger than its input (a full fill, or one listed before
+Midgard reported it) keeps its input as what was sent. A swap whose return is
+the whole of what was sent fails rather than export nothing or less.
 
 Midgard also reports a `refund` action for the unfilled part, with the same
-txid, whose outputs include the swap's output in another asset. No row is
-exported for it: the swap's rows already account for everything sent and
-returned, including the outbound fee on the returned part, and its
-`BridgeTradeOut` carries the inbound fee.
+txid, whose input is that part (deposit − part swapped) and whose outputs
+include the swap's output in another asset. No row is exported for it: the
+swap's rows already account for everything sent and returned, including the
+outbound fee on the returned part, and its `BridgeTradeOut` carries the
+inbound fee.
+
+Until the return is paid, the swap lists no return output and its refund is
+still pending. The swap then exports only the part swapped, with a warning;
+the refund, once paid, is ignored as above while the swap's next export nets
+the return off the deposit (the row keeps its ID); a refund never paid is
+exported as a stuck refund (`pending.md`), which covers the rest.
 
 ## Tests
 

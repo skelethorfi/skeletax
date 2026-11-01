@@ -466,6 +466,76 @@ describe("swap", () => {
     assert.throws(() => swap(action), /swap: no matching out tx/);
   });
 
+  // A streaming swap of 0.5 BTC that filled 0.3 BTC: Midgard lists the 0.3 swapped as the input and the deposit as
+  // streamingSwapMeta.depositedCoin; `returned` adds the unfilled part paid back to the sender, net of its outbound fee
+  const partialFill = ({ deposited, returned }: { deposited?: number; returned?: number }): Action => {
+    const action = createMockAction({
+      inputAsset: "BTC.BTC",
+      inputAmount: 0.3,
+      outputAsset: "ETH.ETH",
+      outputAmount: 4,
+      inputAddress: "bc1sender",
+      outputAddress: "0xreceiver",
+      txID: "tx-partial",
+    });
+    const coin = (amount: number) => ({ asset: "BTC.BTC", amount: "" + amount * 1e8 });
+
+    if (deposited !== undefined) {
+      action.metadata.swap!.streamingSwapMeta = { depositedCoin: coin(deposited), inCoin: coin(0.3) } as any;
+    }
+
+    if (returned !== undefined) {
+      action.out.unshift({ address: "bc1sender", coins: [coin(returned)], txID: "tx-return" } as Transaction);
+    }
+
+    return action;
+  };
+
+  test("a partly filled streaming swap sends its deposit and nets off the return, also when more is returned than swapped", () => {
+    const [tradeOut] = swap(partialFill({ deposited: 0.5, returned: 0.19999 }));
+
+    assert.equal(tradeOut.baseAmount, "0.30001");
+    assert.equal(tradeOut.description, "1/2 - Swap 0.30001 BTC to 4 ETH (0.19999 BTC returned unfilled); tx-partial");
+
+    // 0.3 swapped of 1.0: the old netting of the return off the input gave -0.39999
+    const action = partialFill({ deposited: 1, returned: 0.69999 });
+    assert.equal(swap(action)[0].baseAmount, "0.30001");
+  });
+
+  test("a partly filled streaming swap whose return is not paid yet exports the part swapped, with a warning", () => {
+    const { rows, issues } = runBundle(
+      {
+        source: "midgard",
+        protocol: THORCHAIN.id,
+        wallet: "",
+        data: partialFill({ deposited: 0.5 }),
+        thornodeTxs: [],
+        cosmosTxs: [],
+      },
+      THORCHAIN,
+    );
+
+    assert.equal(rows[0].baseAmount, "0.3");
+    assert.deepEqual(issues, [
+      {
+        kind: "warning",
+        message:
+          "streaming swap filled only partly and its unfilled 0.2 BTC.BTC is not returned yet: only the part swapped is exported until the refund is paid",
+      },
+    ]);
+  });
+
+  test("a return with no deposit listed is netted off the input, as Midgard reported partial fills before", () => {
+    assert.equal(swap(partialFill({ returned: 0.1 }))[0].baseAmount, "0.2");
+  });
+
+  test("a swap that returned all it was sent is a failure, never a row of nothing or less", () => {
+    assert.throws(
+      () => swap(partialFill({ returned: 0.3 })),
+      /swap: returned 30000000 of 30000000 sent, so nothing was swapped/,
+    );
+  });
+
   test("Maya: a CACAO input without node data falls back to the 0.2 CACAO native fee", () => {
     const action = createMockAction({
       inputAsset: "MAYA.CACAO",

@@ -1,0 +1,69 @@
+id: midgard/swap.1B0368432D8B98DC1B208606BE618336CDC8123E859A3F6986FD797DEAC887D5
+protocol: thorchain
+kind: swap
+status: success
+time: 2026-10-24T20:21:39.223Z
+memo: =:ETH.WBTC:0x66467249ACbcb7d9b72ca0d87349E6347D9Ea103:224493478/0/135:sto:0
+legs:
+  - direction: out
+    wallet: bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn
+    asset:
+      notation: BTC.BTC
+      kind: native
+    role: principal
+    basis: observed
+    txid: 1B0368432D8B98DC1B208606BE618336CDC8123E859A3F6986FD797DEAC887D5
+    amount: "2.25236"
+    decimals: 8
+  - direction: in
+    wallet: bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn
+    asset:
+      notation: BTC.BTC
+      kind: native
+    role: returned
+    basis: observed
+    txid: 3C11493982801735FA2D9102FCCAA0C403093A4C8338BC21971FB70A2E1947A4
+    amount: "1.30135249"
+    decimals: 8
+  - direction: in
+    wallet: "0x66467249acbcb7d9b72ca0d87349e6347d9ea103"
+    asset:
+      notation: ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599
+      kind: token
+    role: principal
+    basis: observed
+    txid: C12519640F6352C777540C3EA755DF65B8320DF0DEB7FC52B5081BC1C9A559D6
+    amount: "0.94821139"
+    decimals: 8
+  - direction: out
+    wallet: bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn
+    asset:
+      notation: BTC.BTC
+      kind: native
+    role: gas
+    basis: observed
+    txid: 1B0368432D8B98DC1B208606BE618336CDC8123E859A3F6986FD797DEAC887D5
+    amount: "0.00001485"
+    decimals: 8
+prices:
+  - asset:
+      notation: BTC.BTC
+      kind: native
+    usd: "80992.60329278115"
+    source: midgard:swap.inPriceUSD
+  - asset:
+      notation: ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599
+      kind: token
+    usd: "81352.30589783922"
+    source: midgard:swap.outPriceUSD
+  - asset:
+      notation: BTC.BTC
+      kind: native
+    usd: "80415.0926847808"
+    source: midgard:history.depths
+  - asset:
+      notation: ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599
+      kind: token
+    usd: "80771.60811156542"
+    source: midgard:history.depths
+details: {}

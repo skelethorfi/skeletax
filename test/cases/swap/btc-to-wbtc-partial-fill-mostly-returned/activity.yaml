@@ -1,0 +1,69 @@
+id: midgard/swap.3A5FE8FA45896852D1ACB43C6FE7FC5D226EC772A149409F1B227552A1AED088
+protocol: thorchain
+kind: swap
+status: success
+time: 2026-10-24T21:45:30.970Z
+memo: =:ETH.WBTC:0x66467249ACbcb7d9b72ca0d87349E6347D9Ea103:99729082/0/60:sto:0
+legs:
+  - direction: out
+    wallet: bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn
+    asset:
+      notation: BTC.BTC
+      kind: native
+    role: principal
+    basis: observed
+    txid: 3A5FE8FA45896852D1ACB43C6FE7FC5D226EC772A149409F1B227552A1AED088
+    amount: "1"
+    decimals: 8
+  - direction: in
+    wallet: bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn
+    asset:
+      notation: BTC.BTC
+      kind: native
+    role: returned
+    basis: observed
+    txid: 8074A4A678DCF2F3865080B882046B51E454E011DB02B50D64F45170DE443029
+    amount: "0.94998902"
+    decimals: 8
+  - direction: in
+    wallet: "0x66467249acbcb7d9b72ca0d87349e6347d9ea103"
+    asset:
+      notation: ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599
+      kind: token
+    role: principal
+    basis: observed
+    txid: 64849EA970274ADDCF9B194B80883F400D536CA9899F962FB4EB6CC3C5C81143
+    amount: "0.04990774"
+    decimals: 8
+  - direction: out
+    wallet: bc1qwh9c35ka227ywhrxqh43j4wvd3zvc2zmsdkksn
+    asset:
+      notation: BTC.BTC
+      kind: native
+    role: gas
+    basis: observed
+    txid: 3A5FE8FA45896852D1ACB43C6FE7FC5D226EC772A149409F1B227552A1AED088
+    amount: "0.00001135"
+    decimals: 8
+prices:
+  - asset:
+      notation: BTC.BTC
+      kind: native
+    usd: "80772.72985332416"
+    source: midgard:swap.inPriceUSD
+  - asset:
+      notation: ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599
+      kind: token
+    usd: "81074.0659071343"
+    source: midgard:swap.outPriceUSD
+  - asset:
+      notation: BTC.BTC
+      kind: native
+    usd: "80256.29356494454"
+    source: midgard:history.depths
+  - asset:
+      notation: ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599
+      kind: token
+    usd: "80548.49540365984"
+    source: midgard:history.depths
+details: {}
