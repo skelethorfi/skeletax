@@ -262,13 +262,6 @@ test("after a stop, an entry with no lines was not reached; one with lines did n
   assert.match(verifyMarkdown(v, "p", "x", "y"), /Last apply stop: conflict/);
 });
 
-test("deleted legs gone have landed; ones still there have not", () => {
-  const p = plan({ delete: [del(["a"])] });
-  const v = run([leg("a"), leg("b")], [leg("b")], p);
-  assert.equal(stateOf(v, "delete-0"), "landed");
-  assert.deepEqual(v.gone, []);
-});
-
 test("a leg gone that the plan did not name is reported", () => {
   const v = run([leg("a"), leg("b")], [leg("b")], plan());
   assert.deepEqual(
@@ -359,17 +352,6 @@ test("a pairing outside the plan shows, though no field of a leg moved", () => {
   );
 });
 
-test("a pairing with a leg of the plan, or an uploaded row, is explained", () => {
-  const before = [leg("a"), leg("b")];
-  const after = [leg("a", { trade: "buy", actionId: "both" }), leg("b", { actionId: "both" })];
-  assert.deepEqual(run(before, after, plan({ edit: [edit("a", "trade", "sell", "buy")] })).pairing, []);
-  const upload = plan({ upload: [{ file: "f", filed: false, ids: ["n"] }] });
-  assert.deepEqual(
-    run([leg("a")], [leg("a", { actionId: "both" }), leg("up", { id: "n", actionId: "both" })], upload).pairing,
-    [],
-  );
-});
-
 test("a categorise that landed names its action, for one that failed to pair", () => {
   const p = plan({ categorise: [edit("a", "trade", "deposit", "bridgeTradeIn")] });
   const v = run([leg("a", { trade: "deposit" })], [leg("a", { trade: "bridgeTradeIn" })], p);
@@ -447,7 +429,7 @@ test("verify writes its report in the plan's folder and changes nothing else", (
   assert.equal(readFileSync(join(dir, "apply-log.jsonl"), "utf8"), before);
 });
 
-for (const [name, setup, pattern] of [
+for (const [name, setup, pattern, after] of [
   ["a plan not applied", () => state([], onSnapshot), /has not been applied/],
   [
     "a pull begun before the plan's last write",
@@ -464,6 +446,22 @@ for (const [name, setup, pattern] of [
     () => state([start, done], onSnapshot, { after: { version: 1 } }),
     /before pulls kept/,
   ],
+  [
+    "other sources",
+    () => state([start, done], onSnapshot, { after: { managedSources: ["x"] } }),
+    /differ in managedSources/,
+  ],
+  [
+    "other chains",
+    () => state([start, done], onSnapshot, { after: { managedChains: ["x"] } }),
+    /differ in managedChains/,
+  ],
+  [
+    "a write of another plan just after the first pull began",
+    () => state([start, done, log({ plan: "other", time: "2024-06-01T00:00:01.000Z" })], onSnapshot),
+    /other also wrote/,
+  ],
+  ["a snapshot not there", () => state([start, done], onSnapshot), /no snapshot nope/, "nope"],
   ["another run", () => state([start, done], onSnapshot, { after: { run: "/other" } }), /differ in run/],
   [
     "another range",
@@ -472,10 +470,10 @@ for (const [name, setup, pattern] of [
   ],
   ["a snapshot pruned", () => state([start, done], { snapshot: "gone" }), /is gone/],
   ["a plan on the latest snapshot", () => state([start, done], { snapshot: "2024-06-02T00-00-00" }), /pull first/],
-] as [string, () => { dir: string; planDir: string }, RegExp][]) {
+] as [string, () => { dir: string; planDir: string }, RegExp, string?][]) {
   test(`verify refuses ${name}, and writes nothing`, () => {
     const { dir, planDir } = setup();
-    assert.throws(() => runVerify(dir, planDir), pattern);
+    assert.throws(() => runVerify(dir, planDir, after), pattern);
     assert.equal(existsSync(join(planDir, "verify-2024-06-02T00-00-00.md")), false);
   });
 }
@@ -496,4 +494,241 @@ test("verify counts a write after the second pull finished as no one's", () => {
 test("a plan of uploads alone, with none in Summ, has not been applied", () => {
   const { dir, planDir } = state([], { ...onSnapshot, upload: [{ file: "f", filed: false, ids: ["row"] }] });
   assert.throws(() => runVerify(dir, planDir), /has not been applied/);
+});
+
+const deleteLine = log({ call: "bulk_edit_transactions", entry: "delete-0", operation: "delete", legIds: ["a"] });
+
+test("a deleted leg gone, with its delete logged, has landed; one still there has not", () => {
+  const p = plan({ delete: [del(["a"])] });
+  const v = run([leg("a"), leg("b")], [leg("b")], p, [start, deleteLine, done]);
+  assert.equal(stateOf(v, "delete-0"), "landed");
+  assert.deepEqual(v.gone, []);
+  assert.equal(stateOf(run([leg("a")], [leg("a")], p, [start, deleteLine, done]), "delete-0"), "NOT LANDED");
+});
+
+test("a delete found done by an earlier run has landed", () => {
+  const found = log({ call: "found", via: "found", entry: "delete-0" });
+  const v = run([leg("a")], [], plan({ delete: [del(["a"])] }), [start, found, done]);
+  assert.equal(stateOf(v, "delete-0"), "landed");
+  assert.deepEqual(v.gone, []);
+});
+
+test("a leg of a delete gone with no delete logged is reported as gone or not read", () => {
+  const p = plan({ delete: [del(["a"])] });
+  const v = run([leg("a")], [], p);
+  assert.equal(stateOf(v, "delete-0"), "NOT LANDED");
+  assert.deepEqual(
+    v.gone.map((l) => l.legId),
+    ["a"],
+  );
+  const none = { approveDeletes: false, approveFiled: false };
+  const unselected = run([leg("a")], [], p, [log({ call: "apply-start", flags: none }), done]);
+  assert.equal(stateOf(unselected, "delete-0"), "not selected");
+  assert.deepEqual(
+    unselected.gone.map((l) => l.legId),
+    ["a"],
+  );
+  const unread = run([leg("a")], [], p, [start, log({ call: "apply-stop", reason: "signal" })], {
+    a: [{ id: "x", txHash: "row-a", category: "c", tags: [] }],
+  });
+  assert.equal(stateOf(unread, "delete-0"), "not reached");
+  assert.deepEqual(
+    unread.notRead.map((l) => l.legId),
+    ["a"],
+  );
+});
+
+test("a leg of an entry that did not run moves on its own, so it is reported", () => {
+  const p = plan({
+    categorise: [edit("c", "trade", "deposit", "bridgeTradeIn")],
+    edit: [edit("e", "trade", "sell", "buy", { filed: true })],
+    upload: [{ file: "f", filed: false, ids: ["n"] }],
+  });
+  const before = [leg("c", { trade: "deposit" }), leg("e")];
+  const v = run(before, [leg("c", { trade: "other" }), leg("e", { trade: "third" })], p);
+  assert.equal(stateOf(v, "categorise-0"), "held back");
+  assert.equal(stateOf(v, "edit-0"), "not selected");
+  assert.deepEqual(
+    v.changed.map((c) => [c.leg.legId, c.field]),
+    [
+      ["c", "trade"],
+      ["e", "trade"],
+    ],
+  );
+  assert.deepEqual(
+    run(before, [leg("e")], p).gone.map((l) => l.legId),
+    ["c"],
+  );
+});
+
+test("a log line explains its own leg and field", () => {
+  const before = [leg("f"), leg("m"), leg("i")];
+  const after = [leg("f", { description: "new" }), leg("m", { trade: "ignoreOut" }), leg("i", { trade: "ignoreOut" })];
+  const lines = [
+    start,
+    log({ legId: "f", field: "description" }),
+    log({ entry: "delete-0", madeUp: ["m"] }),
+    log({ operation: "ignore", legIds: ["i"] }),
+    done,
+  ];
+  assert.deepEqual(run(before, after, plan(), lines).changed, []);
+  assert.equal(run(before, after, plan()).changed.length, 3);
+});
+
+test("a change on a leg in a delete's action is marked, not hidden", () => {
+  const p = plan({ delete: [del(["a"], { others: [{ legId: "o" } as never] })] });
+  const v = run([leg("a"), leg("o")], [leg("o", { trade: "ignoreOut" })], p, [start, deleteLine, done]);
+  assert.equal(v.changed[0].besideDelete, true);
+  assert.match(verifyMarkdown(v, "p", "x", "y"), /beside a delete of the plan/);
+});
+
+test("a selected entry with no lines after a complete stop did not land", () => {
+  const v = run([leg("a")], [leg("a")], plan({ edit: [edit("a", "trade", "sell", "buy")] }));
+  assert.equal(stateOf(v, "edit-0"), "NOT LANDED");
+});
+
+test("a categorisation is held back only while selected uploads remain", () => {
+  const c = edit("c", "trade", "deposit", "x");
+  const filed = plan({ categorise: [c], upload: [{ file: "f", filed: true, ids: ["n"] }] });
+  assert.equal(stateOf(run([leg("c")], [leg("c")], filed), "categorise-0"), "NOT LANDED");
+});
+
+test("the entry an apply stopped on did not land, and the stop is the last run's", () => {
+  const p = plan({ edit: [edit("a", "trade", "sell", "buy")] });
+  const stopped = log({ call: "apply-stop", reason: "conflict", entry: "edit-0" });
+  assert.equal(stateOf(run([leg("a")], [leg("a")], p, [start, stopped]), "edit-0"), "NOT LANDED");
+  const died = run([leg("a")], [leg("a")], p, [start, done, log({ call: "apply-start", run: "2", flags: FLAGS })]);
+  assert.equal(died.stop, null);
+  assert.equal(stateOf(died, "edit-0"), "not reached");
+});
+
+test("the last read-back counts, after a resume", () => {
+  const p = plan({ edit: [edit("a", "price", 2, 10)] });
+  const line = (after: number) => log({ entry: "edit-0", legId: "a", field: "price", after });
+  const v = run([leg("a")], [leg("a", { price: 16, priceValueCurrency: "USD" })], p, [start, line(15), line(16), done]);
+  assert.equal(stateOf(v, "edit-0"), "landed");
+});
+
+test("a quantity or time within what the plan calls the same is no change", () => {
+  const after = leg("a", { quantity: 1 + 1e-9, timestamp: "2024-01-01T00:00:00.400Z" });
+  assert.deepEqual(run([leg("a")], [after], plan()).changed, []);
+});
+
+test("a delete's made-up leg must be ignored", () => {
+  const split = log({ entry: "delete-0", kind: "split", madeUp: ["m"], operation: "delete", legIds: ["a"] });
+  const v = run([leg("a"), leg("m")], [leg("m")], plan({ delete: [del(["a"])] }), [start, split, done]);
+  assert.equal(stateOf(v, "delete-0"), "NOT LANDED");
+  assert.match(v.entries[0].problems[0], /to be ignored/);
+});
+
+test("a made-up leg carrying an upload's ID is no upload, and does not make its row uploaded", () => {
+  const p = plan({ upload: [{ file: "f.csv", filed: false, ids: ["row-new"] }] });
+  const madeUp = "ffffffffffffffffffffffff";
+  const v = run([], [leg(madeUp, { id: "row-new", importType: "soft-transfer" })], p);
+  assert.deepEqual([v.uploaded, v.notUploaded], [[], ["row-new"]]);
+  assert.deepEqual(
+    v.added.map((l) => l.legId),
+    [madeUp],
+  );
+});
+
+test("a leg of the plan pairing is its own; a leg outside it joining one is said", () => {
+  const before = [leg("a"), leg("b")];
+  const after = [leg("a", { trade: "buy", actionId: "both" }), leg("b", { actionId: "both" })];
+  const v = run(before, after, plan({ edit: [edit("a", "trade", "sell", "buy")] }));
+  assert.deepEqual(
+    v.pairing.map((p) => [p.leg.legId, p.beside]),
+    [["b", true]],
+  );
+  assert.match(verifyMarkdown(v, "p", "x", "y"), /Paired beside the plan[\s\S]*leg b/);
+  const upload = plan({ upload: [{ file: "f", filed: false, ids: ["n"] }] });
+  const joined = run([leg("a")], [leg("a", { actionId: "both" }), leg("up", { id: "n", actionId: "both" })], upload);
+  assert.deepEqual(
+    joined.pairing.map((p) => [p.leg.legId, p.beside]),
+    [["a", true]],
+  );
+});
+
+test("a row's own fee moving with its edited leg is not reported", () => {
+  const row = { id: "row", actionId: "t" };
+  const before = [leg("a", row), leg("f", { ...row, side: "fees", trade: "fee" }), leg("q")];
+  const moved = { id: "row", actionId: "n" };
+  const after = [
+    leg("a", { ...moved, trade: "buy" }),
+    leg("f", { ...moved, side: "fees", trade: "fee" }),
+    leg("q", { actionId: "n" }),
+  ];
+  const v = run(before, after, plan({ edit: [edit("a", "trade", "sell", "buy")] }));
+  assert.deepEqual(
+    v.pairing.map((p) => p.leg.legId),
+    ["q"],
+  );
+});
+
+test("an action's category moving is a pairing, though its legs did not", () => {
+  const input: VerifyInput = {
+    plan: plan(),
+    planName: "p",
+    before: snap([leg("a")]),
+    beforeFile: file([leg("a")]),
+    after: snap([leg("a")]),
+    afterFile: {
+      ...file([leg("a")]),
+      actions: [{ id: "action-a", txHash: "h", category: "transfer", tags: [], detail: true }],
+    },
+    lines: [start, done],
+  };
+  assert.deepEqual(
+    verifyPlan(input).pairing.map((p) => [p.categoryBefore, p.categoryAfter]),
+    [["trade", "transfer"]],
+  );
+});
+
+test("an action with detail is not in the list section", () => {
+  const entry = { id: "x", txHash: "h", category: "c", tags: [], detail: true as const };
+  assert.deepEqual(run([], [], plan(), [start, done], { b: [entry] }).listBefore, []);
+});
+
+test("a plan's name comes from its folder, however the path is given", () => {
+  const { dir, planDir } = state([start, done], onSnapshot);
+  const cwd = process.cwd();
+  process.chdir(planDir);
+  try {
+    assert.ok(runVerify(dir, "."));
+  } finally {
+    process.chdir(cwd);
+  }
+});
+
+test("another plan's lines that write nothing are no reason to refuse", () => {
+  const other = log({ plan: "other", call: "apply-start", time: "2024-06-01T20:00:00.000Z" });
+  const { dir, planDir } = state([start, done, other], onSnapshot);
+  assert.ok(runVerify(dir, planDir));
+});
+
+test("an earlier snapshot can be named, for a plan a later plan has since followed", () => {
+  const { dir, planDir } = state([start, done], onSnapshot);
+  writeFileSync(join(dir, "snapshots", "2024-06-03T00-00-00.json"), "not read");
+  assert.equal(runVerify(dir, planDir, "2024-06-02T00-00-00"), join(planDir, "verify-2024-06-02T00-00-00.md"));
+});
+
+test("a plan of uploads alone, once a row is in, is verified with no apply-start", () => {
+  const { dir, planDir } = state([], { ...onSnapshot, upload: [{ file: "f", filed: false, ids: ["row"] }] });
+  const action = {
+    _id: "x",
+    incoming: [{ _id: "new", id: "row", importType: "manual-csv", quantity: 1 }],
+    outgoing: [],
+    fees: [],
+  };
+  const name = "2024-06-02T00-00-00";
+  const base = JSON.parse(readFileSync(join(dir, "snapshots", `${name}.json`), "utf8"));
+  writeFileSync(
+    join(dir, "snapshots", `${name}.json`),
+    JSON.stringify({ ...base, actions: [{ id: "x", txHash: "row", category: "c", tags: [], detail: true }] }),
+  );
+  writeFileSync(
+    join(dir, "snapshots", `${name}.details.jsonl`),
+    JSON.stringify({ run: "/run" }) + "\n" + JSON.stringify({ a: "x", at: "t", action, history: [] }) + "\n",
+  );
+  assert.match(readFileSync(runVerify(dir, planDir), "utf8"), /Rows uploaded: 1, not yet: 0/);
 });

@@ -18,7 +18,7 @@ const USAGE = `Usage:
                                           --only, only the rows the file's entries match
   summ-sync apply <state dir> <plan dir> [--dry-run] [--approve-deletes] [--approve-filed]
                                           carry out a plan (needs login --write)
-  summ-sync verify <state dir> <plan dir>  whether Summ's legs hold what an applied plan said, and nothing else moved
+  summ-sync verify <state dir> <plan dir> [<after snapshot>]  whether Summ's legs hold what an applied plan said, and nothing else moved
                                           (calls nothing)
   summ-sync figures <state dir>           save Summ's disposals and yearly totals, once its figures are current
   summ-sync compare <state dir> <before> <after>
@@ -61,8 +61,8 @@ try {
       approveFiled: rest.includes("--approve-filed"),
     });
   } else if (command === "verify") {
-    if (rest.length !== 1) throw new Error(USAGE);
-    runVerify(stateDir, rest[0]);
+    if (rest.length < 1 || rest.length > 2 || rest.some((a) => a.startsWith("--"))) throw new Error(USAGE);
+    runVerify(stateDir, rest[0], rest[1]);
   } else if (command === "figures") {
     if (rest.length) throw new Error(USAGE);
     await figures(stateDir, { client: new McpClient(stateDir) });

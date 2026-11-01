@@ -2,7 +2,7 @@
 // Verify). Compares the plan's snapshot with the latest. Calls nothing; writes <plan dir>/verify-<after>.md.
 
 import { existsSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { type LogLine, type PlanFile, readPlanFile, selected } from "./apply.ts";
 import { isWriteLine, readLogLines } from "./journal.ts";
 import { type Change, type EditEntry, same, sameValue, soldAmount } from "./plan.ts";
@@ -39,7 +39,9 @@ const FIELDS = [
 const IGNORED = new Set(["ignoreIn", "ignoreOut"]);
 /** Summ issues these fee legs itself, and can issue them again under new ids. */
 const SUMM_FEE = "assumed-fee";
-/** On thousands of actions, and set by a review session in Summ's app. */
+/** What an uploaded row's legs carry. A leg Summ makes up can carry the ID of the row it pairs with. */
+const UPLOADED = "manual-csv";
+/** Set by a review session in Summ's app, on any number of actions. */
 const SESSION_TAGS = new Set(["REVIEWED"]);
 
 type EntryState = "landed" | "not selected" | "held back" | "not reached" | "NOT LANDED";
@@ -61,6 +63,8 @@ export interface FieldChange {
   before: unknown;
   after: unknown;
   history?: string;
+  /** In an action a delete of the plan took a leg from. */
+  besideDelete: boolean;
 }
 
 export interface Verification {
@@ -82,7 +86,15 @@ export interface Verification {
   /** Legs that left or entered the details this pull read: the snapshots cannot say what happened to them. */
   notRead: Leg[];
   newlyRead: Leg[];
-  pairing: { leg: Leg; categoryBefore: string; categoryAfter: string; matesBefore: number; matesAfter: number }[];
+  /** `beside`: a leg of the plan or an upload is among its other legs, which does not make this the right pair. */
+  pairing: {
+    leg: Leg;
+    categoryBefore: string;
+    categoryAfter: string;
+    matesBefore: number;
+    matesAfter: number;
+    beside: boolean;
+  }[];
   listBefore: string[];
   listAfter: string[];
 }
@@ -154,7 +166,10 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
   const flagged = (starts.find((l) => wrote && l.run === wrote.run) ?? starts.at(-1))?.flags as
     Verification["flags"] | undefined;
   const flags = flagged ?? { approveDeletes: false, approveFiled: false };
-  const stop = (lines.filter((l) => l.call === "apply-stop").at(-1)?.reason as string | undefined) ?? null;
+  // The last run's stop: a run that died logs none, whatever an earlier run did
+  const lastRun = starts.at(-1)?.run;
+  const stopLine = lines.filter((l) => l.call === "apply-stop" && l.run === lastRun).at(-1);
+  const stop = (stopLine?.reason as string | undefined) ?? null;
 
   const linesOf = (key: string) => lines.filter((l) => l.entry === key);
   /** The leg's price as apply last read it back, or undefined. */
@@ -189,11 +204,12 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
     if (!quote || !base) return `the value of leg ${legId}: it or its base leg is not in the snapshot`;
     const mates = after.legs.filter((l) => l.actionId === base.actionId);
     const [sold, bought] = [(base.price ?? 0) * soldAmount(base, mates), (quote.price ?? 0) * quote.quantity];
-    return sameValue(sold, bought) ? null : `value: sold ${sold}, bought ${bought} (leg ${legId})`;
+    return sold > 0 && sameValue(sold, bought) ? null : `value: sold ${sold}, bought ${bought} (leg ${legId})`;
   }
 
   const stateOf = (problems: string[], key: string, chosen: boolean, heldBack: boolean): EntryState => {
     if (!problems.length) return "landed";
+    if (stopLine?.entry === key) return "NOT LANDED";
     if (!chosen) return "not selected";
     if (heldBack && !linesOf(key).length) return "held back";
     if (stop !== "complete" && !linesOf(key).length) return "not reached";
@@ -203,7 +219,7 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
   const left: string[] = [];
   const leftOf = (key: string) => {
     const legs = linesOf(key).flatMap((l) => (l.leftLeg ? [l.leftLeg as string] : []));
-    left.push(...legs);
+    for (const id of legs) if (!left.includes(id)) left.push(id);
     return new Set(legs);
   };
   const ignoreProblems = (legIds: string[], stays: Set<string>) =>
@@ -213,9 +229,15 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
   const madeUpOf = (key: string) => [...new Set(linesOf(key).flatMap((l) => (l.madeUp as string[] | undefined) ?? []))];
 
   const entries: EntryResult[] = [];
+  const deleted = new Set<string>();
   for (const [i, d] of plan.delete.entries()) {
     const key = `delete-${i}`;
-    const problems = d.legIds.filter((id) => now.has(id)).map((id) => `leg ${id} is still there`);
+    // Gone is not deleted: with no delete logged the leg is reported below, as apply itself would stop on it
+    const logged = linesOf(key).some((l) => l.operation === "delete" || l.call === "found");
+    if (logged) for (const id of d.legIds) deleted.add(id);
+    const problems = d.legIds.flatMap((id) =>
+      now.has(id) ? [`leg ${id} is still there`] : logged ? [] : [`leg ${id} is gone, with no delete logged`],
+    );
     problems.push(...ignoreProblems(madeUpOf(key), leftOf(key)));
     const chosen = flags.approveDeletes && d.filed === flags.approveFiled;
     entries.push({ key, state: stateOf(problems, key, chosen, false), problems, rates: [] });
@@ -245,33 +267,40 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
 
   // Uploads
   const added0 = after.legs.filter((l) => !was.has(l.legId));
-  const newIds = new Set(added0.map((l) => l.id));
   const uploadIds = new Set(plan.upload.flatMap((u) => u.ids));
-  const deleting = new Set(plan.delete.flatMap((d) => d.legIds));
+  const isUpload = (l: Leg | undefined) => l !== undefined && l.importType === UPLOADED && uploadIds.has(l.id);
+  const newIds = new Set(added0.filter(isUpload).map((l) => l.id));
   const uploaded = [...uploadIds].filter((id) => newIds.has(id));
   const notUploaded = [...uploadIds].filter((id) => !newIds.has(id));
   const besideOldCopy = before.legs.filter(
     (l) => uploadIds.has(l.id) && newIds.has(l.id) && now.has(l.legId) && l.importType !== SUMM_FEE,
   );
 
-  // What the plan explains: by field, as a leg named for one thing is not cleared for another
+  // What the plan explains: by field, as a leg named for one thing is not cleared for another; and only entries that
+  // ran, as a leg of one held back or not reached that moves, moved on its own
   const explained = new Set<string>();
-  const named = new Set<string>([...deleting]);
+  const touched = new Set<string>();
   const explain = (legId: string, field: string) => {
     explained.add(`${legId}|${field}`);
-    named.add(legId);
+    touched.add(legId);
   };
-  for (const e of [...plan.edit, ...plan.categorise]) {
-    for (const c of e.changes) explain(c.legId, c.field);
-    for (const id of e.ignore ?? []) explain(id, "trade");
-    if (e.match) explain(e.match.legId, "price");
+  for (const kind of ["edit", "categorise"] as const) {
+    for (const [i, e] of plan[kind].entries()) {
+      const key = `${kind}-${i}`;
+      if (entries.find((x) => x.key === key)?.state !== "landed" && !linesOf(key).length) continue;
+      for (const c of e.changes) explain(c.legId, c.field);
+      for (const id of e.ignore ?? []) explain(id, "trade");
+      if (e.match) explain(e.match.legId, "price");
+    }
   }
   for (const l of lines) {
     if (l.legId && l.field) explain(l.legId as string, l.field as string);
     for (const id of (l.madeUp as string[] | undefined) ?? []) explain(id, "trade");
     if (l.operation === "ignore") for (const id of (l.legIds as string[] | undefined) ?? []) explain(id, "trade");
-    if (l.operation === "delete") for (const id of (l.legIds as string[] | undefined) ?? []) named.add(id);
+    if (l.operation === "delete") for (const id of (l.legIds as string[] | undefined) ?? []) deleted.add(id);
   }
+  for (const id of deleted) touched.add(id);
+  const besideDelete = new Set(plan.delete.flatMap((d) => (d.others ?? []).map((o) => o.legId)));
 
   const historyOf = (leg: Leg) => after.history.get(leg.actionId)?.at(-1);
   const changed: FieldChange[] = [];
@@ -281,7 +310,14 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
     for (const field of FIELDS) {
       const [x, y] = [valueOf(b, field), valueOf(a, field)];
       if (!unchanged(field, x, y) && !explained.has(`${b.legId}|${field}`)) {
-        changed.push({ leg: a, field, before: x, after: y, history: historyOf(a) });
+        changed.push({
+          leg: a,
+          field,
+          before: x,
+          after: y,
+          history: historyOf(a),
+          besideDelete: besideDelete.has(b.legId),
+        });
       }
     }
   }
@@ -294,7 +330,7 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
   }
   let summFeesReissued = 0;
   const reissued = new Set<string>();
-  const gone0 = before.legs.filter((l) => !now.has(l.legId) && !named.has(l.legId));
+  const gone0 = before.legs.filter((l) => !now.has(l.legId) && !deleted.has(l.legId));
   const summFeesGone: Leg[] = [];
   const unreadAfter = hashesOf(afterFile.actions);
   const unreadBefore = hashesOf(beforeFile.actions);
@@ -314,7 +350,7 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
   const added: Leg[] = [];
   const newlyRead: Leg[] = [];
   for (const l of added0) {
-    if (reissued.has(l.legId) || uploadIds.has(l.id)) continue;
+    if (reissued.has(l.legId) || isUpload(l)) continue;
     if (l.importType === SUMM_FEE) summFeesAdded.push(l);
     else if (unreadBefore.has(normaliseTxid(l.id)) || createdBefore(l.legId, beforeFile.takenAt)) newlyRead.push(l);
     else added.push(l);
@@ -324,8 +360,7 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
   const categories = (file: SnapshotFile) => new Map(file.actions.map((a) => [a.id, a.category]));
   const [catBefore, catAfter] = [categories(beforeFile), categories(afterFile)];
   const [matesBefore, matesAfter] = [matesOf(before.legs), matesOf(after.legs)];
-  const inPlan = (id: string) =>
-    named.has(id) || uploadIds.has(now.get(id)?.id ?? "") || uploadIds.has(was.get(id)?.id ?? "");
+  const inPlan = (id: string) => touched.has(id) || isUpload(now.get(id)) || isUpload(was.get(id));
   const pairing: Verification["pairing"] = [];
   for (const b of before.legs) {
     const a = now.get(b.legId);
@@ -333,8 +368,17 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
     const [m0, m1] = [matesBefore.get(b.legId) ?? [], matesAfter.get(b.legId) ?? []];
     const [c0, c1] = [catBefore.get(b.actionId) ?? "", catAfter.get(a.actionId) ?? ""];
     if (m0.join() === m1.join() && c0 === c1) continue;
-    if ([b.legId, ...m0, ...m1].some(inPlan)) continue;
-    pairing.push({ leg: a, categoryBefore: c0, categoryAfter: c1, matesBefore: m0.length, matesAfter: m1.length });
+    // A row's own legs travel together: its fee beside its edited leg is that leg
+    const sameRow = (id: string) => (now.get(id) ?? was.get(id))?.id === b.id;
+    if (inPlan(b.legId) || [...m0, ...m1].some((id) => inPlan(id) && sameRow(id))) continue;
+    pairing.push({
+      leg: a,
+      categoryBefore: c0,
+      categoryAfter: c1,
+      matesBefore: m0.length,
+      matesAfter: m1.length,
+      beside: [...m0, ...m1].some(inPlan),
+    });
   }
 
   return {
@@ -411,7 +455,7 @@ export function verifyMarkdown(v: Verification, planName: string, beforeName: st
     "Fields changed outside the plan",
     v.changed.map(
       (c) =>
-        `- ${c.field}: ${String(c.before)} to ${String(c.after)}, on ${legLine(c.leg)}${c.history ? `. Last in Summ: ${c.history}` : ""}`,
+        `- ${c.field}: ${String(c.before)} to ${String(c.after)}, on ${legLine(c.leg)}${c.besideDelete ? " (beside a delete of the plan)" : ""}${c.history ? `. Last in Summ: ${c.history}` : ""}`,
     ),
   );
   section(
@@ -422,12 +466,12 @@ export function verifyMarkdown(v: Verification, planName: string, beforeName: st
     "New legs in no upload",
     v.added.map((l) => `- ${legLine(l)}`),
   );
+  const pairLine = (p: Verification["pairing"][number]) =>
+    `- ${legLine(p.leg)}: action ${p.categoryBefore} to ${p.categoryAfter}, other legs ${p.matesBefore} to ${p.matesAfter}`;
+  section("Pairing changed outside the plan", v.pairing.filter((p) => !p.beside).map(pairLine));
   section(
-    "Pairing changed outside the plan",
-    v.pairing.map(
-      (p) =>
-        `- ${legLine(p.leg)}: action ${p.categoryBefore} to ${p.categoryAfter}, other legs ${p.matesBefore} to ${p.matesAfter}`,
-    ),
+    "Paired beside the plan: a leg outside it now shares an action with one in it. Check it is the right pair",
+    v.pairing.filter((p) => p.beside).map(pairLine),
   );
   section("Summ's own fee legs", [
     ...(v.summFeesReissued ? [`${v.summFeesReissued} issued again under new ids, with the same values.`] : []),
@@ -446,21 +490,21 @@ export function verifyMarkdown(v: Verification, planName: string, beforeName: st
 }
 
 /** Refuses what cannot be compared; a plan is verified between its own snapshot and the latest. */
-export function runVerify(stateDir: string, planPath: string): string {
-  if (existsSync(join(stateDir, ".lock"))) throw new Error("verify: an apply holds the lock");
+export function runVerify(stateDir: string, planPath: string, afterSnapshot?: string): string {
+  if (existsSync(join(stateDir, ".lock"))) {
+    throw new Error("verify: an apply holds the lock; if none is running, apply clears it");
+  }
   if (!existsSync(join(planPath, "plan.json"))) throw new Error(`verify: ${planPath} holds no plan.json`);
   const { dir, plan } = readPlanFile(planPath);
-  const planName = dir.split("/").at(-1) as string;
+  const planName = basename(resolve(dir));
   const snapshotFile = (name: string) => join(stateDir, "snapshots", `${name}.json`);
   if (!existsSync(snapshotFile(plan.snapshot))) {
     throw new Error(`verify: snapshot ${plan.snapshot} of this plan is gone (prune?)`);
   }
-  const latest = latestSnapshot(stateDir);
-  const afterName = latest
-    .split("/")
-    .at(-1)
-    ?.replace(/\.json$/, "") as string;
-  if (afterName === plan.snapshot) throw new Error("verify: the latest snapshot is the plan's own: pull first");
+  const latest = afterSnapshot ? snapshotFile(afterSnapshot) : latestSnapshot(stateDir);
+  if (!existsSync(latest)) throw new Error(`verify: no snapshot ${afterSnapshot}`);
+  const afterName = basename(latest, ".json");
+  if (afterName === plan.snapshot) throw new Error("verify: that snapshot is the plan's own: pull first");
   const beforeFile = readSnapshotFile(snapshotFile(plan.snapshot));
   const afterFile = readSnapshotFile(latest);
   for (const file of [beforeFile, afterFile]) {
@@ -495,7 +539,7 @@ export function runVerify(stateDir: string, planPath: string): string {
   const known = new Set(before.legs.map((l) => l.legId));
   if (
     !lines.some((l) => l.call === "apply-start") &&
-    !after.legs.some((l) => !known.has(l.legId) && uploads.has(l.id))
+    !after.legs.some((l) => !known.has(l.legId) && l.importType === UPLOADED && uploads.has(l.id))
   ) {
     throw new Error(`verify: ${planName} has not been applied`);
   }
