@@ -23,7 +23,7 @@ export interface DecisionOption {
 }
 
 export interface Decision {
-  /** The event's date and a hash of what it is made of: the same across plans while the event is. */
+  /** The event's date and a hash of what it is made of and what this plan does with it: reopens when either changes. */
   key: string;
   /** The legs this plan deletes that it is about: apply refuses to delete them while it is open. */
   deletes: string[];
@@ -427,11 +427,35 @@ export function decisionsOf(
     const toName = [...named.values()];
     const spans = new Set(toName.map((m) => isFiled(m.timestamp))).size > 1;
 
-    // One event's mark, across plans: what it is made of. Anything of it that changes makes it a new decision
-    const date = [...ls].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))[0].timestamp.slice(0, 10);
+    // One event's mark, across plans: all it is made of, and what this plan does with it. Row IDs leave out amounts, so
+    // the rows' values go in. Anything of it that changes makes it a new decision: an accept covers only what was read
+    const date = [...ls]
+      .map((l) => l.timestamp)
+      .sort()[0]
+      .slice(0, 10);
     const key = `${date}-${createHash("sha256")
       .update(
-        [...ls.map((l) => `${l.legId}:${l.currency}:${l.quantity}`), ...rs.map((r) => `${r.id}:${r.baseAmount}`)]
+        [
+          ...ls.map((l) => `leg ${l.legId} ${l.trade} ${l.currency} ${l.quantity}`),
+          ...groupDeletes.flatMap((d) =>
+            d.legIds.map((id) => `delete ${id} ${legById.get(id)?.currency} ${legById.get(id)?.quantity}`),
+          ),
+          ...[...disposals, ...acquisitions].map((l) => `lost ${l.legId}`),
+          ...rs.map((r) =>
+            [
+              "row",
+              r.id,
+              r.type,
+              r.baseCurrency,
+              r.baseAmount,
+              r.quoteCurrency,
+              r.quoteAmount,
+              r.feeCurrency,
+              r.feeAmount,
+            ].join(" "),
+          ),
+          ...going.map((r) => `going ${r.id}`),
+        ]
           .sort()
           .join("\n"),
       )

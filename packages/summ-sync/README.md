@@ -19,7 +19,7 @@ plan before you apply it.
 2. `login <state dir> --write` once (the token is refreshed after that).
 3. `pull <state dir> <run dir>`, then `plan <state dir> <run dir>`. Read `plan.md`.
    Its Decisions section comes first: what the deletes leave behind, with the options.
-   Close each by adding its option's lines to `summ-sync.json` with your reason, then plan again:
+   Close each by adding its option's lines, or its key under `accept`, to `summ-sync.json` with your reason, then plan again:
    `apply --approve-deletes` refuses a delete a decision is open over. Each has a key that stays while its event does.
 4. `apply <state dir> <plan dir>` (`--dry-run` first; `--approve-deletes` if the
    plan deletes). It deletes and edits, and holds back categorisation while the

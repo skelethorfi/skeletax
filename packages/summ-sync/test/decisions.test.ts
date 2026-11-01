@@ -5,6 +5,7 @@ import { makePlan, type PlanInput } from "../src/plan.ts";
 import type { Row, RunFile } from "../src/run.ts";
 import type { Leg } from "../src/snapshot.ts";
 import { decisionLines } from "../src/decisions.ts";
+import { renderPlan } from "../src/write-plan.ts";
 
 // Every value below is made up. One swap: AAA -> BBB through a pool, ending in TKN, which an old CSV recorded as far as
 // BBB, with the user's manual BBB -> TKN trade and a manual send paired with the wallet's TKN receive.
@@ -1113,4 +1114,95 @@ test("a decision shows its value, from what matters", () => {
   assert.equal(d.value, 1000);
   assert.match(decisionLines([d], []).join("\n"), /, about 1,000 in Summ's currency/);
   assert.equal(plan({ legs: oldLegs().slice(1, 3) }).decisions![0].value, null);
+});
+
+test("a key changes with anything a row says, a leg's type, a fee leg, what is lost and what goes ahead", () => {
+  const { rows, legs } = swapChanged();
+  const key = (r: Row[], l: Leg[], config = CONFIG) => plan({ rows: r, legs: l, config }).decisions?.[0]?.key;
+  const base = key(rows, legs);
+  assert.equal(key([...rows].reverse(), [...legs].reverse()), base);
+  const changed: [string, Row[]][] = [
+    ["quote amount", [outRow({ quoteAmount: "51" }), inRow()]],
+    ["quote currency", [outRow({ quoteCurrency: "OTH" }), inRow()]],
+    ["base amount of the other row", [outRow(), inRow({ baseAmount: "51" })]],
+    ["base currency", [outRow(), inRow({ baseCurrency: "OTH" })]],
+    ["fee", [outRow({ feeCurrency: "AAA", feeAmount: "1" }), inRow()]],
+    ["type", [outRow({ type: "sell" }), inRow()]],
+  ];
+  for (const [what, r] of changed) assert.notEqual(key(r, legs), base, what);
+  assert.notEqual(
+    key(
+      rows,
+      legs.map((l) => (l.id === "old.csv:3" ? { ...l, trade: "bridgeOut" } : l)),
+    ),
+    base,
+    "trade",
+  );
+  const fee = leg({
+    id: "old.csv:2",
+    actionId: "action-old-swap",
+    side: "fees",
+    trade: "fee",
+    currency: "BBB",
+    quantity: 0.1,
+    timestamp: `${T}10.000Z`,
+  });
+  assert.notEqual(key(rows, [...legs, fee]), base, "fee leg");
+  // A row going ahead, then held: what it added back is lost, and what was read no longer holds
+  const sold = oldLegs()
+    .slice(1, 3)
+    .map((l) => ({ ...l, from: "another", to: "another" }))
+    .filter((l) => l.trade === "buy");
+  const sell = leg({
+    id: "old.csv:2",
+    actionId: "action-old-swap",
+    trade: "sell",
+    from: "another",
+    to: "another",
+    timestamp: `${T}10.000Z`,
+  });
+  const r = soldBack({ type: "receive", baseCurrency: "BBB", baseAmount: "2", quoteCurrency: "", quoteAmount: "" });
+  const going = plan({ rows: [r], legs: [...sold, sell] }).decisions![0].key;
+  const heldRow = plan({
+    rows: [r],
+    legs: [...sold, sell],
+    config: { ...CONFIG, hold: [{ id: r.id, reason: "held" }] },
+  }).decisions![0].key;
+  assert.notEqual(going, heldRow);
+});
+
+test("a key takes its event's first date, and option b's reason names it", () => {
+  const legs = oldLegs().slice(1, 3);
+  const later = leg({
+    id: "old.csv:2",
+    actionId: "action-old-swap",
+    side: "incoming",
+    trade: "buy",
+    currency: "DDD",
+    quantity: 1,
+    timestamp: "2024-03-02T10:00:00.000Z",
+  });
+  const d = plan({ legs: [later, ...legs] }).decisions![0];
+  assert.match(d.key, /^2024-03-01-/);
+  assert.equal(d.options[1].config.hold?.[0].reason, `not yet: decision ${d.key}`);
+});
+
+test("a decision's value counts its manual legs, and plan.md lists what is decided", () => {
+  const m = leg({
+    ...manual,
+    id: "n",
+    actionId: "an",
+    trade: "sell",
+    currency: "BBB",
+    quantity: 2,
+    price: 900,
+    timestamp: at("10:00:50"),
+  });
+  const legs = [...oldLegs().slice(1, 3), m];
+  assert.equal(plan({ legs }).decisions![0].value, 1800);
+  const p = plan({
+    legs: oldLegs().slice(1, 3),
+    config: { ...CONFIG, hold: [{ id: "kept.csv:1", reason: "not now" }] },
+  });
+  assert.match(renderPlan(p, "snap", "run"), /## Decided \(1\)/);
 });

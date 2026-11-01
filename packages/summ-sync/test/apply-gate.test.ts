@@ -79,6 +79,15 @@ test("a plan with no decisions, or from before them, is not stopped", () => {
   assert.equal(startState(old.dir, old.file, "p", "sha", ON), "first");
 });
 
+test("a plan whose decisions have no keys, from before they did, is told to plan again", () => {
+  const { dir, file } = setup({
+    delete: [entry("leg1", false)],
+    decisions: [{ id: "d1", title: "t", lines: [], options: [] }],
+  });
+  assert.throws(() => startState(dir, file, "p", "sha", ON), /have no keys.*plan again/);
+  assert.equal(startState(dir, file, "p", "sha", { ...ON, approveDeletes: false }), "first");
+});
+
 test("a run without the flag writes nothing, so the refusal still applies when it comes with the flag", () => {
   const { dir, file } = setup({ delete: [entry("leg1", false)], decisions: [decision("k", ["leg1"])] });
   const start = {
@@ -119,6 +128,9 @@ test("a config still saying <why> is refused: the reason is the user's to write"
   ])
     assert.throws(() => parseConfig(text), /still say <why>/);
   assert.throws(() => parseConfig('{"accept":[{"key":"k"}]}'), /accept must be a list/);
+  assert.throws(() => parseConfig('{"accept":[{"key":"","reason":"r"}]}'), /accept must be a list/);
+  assert.throws(() => parseConfig('{"accept":[{"key":"k","reason":"  "}]}'), /accept must be a list/);
+  assert.throws(() => parseConfig('{"accept":[{"key":"k","reason":" <why> "}]}'), /still say <why>/);
   assert.throws(() => parseConfig('{"accept":"k"}'), /accept must be a list/);
   assert.equal(parseConfig('{"accept":[{"key":"k","reason":"read it"}]}').accept[0].key, "k");
 });

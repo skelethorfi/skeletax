@@ -575,8 +575,10 @@ would make (Refusal below). Most old legs hold no txid, so legs are linked by cu
 not proof, and the section says so. No gain is computed: Summ's own figures show the effect after a recalculation. Each decision
 shows its largest quantity by Summ's price, to tell a large one from a small one.
 
-A decision's key is its first date and a hash of its legs' ids, currencies and quantities and its rows' IDs and amounts, in sorted
-order. It stays while its event does, whatever else is decided, and changes when the event does, which reopens it.
+A decision's key is its first date and a hash of what it is made of: its legs (id, type, currency, quantity), its deletes' legs, fee
+legs too, which legs are lost, its rows (ID, type, both currencies and amounts, fee), and which rows go ahead. So it stays while the
+event and what this plan does with it stay, across pulls and other decisions, and an accept covers only what was read. Anything of it
+that changes reopens it. A partial `--only` can make another key, which reopens it safely, as can a group taking in a row or a leg.
 
 A leg is _added back_ by a row this plan uploads, or a kept leg that counts, with the same currency and amount within a
 day, or about the amount (within 1%, a fee apart) within 5 minutes. A row uploaded with the same amount under another

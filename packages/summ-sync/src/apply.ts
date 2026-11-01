@@ -186,6 +186,8 @@ export function startState(
     if (plan.configSha !== undefined && plan.configSha !== configSha(stateDir))
       throw new Error("summ-sync.json changed since this plan was made: plan again");
     if (!flags.approveDeletes) return;
+    if (plan.decisions?.some((d) => d.deletes === undefined))
+      throw new Error("This plan's decisions have no keys, from before they did: plan again");
     const going = new Set(selected(plan.delete, flags).flatMap((d) => d.legIds));
     const open = (plan.decisions ?? []).filter((d) => d.deletes.some((id) => going.has(id)));
     if (open.length)

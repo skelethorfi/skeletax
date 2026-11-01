@@ -104,7 +104,9 @@ export function parseConfig(text: string): Config {
   ) {
     throw new Error('summ-sync.json: accept must be a list of {"key": "<decision key>", "reason": "<why>"}');
   }
-  const unfinished = [...config.hold, ...config.deleteManualEntries, ...config.accept].filter((e) => e.reason === WHY);
+  const unfinished = [...config.hold, ...config.deleteManualEntries, ...config.accept].filter(
+    (e) => e.reason.trim() === WHY,
+  );
   if (unfinished.length)
     throw new Error(`summ-sync.json: ${unfinished.length} entries still say ${WHY}: write the reason`);
   const named = config.deleteManualEntries.map((m) => m.legId);
