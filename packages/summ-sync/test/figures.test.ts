@@ -104,6 +104,7 @@ interface Fake {
   totalRows?: number;
   top?: { symbol: string; gain: number }[];
   hidden?: number | null;
+  expenses?: string | null;
   /** Summary of the whole range, when it differs from the rows. */
   wholeIncome?: number;
 }
@@ -161,7 +162,7 @@ function fakeSumm(fake: Fake) {
           (inside.length ? fake.gains : undefined) ?? inside.reduce((s, r) => s + (r.gain as number), 0),
         ),
         totalIncome: isWhole && fake.wholeIncome !== undefined ? String(fake.wholeIncome) : "0",
-        totalExpenses: "0",
+        totalExpenses: fake.expenses === undefined ? "0" : fake.expenses,
         zeroCostBuysTop:
           (inside.length ? fake.top : undefined) ??
           inside
@@ -243,6 +244,7 @@ for (const [name, fake, pattern] of [
   ["a row with no date", { rows: [apiRow({ sellTime: "soon" })] }, /not what this version reads/],
   ["a row with no holding period", { rows: [apiRow({ isLongTerm: undefined })] }, /not what this version reads/],
   ["a summary with no zero-cost count", { hidden: null }, /summary is not/],
+  ["a summary with no expenses", { expenses: null }, /summary is not/],
 ] as [string, Fake, RegExp][]) {
   test(`figures refuses ${name}, and writes nothing`, async () => {
     const dir = stateDir();
@@ -380,6 +382,40 @@ test("a replaced pair zero-cost on both sides is no change; one that lost its co
     worse.zeroCost.map((z) => [z.before, z.after]),
     [[0, 1]],
   );
+});
+
+test("a holding period that flips on a replaced pair shows", () => {
+  const c = compareFigures(
+    data([row({ sellUid: "o", gain: 1 })]),
+    data([row({ sellUid: "n", gain: 1, isLongTerm: true })], LATER),
+  );
+  assert.equal(c.replaced.length, 1);
+  assert.match(compareMarkdown(c, "x", "y"), /long-term quantity 0 to 1/);
+});
+
+test("identical legs pair by their zero-cost quantity, so nothing cancels out", () => {
+  const zero = { error: "zeroCostBuy", buyUid: undefined };
+  const c = compareFigures(
+    data([row({ sellUid: "o1", gain: 1 }), row({ sellUid: "o2", gain: 1, ...zero })]),
+    data([row({ sellUid: "n1", gain: 1, ...zero }), row({ sellUid: "n2", gain: 1 })], LATER),
+  );
+  assert.deepEqual(
+    c.replaced.map((p) => [p.before.sellUid, p.after.sellUid]),
+    [
+      ["o1", "n2"],
+      ["o2", "n1"],
+    ],
+  );
+  assert.deepEqual(c.zeroCost, []);
+});
+
+test("a year whose gain moved by a cent shows how", () => {
+  const md = compareMarkdown(
+    compareFigures(data([row({ sellUid: "a", gain: 10 })]), data([row({ sellUid: "a", gain: 10.01 })], LATER)),
+    "x",
+    "y",
+  );
+  assert.match(md, /- 2023: gone/);
 });
 
 test("a kept leg shows a quantity or type change even at the same gain", () => {

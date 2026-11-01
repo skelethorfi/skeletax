@@ -140,6 +140,9 @@ async function currentComputation(client: Client, stateDir: string): Promise<{ s
   return computation;
 }
 
+/** A summary's figure: an empty one is no figure, not 0. */
+const amount = (value: unknown): number => (value === null || value === "" ? NaN : Number(value));
+
 const near = (a: number, b: number, within = CENT) => Math.abs(a - b) <= within;
 
 export async function figures(
@@ -211,9 +214,9 @@ export async function figures(
       from: iso(y.from),
       to: iso(y.to),
       filed: y.to < filedBefore,
-      capitalGains: Number(report.totalCapitalGains),
-      income: Number(report.totalIncome),
-      expenses: Number(report.totalExpenses),
+      capitalGains: amount(report.totalCapitalGains),
+      income: amount(report.totalIncome),
+      expenses: amount(report.totalExpenses),
     };
     if (
       typeof report.zeroCostBuysHiddenCount !== "number" ||
@@ -324,15 +327,15 @@ const figuresNames = (stateDir: string): string[] => {
 
 /** A line for apply: figures taken before it are what a compare after it needs. Gates nothing. */
 export function figuresNote(stateDir: string): string {
-  const latest = figuresNames(stateDir).at(-1);
-  if (!latest) return "No figures yet: without one from before this apply, compare has nothing to compare it with.";
   // A bad figures file is no reason to stop an apply, or the resume of one
   try {
+    const latest = figuresNames(stateDir).at(-1);
+    if (!latest) return "No figures yet: without one from before this apply, compare has nothing to compare it with.";
     const { takenAt } = JSON.parse(readFileSync(join(stateDir, "figures", `${latest}.json`), "utf8")) as Figures;
     const since = readLogLines<{ time?: string }>(stateDir).filter((l) => l.time && l.time > takenAt).length;
     return `Latest figures ${latest}, ${since} apply-log lines since.`;
   } catch {
-    return `Latest figures ${latest} cannot be read.`;
+    return "The latest figures cannot be read.";
   }
 }
 
@@ -498,9 +501,14 @@ export function compareFigures(before: Figures, after: Figures): Comparison {
   const replaced: Comparison["replaced"] = [];
   const open = [...added];
   const unpaired = gone.filter((b) => {
-    const at = open.findIndex(
+    const alike = open.filter(
       (a) => a.currencyId === b.currencyId && a.sellTime === b.sellTime && sameQuantity(a.quantity, b.quantity),
     );
+    // Among identical legs, the one with the same zero-cost and long-term quantities: else two entries cancel out
+    const match =
+      alike.find((a) => sameQuantity(a.zeroQuantity, b.zeroQuantity) && sameQuantity(a.longQuantity, b.longQuantity)) ??
+      alike[0];
+    const at = match ? open.indexOf(match) : -1;
     if (at < 0) return true;
     replaced.push({ before: b, after: open[at] });
     open.splice(at, 1);
@@ -601,7 +609,9 @@ export function compareMarkdown(c: Comparison, beforeName: string, afterName: st
     );
   }
   out.push("");
-  const moved = c.years.filter((y) => Math.abs((y.after?.capitalGains ?? 0) - (y.before?.capitalGains ?? 0)) >= CENT);
+  const moved = c.years.filter(
+    (y) => Math.abs((y.after?.capitalGains ?? 0) - (y.before?.capitalGains ?? 0)) >= CENT - 1e-9,
+  );
   for (const y of moved) {
     out.push(
       `- ${y.year}: gone ${signed(y.gone)}, new ${signed(y.added)}, replaced ${signed(y.replaced)}, changed ${signed(y.changed)}, under a cent each ${signed(y.underTolerance)}.`,
@@ -636,7 +646,7 @@ export function compareMarkdown(c: Comparison, beforeName: string, afterName: st
     "Disposals replaced (same currency, time and quantity under a new leg: a hint, not proof)",
     c.replaced.map(
       ({ before: b, after: a }) =>
-        `- ${a.sellTime} ${a.quantity} ${a.symbol}: gain ${money(b.gain)} to ${money(a.gain)}, ${signed(a.gain - b.gain)} (${b.types} leg ${b.sellUid} to ${a.types} leg ${a.sellUid}, tx ${a.sellTxHash})`,
+        `- ${a.sellTime} ${a.quantity} ${a.symbol}: gain ${money(b.gain)} to ${money(a.gain)}, ${signed(a.gain - b.gain)}${sameQuantity(a.longQuantity, b.longQuantity) ? "" : `, long-term quantity ${b.longQuantity} to ${a.longQuantity}`} (${b.types} leg ${b.sellUid} to ${a.types} leg ${a.sellUid}, tx ${a.sellTxHash})`,
     ),
   );
 

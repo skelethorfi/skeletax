@@ -990,7 +990,7 @@ id (`sellUid`), and its rows sum to the report's totals.
   apply log's last line of any kind (at worst, one needless recalculation). A write in Summ's own app and an upload
   are not in the log, so recalculate last;
 - unless the status, `updatedAt` and the log's length are the same after the read;
-- on a row or summary whose fields are not as expected;
+- on a row, summary or page count that is not as expected;
 - unless the rows' unique ids equal the report's count (rows can shift between pages, which a sum can miss);
 - unless each tax year's rows, by `sellTime`, sum to its `totalCapitalGains` within a cent, and its zero-cost rows by
   symbol to `zeroCostBuysTop` (when none are hidden);
@@ -1010,7 +1010,7 @@ by disposal leg. It reports:
 2. Zero-cost parcels: each leg whose quantity with Summ's `zeroCostBuy` mark moved, as a leg can be only partly
    zero-cost. By the mark, never by a cost of 0: some zero-cost rows carry a fee as cost, and some costless rows have no mark.
 3. Disposals gone and new. A new leg of the same currency, time and quantity as a gone one is shown as replaced, one to
-   one, with the gain difference: a hint, not proof. A replaced pair counts as one leg in the zero-cost list.
+   one, with the gain difference: a hint, not proof. Its long-term quantity is shown if it moved. A replaced pair counts as one leg in the zero-cost list.
 4. Kept disposals whose gain (by a cent), quantity, long-term quantity, type or year moved, by currency, largest
    first. The holding period can change a disposal's tax with no change in its gain.
 5. Acquisitions (`buyUid`) used before and not after, and the reverse: a hint at the cause.
