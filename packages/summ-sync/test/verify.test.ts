@@ -146,7 +146,11 @@ test("a planned edit that holds has landed, and one that does not is said", () =
 
 test("a change on a leg named for something else is still outside the plan", () => {
   const p = plan({ edit: [edit("a", "trade", "sell", "buy")] });
-  const v = run([leg("a")], [leg("a", { trade: "buy", quantity: 3 })], p);
+  const v = run([leg("a")], [leg("a", { trade: "buy", quantity: 3 })], p, [
+    start,
+    log({ entry: "edit-0", legId: "a", field: "trade" }),
+    done,
+  ]);
   assert.deepEqual(
     v.changed.map((c) => c.field),
     ["quantity"],
@@ -801,4 +805,29 @@ test("a value match of nothing against nothing has not landed", () => {
     leg("quote", { actionId: "t", side: "incoming", trade: "buy", price: 0 }),
   ];
   assert.equal(stateOf(run(legs, legs, plan({ edit: [entry] })), "edit-0"), "NOT LANDED");
+});
+
+test("a field that came to hold the planned value with no write moved on its own", () => {
+  const p = plan({ categorise: [edit("c", "trade", "deposit", "x")] });
+  const v = run([leg("c", { trade: "deposit" })], [leg("c", { trade: "x" })], p);
+  assert.equal(stateOf(v, "categorise-0"), "landed");
+  assert.deepEqual(
+    v.changed.map((c) => c.field),
+    ["trade"],
+  );
+});
+
+test("a leg left in place that Summ then re-types is reported", () => {
+  const p = plan({ categorise: [edit("a", "trade", "deposit", "x", { ignore: ["m"] })] });
+  const lines = [
+    start,
+    log({ entry: "categorise-0", legId: "a", field: "trade" }),
+    log({ entry: "categorise-0", call: "skip", leftLeg: "m" }),
+    done,
+  ];
+  const v = run([leg("a"), leg("m")], [leg("a", { trade: "x" }), leg("m", { trade: "other" })], p, lines);
+  assert.deepEqual(
+    v.changed.map((c) => c.leg.legId),
+    ["m"],
+  );
 });

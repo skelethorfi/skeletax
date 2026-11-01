@@ -1,5 +1,5 @@
 // verify: whether Summ's legs hold what an applied plan said, and nothing else moved (spec: docs/specs/summ-sync.md,
-// Verify). Compares the plan's snapshot with the latest. Calls nothing; writes <plan dir>/verify-<after>.md.
+// Verify). Compares the plan's snapshot with the latest, or a named one. Calls nothing; writes <plan dir>/verify-<after>.md.
 
 import { existsSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
@@ -295,9 +295,9 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
   for (const kind of ["edit", "categorise"] as const) {
     for (const [i, e] of plan[kind].entries()) {
       const key = `${kind}-${i}`;
-      if (entries.find((x) => x.key === key)?.state !== "landed" && !ranLines(key).length) continue;
+      if (!ranLines(key).length) continue;
       for (const c of e.changes) explain(c.legId, c.field);
-      for (const id of e.ignore ?? []) explain(id, "trade");
+      for (const id of e.ignore ?? []) if (!left.includes(id)) explain(id, "trade");
       if (e.match) explain(e.match.legId, "price");
     }
   }
@@ -499,7 +499,7 @@ export function verifyMarkdown(v: Verification, planName: string, beforeName: st
   return out.join("\n");
 }
 
-/** Refuses what cannot be compared; a plan is verified between its own snapshot and the latest. */
+/** Refuses what cannot be compared; a plan is verified between its own snapshot and the latest, or a named one. */
 export function runVerify(stateDir: string, planPath: string, afterSnapshot?: string): string {
   if (existsSync(join(stateDir, ".lock"))) {
     throw new Error("verify: an apply holds the lock; if none is running, apply clears it");

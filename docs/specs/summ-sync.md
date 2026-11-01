@@ -981,7 +981,7 @@ with legs and `compare` says what moved in tax, so neither is repeated here.
 
 `verify <state dir> <plan dir> [<after snapshot>]` compares the plan's snapshot with the latest, or the one named: once a
 later plan has written, this one is verified between its own pulls. It refuses: while `.lock` is held; a folder with no
-`plan.json`; a plan whose snapshot is gone; an after snapshot that is the plan's own, or whose pull began before the plan's
+`plan.json`; a plan whose snapshot is gone, or a named snapshot not there; an after snapshot that is the plan's own, or whose pull began before the plan's
 last log line; a snapshot of version 1, whose store has moved on since; snapshots with another run, range or managed sources
 or chains; another plan's writes between the first pull's start and the second's finish; and a plan with no `apply-start`
 and none of its upload rows in Summ, as a plan of uploads and categorisations held back writes nothing.
@@ -990,8 +990,7 @@ and none of its upload rows in Summ, as a plan of uploads and categorisations he
 
 - _landed_: a delete's legs are gone with a delete logged or found; a changed field holds the planned value; a leg to
   ignore is ignored;
-- _NOT LANDED_, with what differs: it does not hold, and it has lines other than a stop, or the last run stopped on it, or it
-  was selected with no lines after a complete stop;
+- _NOT LANDED_, with what differs: it does not hold, and it has lines other than a stop, or the last run stopped on it, or it was selected, not held back, with no lines after a complete stop;
 - _not selected_: otherwise, its filed flag or `--approve-deletes` was not this apply's, taken from the run that wrote;
 - _held back_: otherwise, a categorisation while selected uploads remain;
 - _not reached_: otherwise, the last run did not stop as `complete`.
@@ -1005,8 +1004,7 @@ pairs with. A new row beside an old `manual-csv` leg of that ID, not ignored, is
 **Outside the plan.** By leg id:
 
 - A field changed: `id`, `trade`, `currency`, `quantity`, `timestamp`, `from`, `to`, `blockchain`, `description`, `price`,
-  `feeQuantity`, `feeCurrency`, `source`, `importType`, `comments`. A field is explained only by a change of an entry that
-  ran, or a log line, for that leg and field: a leg named for one thing is not cleared for another, and a leg of an entry
+  `feeQuantity`, `feeCurrency`, `source`, `importType`, `comments`. A field is explained only by a change of an entry with lines, or a log line, for that leg and field: a leg named for one thing is not cleared for another, and a leg of an entry
   held back or not reached that moves is reported. A change in an action a delete took a leg from is marked as beside it.
   Action ids and `updatedAt` move on their own and are not compared. Each comes with the action's newest history line.
 - A leg gone with no delete logged, and a new leg that is no upload row: Summ's matcher makes up a leg this way.

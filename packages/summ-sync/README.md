@@ -70,7 +70,7 @@ the cost bases of later disposals, in later years and the current one.
   id: minutes for a year, half an hour for everything. A stopped pull goes on
   from where it stopped when run again. Its snapshot is written only once
   Summ's list has stopped changing.
-- `verify` compares an applied plan's snapshot with the latest. Each entry landed, or why not; then any field, leg or
+- `verify` compares an applied plan's snapshot with the latest, or a named one. Each entry landed, or why not; then any field, leg or
   pairing that moved outside the plan. It calls nothing, writes `verify-<snapshot>.md` in the plan's folder and holds nothing back. Spec: Verify.
 - `figures` writes `<state dir>/figures/<time>.json`: Summ's capital gains rows and yearly totals, only when its
   computation is current and they tie to Summ's totals. It needs `taxYearStart` (`MM-DD`) in `summ-sync.json`.
