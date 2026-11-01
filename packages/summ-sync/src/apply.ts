@@ -67,7 +67,7 @@ export interface ApplyOptions {
   dryRun: boolean;
 }
 
-export type PlanFile = Plan & { snapshot: string; run: string };
+export type PlanFile = Plan & { snapshot: string; run: string; configSha?: string; scopeFile?: string };
 
 export interface LogLine {
   time: string;

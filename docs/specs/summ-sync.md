@@ -605,9 +605,10 @@ Each decision has two options, each with the config to add to `summ-sync.json` b
 A decision is filed by the entries option a names, or with none by its legs.
 
 `decide <state dir> <plan dir> d1:a [d2:b ...]` adds what the options name to `summ-sync.json`, all or none, leaving what is
-already there, and prints what the next plan does. It refuses a choice the plan does not have, a decision chosen twice, or a
-plan that `apply` would call out of date. It writes nothing to Summ: the entries still go through a plan and apply's
-approvals. To undo a choice, remove the lines from `summ-sync.json`.
+already there, and prints what the next plan does. It refuses a choice the plan does not have, a decision chosen twice, filed and current-year
+entries together, a plan not from the latest snapshot or with a write to Summ since it, and a plan not made from
+`summ-sync.json` as it is now (`plan.json` holds its `configSha`): a decision's number means something only in its plan, so after
+a choice, plan again before choosing more. It writes nothing to Summ: the entries still go through a plan and apply's approvals. To undo a choice, remove the lines from `summ-sync.json`.
 
 Or neither: change the entries in Summ or the run, then pull and plan. `checks` lists the other removed acquisitions with
 nothing to add them back that have kept outgoing legs of that asset within a week: nothing links them but the asset. An

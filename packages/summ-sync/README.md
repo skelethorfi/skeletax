@@ -46,8 +46,8 @@ the cost bases of later disposals, in later years and the current one.
     node packages/summ-sync/bin/summ-sync.ts prune <state dir> [--older-than <days>]
     node packages/summ-sync/bin/summ-sync.ts tools <state dir>
 
-- `decide` adds a plan's decision options to `summ-sync.json`, all or none, and writes nothing to Summ. It refuses a plan
-  that is not from the latest snapshot, or one Summ was written to since. Plan again after it.
+- `decide` adds a plan's decision options to `summ-sync.json`, all or none, and writes nothing to Summ. It needs the latest
+  plan: not from an older snapshot, and made from `summ-sync.json` as it is. Plan again after it.
 - `login` opens the browser to authorise this tool (scope `mcp:read`, or
   `mcp:read mcp:write` with `--write`) and keeps the token in
   `<state dir>/.auth.json` (mode 600).

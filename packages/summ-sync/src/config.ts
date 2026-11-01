@@ -1,5 +1,6 @@
 // <state dir>/summ-sync.json: the sync's settings (docs: README.md).
 
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -101,6 +102,14 @@ export function parseConfig(text: string): Config {
 export function loadConfig(stateDir: string): Config {
   const file = join(stateDir, "summ-sync.json");
   return existsSync(file) ? parseConfig(readFileSync(file, "utf8")) : { ...DEFAULTS };
+}
+
+/** What summ-sync.json holds now, to tell whether a plan was made from it. */
+export function configSha(stateDir: string): string {
+  const file = join(stateDir, "summ-sync.json");
+  return createHash("sha256")
+    .update(existsSync(file) ? readFileSync(file) : "")
+    .digest("hex");
 }
 
 /** config.extraDirs as paths: each is relative to the state dir. */

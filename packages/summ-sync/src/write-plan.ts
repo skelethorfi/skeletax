@@ -8,7 +8,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { extraDirsOf, loadConfig } from "./config.ts";
+import { configSha, extraDirsOf, loadConfig } from "./config.ts";
 import { decisionLines } from "./decisions.ts";
 import {
   type Change,
@@ -358,7 +358,13 @@ export function writePlan(stateDir: string, runDir: string, only?: string): stri
   writeFileSync(
     join(dir, "plan.json"),
     JSON.stringify(
-      { snapshot: snapshot.name, run: resolve(runDir), ...(only ? { scopeFile: resolve(only) } : {}), ...plan },
+      {
+        snapshot: snapshot.name,
+        run: resolve(runDir),
+        configSha: configSha(stateDir),
+        ...(only ? { scopeFile: resolve(only) } : {}),
+        ...plan,
+      },
       null,
       2,
     ) + "\n",
