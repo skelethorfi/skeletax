@@ -343,7 +343,7 @@ export function soldAmount(base: Leg, legs: Leg[]): number {
 
 const hasQuote = (row: Row, type: SummType) => type.quote !== undefined && row.quoteCurrency !== "";
 const typeOf = (row: Row) => summType(row.type) as SummType;
-const txidsOf = (legs: Leg[]) =>
+export const txidsOf = (legs: Leg[]) =>
   legs.flatMap((l) => [...l.description.matchAll(/[0-9a-fA-F]{64}/g)].map((m) => m[0].toLowerCase()));
 
 /** The row's base, quote and fee legs among `legs`, or why the legs do not have the row's shape. */
@@ -1334,7 +1334,8 @@ export function makePlan(input: PlanInput): PlanResult {
     }
     const row = runRows.get(h.id);
     if (row) holdOf.set(h.id, { kind: "hold", filed: isFiled(row.timestamp), id: h.id, reason: h.reason, held: [] });
-    else if (!STABLE_ID.test(h.id) || inScope(h.id.slice(0, 24))) plan.notes.push(`hold: no row ${h.id} in the run`);
+    else if ((!STABLE_ID.test(h.id) || inScope(h.id.slice(0, 24))) && !input.legs.some((l) => l.id === h.id))
+      plan.notes.push(`hold: no row ${h.id} in the run`);
   }
   const manualIn = (actionIds: string[]) =>
     [...new Set(actionIds)].flatMap((a) =>
@@ -1548,7 +1549,7 @@ export function makePlan(input: PlanInput): PlanResult {
   if (input.scope) narrow(plan, input.scope, rows, legsOf, eventOf);
 
   // After the scope: what this plan does is what it leaves behind
-  const { decisions, checks } = decisionsOf(plan, input.legs, rows);
+  const { decisions, checks } = decisionsOf(plan, input.legs, rows, isFiled);
   if (decisions.length) plan.decisions = decisions;
   if (checks.length) plan.checks = checks;
 

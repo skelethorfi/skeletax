@@ -5,9 +5,9 @@
 // Old legs usually hold no txid, so legs are linked by currency, amount and time: strong for exact amounts, not proof.
 
 import type { DeleteManualEntry, Hold } from "./config.ts";
-import { type Plan, sameAmount, sameCurrency, txidsNamedBy } from "./plan.ts";
+import { type Plan, sameAmount, sameCurrency, txidsNamedBy, txidsOf } from "./plan.ts";
 import type { Row } from "./run.ts";
-import type { Leg } from "./snapshot.ts";
+import { type Leg, normaliseTxid } from "./snapshot.ts";
 import { summType } from "./summ-types.ts";
 
 export interface DecisionOption {
@@ -49,12 +49,16 @@ const TRANSFER_IN = new Set(["deposit", "bridgeIn", "failedIn", "spamIn"]);
 const TRANSFER_OUT = new Set(["withdrawal", "bridgeOut", "failedOut", "fee", "approval"]);
 const IGNORED = new Set(["ignoreIn", "ignoreOut"]);
 
+/** Comes in, and acquires nothing even alone. */
+const NOTHING_IN = new Set(["failedIn", "spamIn"]);
+
 const isAcquisition = (trade: string) => !TRANSFER_IN.has(trade) && !IGNORED.has(trade);
 const isDisposal = (trade: string) => !TRANSFER_OUT.has(trade) && !IGNORED.has(trade);
 const gap = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b));
 
 interface Move {
   side: "incoming" | "outgoing";
+  trade: string;
   currency: string;
   amount: number;
 }
@@ -63,10 +67,13 @@ interface Move {
 function movesOf(r: Row): Move[] {
   const type = summType(r.type);
   if (!type) return [];
-  const moves: Move[] = [{ side: type.side, currency: r.baseCurrency, amount: Number(r.baseAmount) }];
+  const moves: Move[] = [
+    { side: type.side, trade: type.trade, currency: r.baseCurrency, amount: Number(r.baseAmount) },
+  ];
   if (r.quoteCurrency)
     moves.push({
       side: type.side === "incoming" ? "outgoing" : "incoming",
+      trade: type.quote ?? "",
       currency: r.quoteCurrency,
       amount: Number(r.quoteAmount),
     });
@@ -82,7 +89,12 @@ function legsMade(r: Row): Move[] {
 const sameMove = (l: Leg, m: Move) => sameCurrency(l.currency, m.currency) && sameAmount(l.quantity, m.amount);
 const legText = (l: Leg) => `${l.trade} ${l.quantity} ${l.currency}`;
 
-export function decisionsOf(plan: Plan, legs: Leg[], rows: Row[]): { decisions: Decision[]; checks: PlanCheck[] } {
+export function decisionsOf(
+  plan: Plan,
+  legs: Leg[],
+  rows: Row[],
+  isFiled: (time: string) => boolean = () => false,
+): { decisions: Decision[]; checks: PlanCheck[] } {
   const deletes = plan.delete.filter((d) => !d.manual);
   const legById = new Map(legs.map((l) => [l.legId, l]));
   const removed = new Set(plan.delete.flatMap((d) => d.legIds));
@@ -92,7 +104,6 @@ export function decisionsOf(plan: Plan, legs: Leg[], rows: Row[]): { decisions: 
   const deleteOfLeg = new Map([...legsOfDelete].flatMap(([d, ls]) => ls.map((l) => [l.legId, d] as const)));
   const uploads = new Set(plan.upload.flatMap((u) => u.ids));
   const heldRows = new Set(plan.held.flatMap((h) => (h.id === null ? [] : [h.id])));
-  /** The type a kept leg ends up with: this plan's change, or the type of the row that took it, unless that row is held. */
   const adopted = new Map(plan.adopted.map((a) => [a.legId, a.id]));
   const rowById = new Map(rows.map((r) => [r.id, r]));
   const rowOfLeg = (l: Leg) => rowById.get(adopted.get(l.legId) ?? l.id);
@@ -101,10 +112,8 @@ export function decisionsOf(plan: Plan, legs: Leg[], rows: Row[]): { decisions: 
       e.changes.filter((c) => c.field === "trade").map((c) => [c.legId as string, String(c.desired)] as const),
     ),
   );
-  const tradeAfter = (l: Leg) => {
-    const row = rowOfLeg(l);
-    return typeChange.get(l.legId) ?? (row && !heldRows.has(row.id) ? (summType(row.type)?.trade ?? l.trade) : l.trade);
-  };
+  /** The type a kept leg ends up with: only what this plan changes, since a retained override or a scope can keep it. */
+  const tradeAfter = (l: Leg) => typeChange.get(l.legId) ?? l.trade;
   const categorisedRows = new Set(plan.categorise.map((e) => e.id));
   const kept = legs.filter(
     (l) => !removed.has(l.legId) && l.side !== "fees" && !IGNORED.has(l.trade) && l.importType !== "soft-transfer",
@@ -127,6 +136,7 @@ export function decisionsOf(plan: Plan, legs: Leg[], rows: Row[]): { decisions: 
         legsMade(r).some(
           (m) =>
             m.side === l.side &&
+            (l.side === "outgoing" ? isDisposal(m.trade) : !NOTHING_IN.has(m.trade)) &&
             (fits(l, m.currency, m.amount, r.timestamp) ||
               // The same amount at about the same time under another name: a ticker the run spells differently
               (sameAmount(l.quantity, m.amount) && gap(r.timestamp, l.timestamp) <= NEAR)),
@@ -137,6 +147,7 @@ export function decisionsOf(plan: Plan, legs: Leg[], rows: Row[]): { decisions: 
       if (k.side !== l.side || !fits(l, k.currency, k.quantity, k.timestamp)) return false;
       const trade = tradeAfter(k);
       if (l.side === "outgoing") return isDisposal(trade);
+      if (NOTHING_IN.has(trade)) return false;
       // A plain receive counts only alone: beside a kept send it is half of a transfer, and acquires nothing
       return (
         isAcquisition(trade) ||
@@ -161,13 +172,13 @@ export function decisionsOf(plan: Plan, legs: Leg[], rows: Row[]): { decisions: 
     .filter((l) => l.side === "outgoing" && isDisposal(l.trade) && !addedBack(l));
   const lostAcquisitions = [...deleteOfLeg.keys()]
     .map((id) => legById.get(id) as Leg)
-    .filter((l) => l.side === "incoming" && !IGNORED.has(l.trade) && !addedBack(l));
+    .filter((l) => l.side === "incoming" && !IGNORED.has(l.trade) && !NOTHING_IN.has(l.trade) && !addedBack(l));
   const dependent = lostAcquisitions.filter((l) => sentOn(l).length);
   /** A row adding what a kept manual leg already acquires. */
   const doubled = rows.flatMap((r) => {
     if (!uploads.has(r.id) && !categorisedRows.has(r.id)) return [];
     return legsMade(r)
-      .filter((m) => m.side === "incoming")
+      .filter((m) => m.side === "incoming" && isAcquisition(m.trade))
       .flatMap((m) =>
         manualKept
           .filter(
@@ -221,11 +232,14 @@ export function decisionsOf(plan: Plan, legs: Leg[], rows: Row[]): { decisions: 
             gap(o.timestamp, l.timestamp) <= NEAR
           )
             addLeg(o);
+        // Hand-typed times can be a day off from what they stand for, but one manual leg is no reason to reach for another
+        const reach = l.importType === "manual" ? NEAR : DAY;
         for (const m of manualKept)
           if (
+            !usedLegs.has(m.legId) &&
             sameCurrency(m.currency, l.currency) &&
             sameAmount(m.quantity, l.quantity) &&
-            gap(m.timestamp, l.timestamp) <= DAY
+            gap(m.timestamp, l.timestamp) <= reach
           ) {
             addLeg(m);
             (keptByAction.get(m.actionId) ?? []).filter((o) => o.importType === "manual").forEach(addLeg);
@@ -237,9 +251,10 @@ export function decisionsOf(plan: Plan, legs: Leg[], rows: Row[]): { decisions: 
       for (const r of [...groupRows.values()]) {
         for (const id of heldManual.get(r.id) ?? []) {
           const m = legById.get(id);
-          if (m && !removed.has(id)) addLeg(m);
+          if (m && !removed.has(id) && !usedLegs.has(id)) addLeg(m);
         }
-        for (const m of manualKept) if (txidsNamedBy(m).some((t) => r.txids.includes(t))) addLeg(m);
+        for (const m of manualKept)
+          if (!usedLegs.has(m.legId) && txidsNamedBy(m).some((t) => r.txids.includes(t))) addLeg(m);
       }
     }
     for (const l of groupLegs.values()) usedLegs.add(l.legId);
@@ -250,10 +265,13 @@ export function decisionsOf(plan: Plan, legs: Leg[], rows: Row[]): { decisions: 
     const manual = ls.filter((l) => l.importType === "manual");
     const groupDeletes = deletes.filter((d) => (legsOfDelete.get(d) as Leg[]).some((l) => ls.includes(l)));
     const disposals = lostDisposals.filter((l) => ls.includes(l));
-    const acquisitions = lostAcquisitions.filter((l) => ls.includes(l) && isAcquisition(l.trade));
+    const acquisitions = lostAcquisitions.filter((l) => ls.includes(l) && (isAcquisition(l.trade) || sentOn(l).length));
     const twice = doubled.filter((d) => ls.includes(d.leg));
     const notGoing = rs.filter((r) => !uploads.has(r.id) && !categorisedRows.has(r.id));
-    const hasLeg = new Set(kept.flatMap((k) => rowOfLeg(k)?.id ?? []));
+    const keptTxids = new Set(kept.map((k) => normaliseTxid(k.id)));
+    const hasLeg = (r: Row) =>
+      kept.some((k) => rowOfLeg(k)?.id === r.id) || r.txids.some((t) => keptTxids.has(t) && !/^0+$/.test(t));
+    const going = rs.filter((r) => uploads.has(r.id) || categorisedRows.has(r.id));
     const held = notGoing.filter((r) => heldRows.has(r.id));
 
     // An old trade whose sold side is a row of the run, and whose bought side the run replaces with another asset
@@ -281,7 +299,9 @@ export function decisionsOf(plan: Plan, legs: Leg[], rows: Row[]): { decisions: 
         `Disposal removed, nothing adds it back: ${legText(l)} (\`${l.id}\`). Its gain or loss goes, and its cost base stays for later disposals.`,
       );
     for (const l of acquisitions.filter((a) => sentOn(a).length || !disposals.length))
-      lines.push(`Acquisition removed, nothing adds it back: ${legText(l)} (\`${l.id}\`).`);
+      lines.push(
+        `${isAcquisition(l.trade) ? "Acquisition" : "Receive"} removed, nothing adds it back: ${legText(l)} (\`${l.id}\`).`,
+      );
     for (const l of acquisitions)
       for (const m of sentOn(l))
         lines.push(
@@ -295,15 +315,42 @@ export function decisionsOf(plan: Plan, legs: Leg[], rows: Row[]): { decisions: 
       (m) => !acquisitions.some((l) => sentOn(l).includes(m)) && !twice.some((d) => d.leg === m),
     );
     for (const m of otherManual) lines.push(`Also kept: manual ${legText(m)} (leg \`${m.legId}\`).`);
-    if (held.length)
+    if (held.length) {
+      const noTxid = groupDeletes.length && groupDeletes.every((d) => !d.txids?.length);
       lines.push(
-        `Rows held, so not uploaded: ${held.map((r) => `\`${r.id}\``).join(", ")}.${groupDeletes.length ? ` These deletes still go: ${groupDeletes.map((d) => `\`${d.summId}\``).join(", ")}: they name no txid, so the hold does not reach them.` : ""}`,
+        `Rows held, so not uploaded: ${held.map((r) => `\`${r.id}\``).join(", ")}.${groupDeletes.length ? ` These deletes still go: ${groupDeletes.map((d) => `\`${d.summId}\``).join(", ")}${noTxid ? ": they name no txid, so the hold does not reach them" : ""}.` : ""}`,
       );
-    const outside = notGoing.filter((r) => !heldRows.has(r.id) && !hasLeg.has(r.id));
+    }
+    for (const o of plan.overridden)
+      if (o.override.field === "trade" && rs.some((r) => r.id === o.override.id))
+        lines.push(
+          `Your value stays on row \`${o.override.id}\`: type ${o.override.summ}, where the run has ${o.override.run}. Its \`retainUserEdit\` decides that.`,
+        );
+    const outside = notGoing.filter((r) => !heldRows.has(r.id) && !hasLeg(r));
     if (outside.length) lines.push(`Rows not in this plan: ${outside.map((r) => `\`${r.id}\``).join(", ")}.`);
     lines.push(
       "Linked by currency, amount and time, not by txid. No gain is computed here: Summ shows the effect only after a recalculation.",
     );
+
+    // What the plan refuses to delete an entry beside: every manual leg in its action or naming its txids, fee legs too
+    const named = new Map(manual.map((m) => [m.legId, m]));
+    for (let grew = named.size > 0; grew;) {
+      grew = false;
+      const entries = [...named.values()];
+      const txids = new Set([...txidsOf(entries), ...entries.flatMap(txidsNamedBy)].filter((t) => !/^0+$/.test(t)));
+      for (const o of legs)
+        if (
+          o.importType === "manual" &&
+          !removed.has(o.legId) &&
+          !named.has(o.legId) &&
+          (entries.some((m) => m.actionId === o.actionId) || txidsNamedBy(o).some((t) => txids.has(t)))
+        ) {
+          named.set(o.legId, o);
+          grew = true;
+        }
+    }
+    const toName = [...named.values()];
+    const spans = new Set(toName.map((m) => isFiled(m.timestamp))).size > 1;
 
     const reason = swap
       ? `the run exports this swap as ${swap.sold.currency} -> ${swap.into.currency}`
@@ -313,10 +360,9 @@ export function decisionsOf(plan: Plan, legs: Leg[], rows: Row[]): { decisions: 
         ? {
             key: "a",
             title: "The run is right, and the manual entries were stand-ins: delete them.",
-            result:
-              "The next plan deletes these entries with the old rows and goes ahead with the run's rows. Summ has no undo for a delete; apply saves each entry first.",
+            result: `The next plan deletes these entries with the old rows and goes ahead with the run's rows. Summ has no undo for a delete; apply saves each entry first.${spans ? " These span filed and current years, and a plan takes one kind at a time: name each kind in turn." : ""}`,
             config: {
-              deleteManualEntries: manual.map((m) => ({
+              deleteManualEntries: toName.map((m) => ({
                 legId: m.legId,
                 currency: m.currency,
                 quantity: m.quantity,
@@ -326,17 +372,17 @@ export function decisionsOf(plan: Plan, legs: Leg[], rows: Row[]): { decisions: 
           }
         : {
             key: "a",
-            title: "The plan is right: nothing depends on what it removes.",
+            title: "The plan is right: this is meant to go.",
             result: "Nothing to add: apply the plan as it is.",
             config: {},
           },
       {
         key: "b",
         title: "Keep what Summ has for now.",
-        result: "The next plan leaves these old rows alone, until the holds are removed.",
+        result: "The next plan leaves these old rows and the run's rows alone, until the holds are removed.",
         config: {
-          hold: groupDeletes.map((d) => ({
-            id: d.id ?? d.summId,
+          hold: [...new Set([...groupDeletes.map((d) => d.id ?? d.summId), ...going.map((r) => r.id)])].map((id) => ({
+            id,
             reason: `kept beside what depends on it: ${reason}`,
           })),
         },
@@ -350,16 +396,17 @@ export function decisionsOf(plan: Plan, legs: Leg[], rows: Row[]): { decisions: 
           ? "lost-acquisition"
           : "acquired-twice";
     const date = [...ls].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))[0].timestamp.slice(0, 10);
+    const boughtSentOn = acquisitions.find((l) => isAcquisition(l.trade) && sentOn(l).length);
     const titles: Record<Decision["kind"], string> = {
       "swap-changed": `a swap changed from ${swap?.bought.currency} to ${swap?.into.currency}`,
-      "lost-disposal": `a disposal of ${disposals[0]?.currency} is removed${acquisitions.some((l) => sentOn(l).length) ? `, and the ${acquisitions[0]?.currency} it bought is sent on` : ""}`,
-      "lost-acquisition": `an acquisition of ${acquisitions[0]?.currency} is removed and sent on`,
+      "lost-disposal": `a disposal of ${disposals[0]?.currency} is removed${boughtSentOn ? `, and the ${boughtSentOn.currency} it bought is sent on` : ""}`,
+      "lost-acquisition": `${isAcquisition(acquisitions[0]?.trade ?? "") ? "an acquisition" : "a receive"} of ${acquisitions[0]?.currency} is removed and sent on`,
       "acquired-twice": `${twice[0]?.leg.currency} is acquired twice`,
     };
     return {
       id,
       kind,
-      filed: ls.some((l) => deleteOfLeg.has(l.legId) && plan.delete.find((d) => d.legIds.includes(l.legId))?.filed),
+      filed: (toName.length ? toName : ls).some((l) => isFiled(l.timestamp)),
       title: `${date}: ${titles[kind]}`,
       lines,
       options,
