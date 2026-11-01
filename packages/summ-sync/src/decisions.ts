@@ -145,17 +145,25 @@ export function decisionsOf(
   const rowFits = (l: Leg, r: Row, m: Move) =>
     fits(l, m.currency, m.amount, r.timestamp) ||
     (sameAmount(l.quantity, m.amount) && gap(r.timestamp, l.timestamp) <= NEAR);
-  /** Whether a row's plain receive is half of a transfer: a send of the same in the rows going ahead. */
-  const sentByRow = (r: Row, m: Move) =>
+  /** Whether a row's plain receive is half of a transfer: a send of the same, in the rows going ahead or kept in Summ. */
+  const sentElsewhere = (r: Row, m: Move) =>
     (m.trade === "deposit" || m.trade === "bridgeIn") &&
-    rows.some(
+    (rows.some(
       (o) =>
         uploads.has(o.id) &&
         gap(o.timestamp, r.timestamp) <= NEAR &&
         legsMade(o).some(
           (x) => x.side === "outgoing" && sameCurrency(x.currency, m.currency) && sameAmount(x.amount, m.amount),
         ),
-    );
+    ) ||
+      kept.some(
+        (k) =>
+          k.side === "outgoing" &&
+          TRANSFER_OUT.has(k.trade) &&
+          sameCurrency(k.currency, m.currency) &&
+          sameAmount(k.quantity, m.amount) &&
+          gap(k.timestamp, r.timestamp) <= NEAR,
+      ));
   /** What has already added something back: each can do so once, so two removed sells need two rows. */
   const claimed = new Set<string>();
 
@@ -164,7 +172,7 @@ export function decisionsOf(
     uploads.has(r.id) &&
     m.side === l.side &&
     rowFits(l, r, m) &&
-    (l.side === "outgoing" ? isDisposal(m.trade) : !NOTHING_IN.has(m.trade) && !sentByRow(r, m));
+    (l.side === "outgoing" ? isDisposal(m.trade) : !NOTHING_IN.has(m.trade) && !sentElsewhere(r, m));
   /** Whether a kept leg stands for this one, by the type it ends up with. */
   const keptAddsBack = (l: Leg, k: Leg) => {
     if (k.side !== l.side || !fits(l, k.currency, k.quantity, k.timestamp)) return false;
@@ -207,9 +215,11 @@ export function decisionsOf(
     .map((id) => legById.get(id) as Leg)
     .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
   const lostDisposals = removedInOrder.filter((l) => l.side === "outgoing" && isDisposal(l.trade) && !addedBack(l));
-  const lostAcquisitions = removedInOrder.filter(
-    (l) => l.side === "incoming" && !IGNORED.has(l.trade) && !NOTHING_IN.has(l.trade) && !addedBack(l),
-  );
+  // What acquires takes what can replace it before a plain receive does
+  const lostAcquisitions = [
+    ...removedInOrder.filter((l) => isAcquisition(l.trade)),
+    ...removedInOrder.filter((l) => !isAcquisition(l.trade)),
+  ].filter((l) => l.side === "incoming" && !IGNORED.has(l.trade) && !NOTHING_IN.has(l.trade) && !addedBack(l));
   const dependent = lostAcquisitions.filter((l) => sentOn(l).length);
   /** A row adding what a kept manual leg already acquires. */
   const doubled = rows.flatMap((r) => {
@@ -431,7 +441,7 @@ export function decisionsOf(
         : {
             key: "a",
             title: "The plan is right: this is meant to go.",
-            result: `Nothing to add: apply the plan as it is.${held.length ? " Its rows stay held for a manual entry elsewhere: the rest goes without them." : ""}`,
+            result: `Nothing to add: apply the plan as it is.${held.length ? " Its rows stay held: the rest goes without them." : ""}`,
             config: {},
           },
       {

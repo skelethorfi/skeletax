@@ -580,8 +580,8 @@ ticker within 5 minutes counts too. Each row side or kept leg adds back one leg,
 goes by type. For a disposal: a type that disposes, not a send, bridge, failed send, fee, approval, or a move into staking,
 collateral, a position or a repayment, whose treatment is Summ's. A kept leg goes by its type after this plan's edit or
 categorisation, and not by what the run has, since an override or a scope can keep its type. For something coming in: anything
-but spam or a failed receive; a kept plain receive only with no send kept beside it, and a row's only with no row going ahead
-sending the same, since it is then half of a transfer. A held row adds nothing, nor does a row outside the scope, a made-up or
+but spam or a failed receive; a kept plain receive only with no send kept beside it, and a row's only with no send of the same going ahead or kept
+within 5 minutes, since it is then half of a transfer. A held row adds nothing, nor does a row outside the scope, a made-up or
 ignored leg, a fee leg, or a bridge's quote, which only names the other asset. A decision is opened by:
 
 - a disposal removed with nothing to add it back: its gain or loss goes;
