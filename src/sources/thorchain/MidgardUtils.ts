@@ -24,6 +24,11 @@ export function memoDestination(memo: string, field: number): string | undefined
   return memo.split(":")[field]?.split("/")[0] || undefined;
 }
 
+// The refund address a memo's field gives after its destination (DESTADDR/REFUNDADDR), when it gives one
+export function memoRefundAddress(memo: string, field: number): string | undefined {
+  return memo.split(":")[field]?.split("/")[1] || undefined;
+}
+
 export function toMidgardNanoTimestamp(date: Date): string {
   return (date.getTime() * 1000000).toString();
 }

@@ -1,5 +1,5 @@
 {
-  "description": "swap/swap success: [BSC.USDT-0X55D398326F99059FF775485246999027B3197955] -> [LTC.LTC, THOR.RUNE], memo destination given as DESTADDR/REFUNDADDR",
+  "description": "swap/swap success: [BSC.USDT-0X55D398326F99059FF775485246999027B3197955] -> [LTC.LTC, THOR.RUNE]",
   "source": "midgard",
   "wallet": "0x77f8acf312258da7e475d1992bbc70ba0df14ef7",
   "data": {
@@ -184,5 +184,10 @@
       "gasUsed": "0xe2f6",
       "effectiveGasPrice": "0x0"
     }
-  ]
+  ],
+  "usdPrices": {
+    "BSC.BNB": "740.5259897987672",
+    "BSC.USDT-0X55D398326F99059FF775485246999027B3197955": "0.8484876333137699",
+    "LTC.LTC": "60.261766001865155"
+  }
 }

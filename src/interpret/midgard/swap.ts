@@ -3,7 +3,12 @@ import type { Activity, Leg, Price } from "../../domain/Activity.ts";
 import { formatAmount, parseAmount } from "../../domain/Amount.ts";
 import { type Asset, toAsset } from "../../domain/Asset.ts";
 import type { Issue } from "../../domain/Issue.ts";
-import { getActionDate, memoDestination, parseMidgardAsset } from "../../sources/thorchain/MidgardUtils.ts";
+import {
+  getActionDate,
+  memoDestination,
+  memoRefundAddress,
+  parseMidgardAsset,
+} from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { inboundGas } from "./gas.ts";
@@ -78,7 +83,7 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
       ? [
           {
             direction: "in",
-            wallet: input.address,
+            wallet: returnWallet(input, returnOutputs[0]),
             asset: inputAsset,
             amount: amount({ asset: inputCoin.asset, amount: returned.toString() }),
             role: "returned",
@@ -279,14 +284,22 @@ function getPrices(action: Action, inputAsset: string, outputAsset: string): Pri
   return prices;
 }
 
-// The outputs, other than the swap output, that return the input asset to the sender
+// The sender, as Midgard spells it in the input, unless the return went to another address (a memo's refund address)
+function returnWallet(input: Transaction, out: Transaction): string {
+  return out.address.toLowerCase() === input.address.toLowerCase() ? input.address : out.address;
+}
+
+// The outputs, other than the swap output, that return the input asset to the sender, or to the refund address the
+// memo gives after its destination (docs/specs/activity.md, The memo's destination)
 function getReturnOutputs(action: Action, input: Transaction, output: Transaction): Transaction[] {
   const inputAsset = input.coins[0].asset;
+  const refund = memoRefundAddress(action.metadata.swap?.memo ?? "", SWAP_DESTADDR);
+  const returnAddresses = [input.address, refund].filter(Boolean).map((address) => address!.toLowerCase());
 
   return action.out.filter(
     (out) =>
       out !== output &&
-      out.address.toLowerCase() === input.address.toLowerCase() &&
+      returnAddresses.includes(out.address.toLowerCase()) &&
       out.coins.some((coin) => coin.asset === inputAsset),
   );
 }

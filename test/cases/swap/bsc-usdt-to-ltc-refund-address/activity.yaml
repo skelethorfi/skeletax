@@ -46,4 +46,19 @@ prices:
       kind: native
     usd: "60.50443501380249"
     source: midgard:swap.outPriceUSD
+  - asset:
+      notation: BSC.USDT-0X55D398326F99059FF775485246999027B3197955
+      kind: token
+    usd: "0.8484876333137699"
+    source: midgard:history.depths
+  - asset:
+      notation: LTC.LTC
+      kind: native
+    usd: "60.261766001865155"
+    source: midgard:history.depths
+  - asset:
+      notation: BSC.BNB
+      kind: native
+    usd: "740.5259897987672"
+    source: midgard:history.depths
 details: {}
