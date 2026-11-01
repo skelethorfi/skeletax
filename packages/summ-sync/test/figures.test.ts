@@ -106,7 +106,7 @@ interface Fake {
   hidden?: number | null;
   expenses?: string | null;
   /** Summary of the whole range, when it differs from the rows. */
-  wholeIncome?: number;
+  wholeIncome?: number | string | null;
 }
 
 const apiRow = (over: Record<string, unknown>) => ({
@@ -161,7 +161,7 @@ function fakeSumm(fake: Fake) {
         totalCapitalGains: String(
           (inside.length ? fake.gains : undefined) ?? inside.reduce((s, r) => s + (r.gain as number), 0),
         ),
-        totalIncome: isWhole && fake.wholeIncome !== undefined ? String(fake.wholeIncome) : "0",
+        totalIncome: isWhole && fake.wholeIncome !== undefined ? fake.wholeIncome : "0",
         totalExpenses: fake.expenses === undefined ? "0" : fake.expenses,
         zeroCostBuysTop:
           (inside.length ? fake.top : undefined) ??
@@ -239,6 +239,8 @@ for (const [name, fake, pattern] of [
   ["a row read twice in place of another", { rows: [apiRow({}), apiRow({})] }, /run it again/],
   ["zero-cost rows that are not Summ's list", { top: [{ symbol: "RUNE", gain: 9 }] }, /zero-cost RUNE/],
   ["income in no year", { wholeIncome: 50 }, /whole range/],
+  ["a whole range with no income figure", { wholeIncome: null }, /whole range/],
+  ["a whole range with an empty income figure", { wholeIncome: "" }, /whole range/],
   ["a row with no leg", { rows: [apiRow({ sellUid: "" })] }, /not what this version reads/],
   ["a row with no gain", { rows: [apiRow({ gain: null })] }, /not what this version reads/],
   ["a row with no date", { rows: [apiRow({ sellTime: "soon" })] }, /not what this version reads/],
