@@ -260,6 +260,10 @@ test("apply refuses a plan from an older config until it has written, and goes o
   // Begun, but a run without its flag wrote nothing
   writeFileSync(join(dir, "apply-log.jsonl"), `${JSON.stringify(start)}\n`);
   assert.throws(() => startState(dir, file, "p", sha, flags), refused);
+  // Finished with nothing to write: still complete
+  const stop = { ...start, call: "apply-stop", reason: "complete" };
+  writeFileSync(join(dir, "apply-log.jsonl"), `${JSON.stringify(start)}\n${JSON.stringify(stop)}\n`);
+  assert.equal(startState(dir, file, "p", sha, flags), "complete");
   const wrote = { ...start, call: "edit_transaction", kind: "edit", entry: "e", result: "ok" };
   writeFileSync(join(dir, "apply-log.jsonl"), `${JSON.stringify(start)}\n${JSON.stringify(wrote)}\n`);
   assert.equal(startState(dir, file, "p", sha, flags), "resume");

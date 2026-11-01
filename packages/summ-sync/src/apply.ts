@@ -197,13 +197,13 @@ export function startState(
   const sameFlags = (was: Flags | undefined) =>
     was?.approveDeletes === flags.approveDeletes && was?.approveFiled === flags.approveFiled;
   const wrote = lines.find((l) => l.plan === planName && isWriteLine(l));
-  if (!wrote) checkConfig();
   if (wrote && !sameFlags(flagsOf(wrote.run)))
     throw new Error(
       `${planName} was applied with ${JSON.stringify(flagsOf(wrote.run))}, not ${JSON.stringify(flags)}: pull and plan again`,
     );
   const finished = lines.filter((l) => l.plan === planName && l.call === "apply-stop" && l.reason === "complete");
   if (finished.some((l) => sameFlags(flagsOf(l.run)))) return "complete";
+  if (!wrote) checkConfig();
   const takenAt = checkLatest(stateDir, plan);
   const runs = new Set(starts.map((l) => l.run));
   const foreign = lines.filter((l) => l.time > takenAt && isWriteLine(l) && !(l.plan === planName && runs.has(l.run)));
