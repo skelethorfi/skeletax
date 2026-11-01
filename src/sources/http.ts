@@ -7,6 +7,8 @@ import axiosThrottle from "axios-request-throttle";
 // limits. Retries are withRetry's, around each store fetch.
 // Typed as axios's CommonJS declarations, which the xchainjs clients and the throttle (CommonJS packages) name;
 // this module gets the ES module ones, a separate but identical type. It is the same instance either way.
+// The xchainjs clients pin axios exactly, so upgrade axios and xchainjs together: a mismatch installs a second
+// axios for them, and this cast would hide it.
 export const http = axios.create({ timeout: 60_000 }) as unknown as CjsAxiosInstance;
 
 type CjsAxiosInstance = import("axios", { with: { "resolution-mode": "require" } }).AxiosInstance;
