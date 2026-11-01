@@ -2,6 +2,7 @@
 // calls nothing; the CLI (writePlan) reads the inputs and writes the plan. Spec: docs/specs/summ-sync.md.
 
 import type { Config, Hold } from "./config.ts";
+import { type Decision, decisionsOf, type PlanCheck } from "./decisions.ts";
 import { before, inPeriod } from "./dates.ts";
 import { parseCsvLine, periodsOf, type Row, type RunFile } from "./run.ts";
 import { type Leg, normaliseTxid } from "./snapshot.ts";
@@ -225,6 +226,9 @@ export interface Plan {
   held: HeldEntry[];
   overridden: OverriddenEntry[];
   notes: string[];
+  /** What the deletes leave behind, with the options: reported, and changing nothing in the plan. */
+  decisions?: Decision[];
+  checks?: PlanCheck[];
 }
 
 export interface PlanResult {
@@ -275,7 +279,7 @@ export function same(field: string, a: Value, b: Value): boolean {
   return String(a).toLowerCase() === String(b).toLowerCase();
 }
 
-const sameCurrency = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+export const sameCurrency = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 /** The wallet of the leg's side: the sender of an outgoing leg, the receiver of an incoming one. */
 const sameWallet = (leg: Leg, row: Row) =>
   leg.side === "outgoing" ? sameCurrency(leg.from, row.from) : sameCurrency(leg.to, row.to);
@@ -1543,6 +1547,11 @@ export function makePlan(input: PlanInput): PlanResult {
 
   if (input.scope) narrow(plan, input.scope, rows, legsOf, eventOf);
 
+  // After the scope: what this plan does is what it leaves behind
+  const { decisions, checks } = decisionsOf(plan, input.legs, rows);
+  if (decisions.length) plan.decisions = decisions;
+  if (checks.length) plan.checks = checks;
+
   if (unmappedChains.size)
     plan.notes.push(`Blockchain not compared (no Summ id in src/summ-types.ts): ${[...unmappedChains].join(", ")}`);
   plan.counts = {
@@ -1561,6 +1570,7 @@ export function makePlan(input: PlanInput): PlanResult {
     reports: plan.report.length,
     held: plan.held.length,
     overridden: plan.overridden.length,
+    ...(decisions.length ? { decisions: decisions.length } : {}),
     ...(input.scope ? { scopedRows: rows.filter((r) => scopeMatch(input.scope as string[], r)).length } : {}),
   };
   return { plan, adopted, overrides, rows };

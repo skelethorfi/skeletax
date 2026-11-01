@@ -9,6 +9,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { extraDirsOf, loadConfig } from "./config.ts";
+import { decisionLines } from "./decisions.ts";
 import {
   type Change,
   type DeleteEntry,
@@ -128,6 +129,7 @@ export function renderPlan(plan: Plan, snapshot: string, run: string, legs: Map<
     ...Object.entries(plan.counts).map(([k, v]) => `- ${k}: ${v}`),
     ...plan.notes.map((n) => `- Note: ${n}`),
     "",
+    ...decisionLines(plan.decisions ?? [], plan.checks ?? []),
     ...section(
       "Superseded extra rows (a run row is the same event; not uploaded, their legs adopt to it)",
       plan.superseded.map((e) => ({ ...e, filed: false })),
@@ -372,6 +374,7 @@ export function writePlan(stateDir: string, runDir: string, only?: string): stri
       .map(([k, v]) => `${k}: ${v}`)
       .join(", "),
   );
+  if (plan.decisions?.length) console.log(`${plan.decisions.length} decisions to read first: see plan.md`);
   console.log(`Plan written to ${dir}`);
   return dir;
 }
