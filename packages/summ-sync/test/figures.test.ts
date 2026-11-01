@@ -30,6 +30,7 @@ const row = (over: Partial<FigureRow> & { sellUid: string; gain: number }): Figu
   buyTime: "2022-01-01T00:00:00.000Z",
   cost: 1,
   proceeds: 1 + over.gain,
+  isLongTerm: false,
   inTradeType: "buy",
   outTradeType: "sell",
   sellTxHash: `tx-${over.sellUid}`,
@@ -57,6 +58,15 @@ const data = (rows: FigureRow[], updatedAt = COMPUTED, income = 0): Figures => (
   rows,
 });
 const LATER = "2024-02-02T00:00:00.000Z";
+
+test("tax years follow a clock change: the start is local midnight in that year's offset", () => {
+  const years = taxYears("04-06", "Europe/London", NOW);
+  const y = years.find((v) => v.year === 2023) as { from: number; to: number };
+  assert.equal(new Date(y.from).toISOString(), "2022-04-05T23:00:00.000Z");
+  assert.equal(new Date(y.to).toISOString(), "2023-04-05T22:59:59.999Z");
+  const winter = taxYears("01-01", "Europe/London", NOW).find((v) => v.year === 2023) as { from: number };
+  assert.equal(new Date(winter.from).toISOString(), "2023-01-01T00:00:00.000Z");
+});
 
 test("tax years end one millisecond before the next starts, in the account's timezone", () => {
   const years = taxYears(FY, TZ, NOW);
@@ -93,7 +103,7 @@ interface Fake {
   gains?: number;
   totalRows?: number;
   top?: { symbol: string; gain: number }[];
-  hidden?: number;
+  hidden?: number | null;
   /** Summary of the whole range, when it differs from the rows. */
   wholeIncome?: number;
 }
@@ -109,6 +119,7 @@ const apiRow = (over: Record<string, unknown>) => ({
   cost: 1,
   proceeds: 3,
   gain: 2,
+  isLongTerm: false,
   inTradeType: "buy",
   outTradeType: "sell",
   sellTxHash: "t1",
@@ -146,15 +157,17 @@ function fakeSumm(fake: Fake) {
       );
       const isWhole = to - from > 2 * 366 * 86_400_000;
       return block({
-        totalCapitalGains: String(fake.gains ?? inside.reduce((s, r) => s + (r.gain as number), 0)),
+        totalCapitalGains: String(
+          (inside.length ? fake.gains : undefined) ?? inside.reduce((s, r) => s + (r.gain as number), 0),
+        ),
         totalIncome: isWhole && fake.wholeIncome !== undefined ? String(fake.wholeIncome) : "0",
         totalExpenses: "0",
         zeroCostBuysTop:
-          fake.top ??
+          (inside.length ? fake.top : undefined) ??
           inside
             .filter((r) => r.error)
             .map((r) => ({ symbol: (r.currencyIdentifier as { symbol: string }).symbol, gain: r.gain })),
-        zeroCostBuysHiddenCount: fake.hidden ?? 0,
+        zeroCostBuysHiddenCount: fake.hidden === undefined ? 0 : fake.hidden,
       });
     },
   };
@@ -225,6 +238,11 @@ for (const [name, fake, pattern] of [
   ["a row read twice in place of another", { rows: [apiRow({}), apiRow({})] }, /run it again/],
   ["zero-cost rows that are not Summ's list", { top: [{ symbol: "RUNE", gain: 9 }] }, /zero-cost RUNE/],
   ["income in no year", { wholeIncome: 50 }, /whole range/],
+  ["a row with no leg", { rows: [apiRow({ sellUid: "" })] }, /not what this version reads/],
+  ["a row with no gain", { rows: [apiRow({ gain: null })] }, /not what this version reads/],
+  ["a row with no date", { rows: [apiRow({ sellTime: "soon" })] }, /not what this version reads/],
+  ["a row with no holding period", { rows: [apiRow({ isLongTerm: undefined })] }, /not what this version reads/],
+  ["a summary with no zero-cost count", { hidden: null }, /summary is not/],
 ] as [string, Fake, RegExp][]) {
   test(`figures refuses ${name}, and writes nothing`, async () => {
     const dir = stateDir();
@@ -250,6 +268,34 @@ test("figures refuses while an apply holds the lock, and with no tax year set", 
   writeFileSync(join(locked, ".lock"), "1");
   await assert.rejects(run(locked), /lock/);
   await assert.rejects(run(stateDir({ timezone: TZ })), /taxYearStart/);
+});
+
+test("figures refuses a log line or a lock that appears during the read", async () => {
+  for (const [name, pattern] of [
+    ["apply-log.jsonl", /grew during/],
+    [".lock", /lock/],
+  ] as [string, RegExp][]) {
+    const dir = stateDir();
+    const client = fakeSumm({});
+    const real = client.callTool;
+    client.callTool = async (tool, args) => {
+      if (tool === "get_tax_report") {
+        const line = JSON.stringify({ call: "skip", time: "2020-01-01T00:00:00.000Z" }) + "\n";
+        writeFileSync(join(dir, name), line);
+      }
+      return real(tool, args);
+    };
+    await assert.rejects(figures(dir, { client, now: NOW }), pattern);
+    noFile(dir);
+  }
+});
+
+test("a report with no page count stops rather than paging for ever", async () => {
+  const client = fakeSumm({});
+  const real = client.callTool;
+  client.callTool = async (name, args) =>
+    args.view === "detailed" ? '```json\n{"rows":[],"totalRows":0}\n```' : real(name, args);
+  await assert.rejects(figures(stateDir(), { client, now: NOW }), /no row or page count/);
 });
 
 test("figures refuses an answer that is no report", async () => {
@@ -301,6 +347,38 @@ test("a disposal that moved shows its gain, by currency, largest first; under a 
   assert.match(
     md,
     /changed \+21\.00, under a cent each \+0\.01|changed \+21\.00, under a cent each \+0\.00|changed \+21\.00/,
+  );
+});
+
+test("a holding period that flips shows at the same gain and quantity", () => {
+  const c = compareFigures(
+    data([row({ sellUid: "a", gain: 1, quantity: 2 })]),
+    data([row({ sellUid: "a", gain: 1, quantity: 2, isLongTerm: true })], LATER),
+  );
+  assert.equal(c.changed.length, 1);
+  assert.match(compareMarkdown(c, "x", "y"), /long-term quantity 0 to 2/);
+});
+
+test("a gain moved by exactly a cent counts as moved", () => {
+  const c = compareFigures(data([row({ sellUid: "a", gain: 10 })]), data([row({ sellUid: "a", gain: 10.01 })], LATER));
+  assert.equal(c.changed.length, 1);
+});
+
+test("a replaced pair zero-cost on both sides is no change; one that lost its cost is", () => {
+  const zero = { error: "zeroCostBuy", buyUid: undefined, sellTime: "2023-02-02T00:00:00.000Z" };
+  const same = compareFigures(
+    data([row({ sellUid: "o", gain: 1, ...zero })]),
+    data([row({ sellUid: "n", gain: 1, ...zero })], LATER),
+  );
+  assert.equal(same.replaced.length, 1);
+  assert.deepEqual(same.zeroCost, []);
+  const worse = compareFigures(
+    data([row({ sellUid: "o", gain: 1, sellTime: zero.sellTime })]),
+    data([row({ sellUid: "n", gain: 1, ...zero })], LATER),
+  );
+  assert.deepEqual(
+    worse.zeroCost.map((z) => [z.before, z.after]),
+    [[0, 1]],
   );
 });
 
@@ -472,6 +550,17 @@ test("runCompare writes its report beside the figures, and reads files by name",
   assert.throws(() => runCompare(dir, "nope", name(second)), /no figures file/);
 });
 
-test("apply's note names a state with no figures", () => {
+test("apply's note names a state with no figures, counts log lines since, and survives a bad file", async () => {
   assert.match(figuresNote(stateDir()), /No figures yet/);
+  const dir = stateDir();
+  const file = await run(dir);
+  writeFileSync(
+    join(dir, "apply-log.jsonl"),
+    JSON.stringify({ time: "2999-01-01T00:00:00.000Z", call: "skip" }) + "\n",
+  );
+  assert.match(figuresNote(dir), /1 apply-log lines since/);
+  for (const bad of ["", "{", "null"]) {
+    writeFileSync(file, bad);
+    assert.match(figuresNote(dir), /cannot be read/);
+  }
 });

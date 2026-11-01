@@ -987,9 +987,10 @@ id (`sellUid`), and its rows sum to the report's totals.
 
 - while `.lock` is held;
 - unless Summ's computation status is `success`, and its `updatedAt`, when that computation started, is later than the
-  apply log's last line of any kind (at worst, one needless recalculation). A write in Summ's own app is not in the
-  log, so only the status guards against one;
-- unless the status, `updatedAt` and log are the same after the read;
+  apply log's last line of any kind (at worst, one needless recalculation). A write in Summ's own app and an upload
+  are not in the log, so recalculate last;
+- unless the status, `updatedAt` and the log's length are the same after the read;
+- on a row or summary whose fields are not as expected;
 - unless the rows' unique ids equal the report's count (rows can shift between pages, which a sum can miss);
 - unless each tax year's rows, by `sellTime`, sum to its `totalCapitalGains` within a cent, and its zero-cost rows by
   symbol to `zeroCostBuysTop` (when none are hidden);
@@ -1009,11 +1010,12 @@ by disposal leg. It reports:
 2. Zero-cost parcels: each leg whose quantity with Summ's `zeroCostBuy` mark moved, as a leg can be only partly
    zero-cost. By the mark, never by a cost of 0: some zero-cost rows carry a fee as cost, and some costless rows have no mark.
 3. Disposals gone and new. A new leg of the same currency, time and quantity as a gone one is shown as replaced, one to
-   one, with the gain difference: a hint, not proof.
-4. Kept disposals whose gain (by a cent), quantity, type or year moved, by currency, largest first.
+   one, with the gain difference: a hint, not proof. A replaced pair counts as one leg in the zero-cost list.
+4. Kept disposals whose gain (by a cent), quantity, long-term quantity, type or year moved, by currency, largest
+   first. The holding period can change a disposal's tax with no change in its gain.
 5. Acquisitions (`buyUid`) used before and not after, and the reverse: a hint at the cause.
 
-`figures` runs before an apply and again after recalculating. apply prints the latest figures' time and the log lines
+`figures` runs before a pull and plan, and again after the last recalculation. apply prints the latest figures' time and the log lines
 since, and gates nothing on it.
 
 Limits:
@@ -1021,6 +1023,9 @@ Limits:
 - Past applies have no figures from before them, so they cannot be compared.
 - An acquisition lost on an asset not yet sold moves no disposal: nothing shows until it is sold.
 - Only zero-cost warnings are by leg. Missing prices and negative balances are not covered. Income and expenses are by year.
+- Status after an upload or a write in Summ's app is not known to change, so those are not refused: a figures file
+  read before the recalculation that follows them reads as current.
+- `timezone` defaults to UTC, which passes every check while a leg near a year's edge lands in the wrong year; figures prints the one it used.
 - It says what moved, not why: Summ's own changes, such as a price, read the same as the plan's.
 
 ## Not done here

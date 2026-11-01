@@ -32,6 +32,7 @@ export interface FigureRow {
   cost: number;
   proceeds: number;
   gain: number;
+  isLongTerm: boolean;
   error?: string;
   inTradeType: string;
   outTradeType: string;
@@ -87,7 +88,15 @@ function reportJson(text: string): Record<string, unknown> {
 
 /** A disposal's row as a figures file keeps it. */
 function figureRow(row: Record<string, unknown>): FigureRow {
-  const currency = row.currencyIdentifier as { id?: string; symbol?: string };
+  const currency = (row.currencyIdentifier ?? {}) as { id?: string; symbol?: string };
+  const fine =
+    typeof row.sellUid === "string" &&
+    row.sellUid !== "" &&
+    typeof currency.symbol === "string" &&
+    [row.quantity, row.cost, row.proceeds, row.gain].every(Number.isFinite) &&
+    Number.isFinite(Date.parse(row.sellTime as string)) &&
+    typeof row.isLongTerm === "boolean";
+  if (!fine) throw new Error(`figures: a row is not what this version reads: ${JSON.stringify(row).slice(0, 300)}`);
   return {
     sellUid: row.sellUid as string,
     ...(row.buyUid ? { buyUid: row.buyUid as string } : {}),
@@ -99,6 +108,7 @@ function figureRow(row: Record<string, unknown>): FigureRow {
     cost: row.cost as number,
     proceeds: row.proceeds as number,
     gain: row.gain as number,
+    isLongTerm: row.isLongTerm as boolean,
     ...(row.error ? { error: row.error as string } : {}),
     inTradeType: row.inTradeType as string,
     outTradeType: row.outTradeType as string,
@@ -144,6 +154,7 @@ export async function figures(
   }
   await client.connect();
   const before = await currentComputation(client, stateDir);
+  const logLines = readLogLines(stateDir).length;
 
   const years = taxYears(config.taxYearStart, config.timezone, now);
   const iso = (t: number) => new Date(t).toISOString();
@@ -167,6 +178,9 @@ export async function figures(
       rows.push(figureRow(row));
     }
     total = report.totalRows as number;
+    if (!Number.isInteger(report.totalPages) || !Number.isInteger(total)) {
+      throw new Error("figures: Summ's report gave no row or page count");
+    }
     process.stdout.write(`\r  page ${page}/${report.totalPages}   `);
     if (page >= (report.totalPages as number)) break;
   }
@@ -201,11 +215,17 @@ export async function figures(
       income: Number(report.totalIncome),
       expenses: Number(report.totalExpenses),
     };
+    if (
+      typeof report.zeroCostBuysHiddenCount !== "number" ||
+      ![year.capitalGains, year.income, year.expenses].every(Number.isFinite)
+    ) {
+      throw new Error(`figures: ${y.year}'s summary is not what this version reads`);
+    }
     const sum = yearRows.reduce((s, r) => s + r.gain, 0);
     if (!near(sum, year.capitalGains)) {
       throw new Error(`figures: ${y.year}'s rows sum to ${sum}, Summ's total is ${year.capitalGains}`);
     }
-    if (Number(report.zeroCostBuysHiddenCount) === 0) checkZeroCost(y.year, yearRows, report);
+    if (report.zeroCostBuysHiddenCount === 0) checkZeroCost(y.year, yearRows, report);
     gains += year.capitalGains;
     income += year.income;
     if (yearRows.length || year.capitalGains || year.income || year.expenses) kept.push(year);
@@ -220,6 +240,8 @@ export async function figures(
   }
 
   const after = await currentComputation(client, stateDir);
+  if (readLogLines(stateDir).length !== logLines)
+    throw new Error("figures: the apply log grew during the read: run it again");
   if (after.updatedAt !== before.updatedAt) {
     throw new Error(
       `figures: Summ computed again while this read (${before.updatedAt}, ${after.updatedAt}): run it again`,
@@ -242,6 +264,7 @@ export async function figures(
   console.log(
     `${rows.length} rows, ${new Set(rows.map((r) => r.sellUid)).size} disposals, ${marked} with zero-cost parcels`,
   );
+  console.log(`Tax years from ${config.taxYearStart} in ${config.timezone}`);
   console.log(`Figures written to ${file}`);
   return file;
 }
@@ -303,9 +326,14 @@ const figuresNames = (stateDir: string): string[] => {
 export function figuresNote(stateDir: string): string {
   const latest = figuresNames(stateDir).at(-1);
   if (!latest) return "No figures yet: without one from before this apply, compare has nothing to compare it with.";
-  const { takenAt } = JSON.parse(readFileSync(join(stateDir, "figures", `${latest}.json`), "utf8")) as Figures;
-  const since = readLogLines<{ time?: string }>(stateDir).filter((l) => l.time && l.time > takenAt).length;
-  return `Latest figures ${latest}, ${since} apply-log lines since.`;
+  // A bad figures file is no reason to stop an apply, or the resume of one
+  try {
+    const { takenAt } = JSON.parse(readFileSync(join(stateDir, "figures", `${latest}.json`), "utf8")) as Figures;
+    const since = readLogLines<{ time?: string }>(stateDir).filter((l) => l.time && l.time > takenAt).length;
+    return `Latest figures ${latest}, ${since} apply-log lines since.`;
+  } catch {
+    return `Latest figures ${latest} cannot be read.`;
+  }
 }
 
 // ---- compare
@@ -319,6 +347,8 @@ interface DisposalLeg {
   types: string;
   sellTxHash: string;
   quantity: number;
+  /** The quantity held long enough to count as long term. */
+  longQuantity: number;
   gain: number;
   zeroQuantity: number;
   zeroGain: number;
@@ -336,6 +366,9 @@ interface Acquisition {
 
 const sameQuantity = (a: number, b: number) =>
   Math.abs(a - b) <= Math.max(1e-9, 1e-9 * Math.max(Math.abs(a), Math.abs(b)));
+
+/** By a cent or more, with room for a float's error at exactly a cent. */
+const gainMoved = (a: DisposalLeg, b: DisposalLeg) => Math.abs(a.gain - b.gain) >= CENT - 1e-9;
 
 function yearOf(time: string, data: Figures): number {
   const t = Date.parse(time);
@@ -360,6 +393,7 @@ function disposalLegs(data: Figures): Map<string, DisposalLeg> {
         typeSet: new Set(),
         sellTxHash: r.sellTxHash,
         quantity: 0,
+        longQuantity: 0,
         gain: 0,
         zeroQuantity: 0,
         zeroGain: 0,
@@ -369,6 +403,7 @@ function disposalLegs(data: Figures): Map<string, DisposalLeg> {
     leg.typeSet.add(r.outTradeType);
     leg.types = [...leg.typeSet].sort().join("+");
     leg.quantity += r.quantity;
+    if (r.isLongTerm) leg.longQuantity += r.quantity;
     leg.gain += r.gain;
     if (r.error === ZERO_COST) {
       leg.zeroQuantity += r.quantity;
@@ -447,7 +482,11 @@ export function compareFigures(before: Figures, after: Figures): Comparison {
     const a = now.get(id);
     if (!a) continue;
     const moved =
-      !near(a.gain, b.gain) || !sameQuantity(a.quantity, b.quantity) || a.types !== b.types || a.year !== b.year;
+      gainMoved(a, b) ||
+      !sameQuantity(a.quantity, b.quantity) ||
+      !sameQuantity(a.longQuantity, b.longQuantity) ||
+      a.types !== b.types ||
+      a.year !== b.year;
     if (moved) changed.push({ before: b, after: a });
     part(b.year)[moved ? "changed" : "under"] -= b.gain;
     part(a.year)[moved ? "changed" : "under"] += a.gain;
@@ -471,10 +510,18 @@ export function compareFigures(before: Figures, after: Figures): Comparison {
   for (const l of open) part(l.year).added += l.gain;
   for (const { before: b, after: a } of replaced) part(a.year).replaced += a.gain - b.gain;
 
+  // A replaced pair is one leg here: both sides zero-cost is no change
   const zeroCost: Comparison["zeroCost"] = [];
-  for (const id of new Set([...was.keys(), ...now.keys()])) {
-    const b = was.get(id);
-    const a = now.get(id);
+  const kept = [...was.values()].flatMap((b) => {
+    const a = now.get(b.sellUid);
+    return a ? [{ b, a }] : [];
+  });
+  for (const { b, a } of [
+    ...kept,
+    ...replaced.map((p) => ({ b: p.before, a: p.after })),
+    ...unpaired.map((b) => ({ b, a: undefined })),
+    ...open.map((a) => ({ b: undefined, a })),
+  ]) {
     const [q0, q1] = [b?.zeroQuantity ?? 0, a?.zeroQuantity ?? 0];
     if (sameQuantity(q0, q1)) continue;
     zeroCost.push({
@@ -603,6 +650,9 @@ export function compareMarkdown(c: Comparison, beforeName: string, afterName: st
       ...pairs.map(({ before: b, after: a }) => {
         const also = [
           sameQuantity(a.quantity, b.quantity) ? "" : `quantity ${b.quantity} to ${a.quantity}`,
+          sameQuantity(a.longQuantity, b.longQuantity)
+            ? ""
+            : `long-term quantity ${b.longQuantity} to ${a.longQuantity}`,
           a.types === b.types ? "" : `type ${b.types} to ${a.types}`,
           a.year === b.year ? "" : `year ${b.year} to ${a.year}`,
         ].filter(Boolean);

@@ -17,12 +17,13 @@ plan before you apply it.
 
 1. Export the year with the exporter (a run dir with `csv/`).
 2. `login <state dir> --write` once (the token is refreshed after that).
-3. `pull <state dir> <run dir>`, then `plan <state dir> <run dir>`. Read `plan.md`.
+3. `figures <state dir>`, so there is something to compare with afterwards. It needs `taxYearStart` in
+   `summ-sync.json`; adding it makes apply refuse a plan made earlier, so plan after it.
+   `pull <state dir> <run dir>`, then `plan <state dir> <run dir>`. Read `plan.md`.
    Its Decisions section comes first: what the deletes leave behind, with the options.
    Close each by adding its option's lines, or its key under `accept`, to `summ-sync.json` with your reason, then plan again:
    `apply --approve-deletes` refuses a delete a decision is open over. Each has a key that stays while its event, and what the plan does with it, stay.
-4. Run `figures <state dir>` first, so there is something to compare with afterwards.
-   `apply <state dir> <plan dir>` (`--dry-run` first; `--approve-deletes` if the
+4. `apply <state dir> <plan dir>` (`--dry-run` first; `--approve-deletes` if the
    plan deletes). It deletes and edits, and holds back categorisation while the
    plan has uploads. Read what each delete removes and leaves in `plan.md`.
 5. Upload the files in `<plan dir>/upload/` to Summ, under the account named

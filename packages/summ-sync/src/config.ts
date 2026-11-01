@@ -23,7 +23,7 @@ export interface Config {
   deleteManualEntries: DeleteManualEntry[];
   /** Decisions of a plan the user has read and goes ahead with, by key. */
   accept: Accept[];
-  /** The first day of the tax year (MM-DD): figures and compare need it, with no default to mislabel every year. */
+  /** The first day of the tax year (MM-DD): figures needs it, with no default to mislabel every year. */
   taxYearStart: string | null;
 }
 
