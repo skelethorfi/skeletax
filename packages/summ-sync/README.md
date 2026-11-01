@@ -20,7 +20,7 @@ plan before you apply it.
 3. `pull <state dir> <run dir>`, then `plan <state dir> <run dir>`. Read `plan.md`.
    Its Decisions section comes first: what the deletes leave behind, with the options.
    Close each by adding its option's lines, or its key under `accept`, to `summ-sync.json` with your reason, then plan again:
-   `apply --approve-deletes` refuses a delete a decision is open over. Each has a key that stays while its event does.
+   `apply --approve-deletes` refuses a delete a decision is open over. Each has a key that stays while its event, and what the plan does with it, stay.
 4. `apply <state dir> <plan dir>` (`--dry-run` first; `--approve-deletes` if the
    plan deletes). It deletes and edits, and holds back categorisation while the
    plan has uploads. Read what each delete removes and leaves in `plan.md`.

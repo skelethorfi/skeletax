@@ -889,7 +889,7 @@ fails. A failed write is never retried in the same run: the next run classifies 
   without its flag needs no new pull.
 - Complete: a plan that completed under these flags reports it and does nothing, whatever the snapshot.
 - Until the plan has a write line: its `configSha`, when it has one, is the hash of `summ-sync.json` now, and with `--approve-deletes`
-  no decision is open over a delete this apply would make (Decisions above). The way on is to close it in `summ-sync.json` and plan.
+  no decision is open over a delete this apply would make (Decisions above). The way on is to close it in `summ-sync.json` and plan. A plan whose decisions have no keys, from before they did, is told to plan again.
 
 A write line is any line but `skip`, `found`, `apply-start`, `apply-stop` and `torn-line`. So a failed read,
 which logs only `apply-stop`, blocks nothing, and a failed write, which logs an `error` line, counts. An
