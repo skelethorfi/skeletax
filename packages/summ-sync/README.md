@@ -18,6 +18,8 @@ plan before you apply it.
 1. Export the year with the exporter (a run dir with `csv/`).
 2. `login <state dir> --write` once (the token is refreshed after that).
 3. `pull <state dir> <run dir>`, then `plan <state dir> <run dir>`. Read `plan.md`.
+   Its Decisions section comes first: what the deletes leave behind, with the options.
+   Applying does not wait for them, so choose first (add the option's config and plan again).
 4. `apply <state dir> <plan dir>` (`--dry-run` first; `--approve-deletes` if the
    plan deletes). It deletes and edits, and holds back categorisation while the
    plan has uploads. Read what each delete removes and leaves in `plan.md`.

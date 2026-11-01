@@ -567,6 +567,48 @@ with the entries left out:
   The user resolves the pairing in Summ, or the run, and plans again. Or the user names the entry in `deleteManualEntries`
   (below): a manual entry never goes without being named.
 
+**Decisions.** The plan compares Summ with the run row by row, so it cannot tell that an old trade it deletes was what a
+kept entry sold from. `decisions.ts` reads the finished plan (after `--only`) and says what its deletes leave behind, as
+the first section of `plan.md`, and in `plan.json` as `decisions` and `checks`. It changes nothing in the plan, and apply
+does not stop on it: apply prints how many are open. Most old legs hold no txid, so legs are linked by currency, amount
+and time: strong for exact amounts, not proof, and each decision says so. No gain is computed: Summ's own figures show the
+effect after a recalculation.
+
+A leg is _added back_ by a row this plan uploads, or a kept leg that counts, with the same currency and amount within a
+day, or about the amount (within 1%, a fee apart) within 5 minutes. A row uploaded with the same amount under another
+ticker within 5 minutes counts too. Each row side or kept leg adds back one leg, the nearest first: disposals, then acquisitions, then plain receives, each in time order. What counts
+goes by type. For a disposal: a type that disposes, not a send, bridge, failed send, fee, approval, or a move into staking,
+collateral, a position or a repayment, whose treatment is Summ's. A kept leg goes by its type after this plan's edit or
+categorisation, and not by what the run has, since an override or a scope can keep its type. For something coming in: anything
+but spam or a failed receive; a kept plain receive only with no send kept beside it, and a row's only with no send of the same going ahead or kept
+within 5 minutes, since it is then half of a transfer. A held row adds nothing, nor does a row outside the scope, a made-up or
+ignored leg, a fee leg, or a bridge's quote, which only names the other asset. A decision is opened by:
+
+- a disposal removed with nothing to add it back: its gain or loss goes;
+- a removed incoming leg with nothing to add it back, when a kept manual leg sends on the same currency and amount, from 5
+  minutes before to a day after: it disposes from nothing, a false gain;
+- a row going ahead whose type acquires what a kept manual leg of an acquiring type also holds, within a day: acquired twice.
+
+What is linked to it joins one decision per event: deletes moving the same amounts within 5 minutes, rows naming them within 5 minutes, rows that add them back, every row their txids chain to, manual legs of those amounts (within a day of a delete or a row, within 5 minutes of
+another manual leg) with the rest of their actions, and manual legs those rows are held for or whose text names their txids. A
+manual leg joins one decision only. An old trade whose sold side is a row of the run, while the rows' incoming side has neither
+its bought currency nor its amount, is shown as a changed swap. The decision also says when rows are held while deletes of the
+same event go, why when they name no txid, when an override keeps a row's type, and which entries named in
+`deleteManualEntries` go beside it.
+
+Each decision has two options, each with the config to add to `summ-sync.json` before planning again:
+
+- **a**: with manual entries, the run is right and they were stand-ins: every manual leg the plan would otherwise hold the entries
+  for (fee and ignored legs of their actions, legs naming their txids), for `deleteManualEntries`. It says when they span filed
+  and current years, which a plan takes one kind at a time. With none, the plan is right: nothing to add.
+- **b**: keep what Summ has: a `hold` on each of its deletes, by row ID or old ID, and on each of its rows going ahead, which
+  would otherwise count the event twice. A hold on an old ID with legs in Summ gives no note.
+
+A decision is filed by the entries option a names, or with none by its legs.
+
+Or neither: change the entries in Summ or the run, then pull and plan. `checks` lists the other removed acquisitions, a named manual entry's included, with nothing to add them back that have kept outgoing legs of that asset within a week: nothing links them but the asset. An
+agent or a person decides; a plan never picks.
+
 **Filed years.** An entry whose row or leg is dated before `filedBefore` is
 an amendment: listed under its own heading in each section and applied only
 with `--approve-filed`, in a separate apply from the current year. Under that

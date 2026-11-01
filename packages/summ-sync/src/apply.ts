@@ -1205,6 +1205,8 @@ export async function runApply(
     console.log(
       `${opts.dryRun ? "Dry run of" : state === "resume" ? "Resuming" : "Applying"} ${planName} (${opts.approveFiled ? "filed years only" : "current years only"})`,
     );
+    if (plan.decisions?.length)
+      console.log(`${plan.decisions.length} decisions in plan.md are open: this carries out the plan as it stands`);
     const prior = readLogLines<LogLine>(stateDir).filter((l) => l.plan === planName);
     const baseline = readSnapshot(join(stateDir, "snapshots", `${plan.snapshot}.json`)).legs;
     if (!opts.dryRun)
