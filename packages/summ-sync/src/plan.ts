@@ -2,7 +2,7 @@
 // calls nothing; the CLI (writePlan) reads the inputs and writes the plan. Spec: docs/specs/summ-sync.md.
 
 import type { Config, Hold } from "./config.ts";
-import { type Decision, decisionsOf, type PlanCheck } from "./decisions.ts";
+import { type Decided, type Decision, decisionsOf, type PlanCheck } from "./decisions.ts";
 import { before, inPeriod } from "./dates.ts";
 import { parseCsvLine, periodsOf, type Row, type RunFile } from "./run.ts";
 import { type Leg, normaliseTxid } from "./snapshot.ts";
@@ -229,6 +229,8 @@ export interface Plan {
   /** What the deletes leave behind, with the options: reported, and changing nothing in the plan. */
   decisions?: Decision[];
   checks?: PlanCheck[];
+  /** What summ-sync.json has already closed, with its reason. */
+  decided?: Decided[];
 }
 
 export interface PlanResult {
@@ -1549,9 +1551,26 @@ export function makePlan(input: PlanInput): PlanResult {
   if (input.scope) narrow(plan, input.scope, rows, legsOf, eventOf);
 
   // After the scope: what this plan does is what it leaves behind
-  const { decisions, checks } = decisionsOf(plan, input.legs, rows, isFiled);
+  const found = decisionsOf(plan, input.legs, rows, isFiled);
+  const accepted = new Map(config.accept.map((a) => [a.key, a.reason]));
+  const decisions = found.decisions.filter((d) => !accepted.has(d.key));
+  const decided: Decided[] = [
+    ...found.decisions
+      .filter((d) => accepted.has(d.key))
+      .map((d) => ({ what: `accepted ${d.key}: ${d.title}`, reason: accepted.get(d.key) as string })),
+    ...config.deleteManualEntries.map((m) => ({
+      what: `delete manual ${m.quantity} ${m.currency} (leg ${m.legId})`,
+      reason: m.reason,
+    })),
+    ...config.hold.map((h) => ({ what: `hold ${h.id ?? h.txid}`, reason: h.reason })),
+  ];
+  if (!input.scope)
+    for (const a of config.accept)
+      if (!found.decisions.some((d) => d.key === a.key))
+        plan.notes.push(`accept: ${a.key} matches no decision: its event changed or has gone; remove its line`);
   if (decisions.length) plan.decisions = decisions;
-  if (checks.length) plan.checks = checks;
+  if (found.checks.length) plan.checks = found.checks;
+  if (decided.length) plan.decided = decided;
 
   if (unmappedChains.size)
     plan.notes.push(`Blockchain not compared (no Summ id in src/summ-types.ts): ${[...unmappedChains].join(", ")}`);

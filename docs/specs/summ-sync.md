@@ -568,11 +568,17 @@ with the entries left out:
   (below): a manual entry never goes without being named.
 
 **Decisions.** The plan compares Summ with the run row by row, so it cannot tell that an old trade it deletes was what a
-kept entry sold from. `decisions.ts` reads the finished plan (after `--only`) and says what its deletes leave behind, as
-the first section of `plan.md`, and in `plan.json` as `decisions` and `checks`. It changes nothing in the plan, and apply
-does not stop on it: apply prints how many are open. Most old legs hold no txid, so legs are linked by currency, amount
-and time: strong for exact amounts, not proof, and each decision says so. No gain is computed: Summ's own figures show the
-effect after a recalculation.
+kept entry sold from. `decisions.ts` reads the finished plan (after `--only`) and says what its deletes leave behind, as the
+first section of `plan.md`, and in `plan.json` as `decisions` and `checks`. It changes nothing in the plan. Apply prints how many
+are open, and with `--approve-deletes` refuses, until the plan has written, a plan with a decision open over a delete this apply
+would make (Refusal below). Most old legs hold no txid, so legs are linked by currency, amount and time: strong for exact amounts,
+not proof, and the section says so. No gain is computed: Summ's own figures show the effect after a recalculation. Each decision
+shows its largest quantity by Summ's price, to tell a large one from a small one.
+
+A decision's key is its first date and a hash of what it is made of: its legs (id, type, currency, quantity), its deletes' legs, fee
+legs too, which legs are lost, its rows (ID, type, both currencies and amounts, fee), and which rows go ahead. So it stays while the
+event and what this plan does with it stay, across pulls and other decisions, and an accept covers only what was read. Anything of it
+that changes reopens it. A partial `--only` can make another key, which reopens it safely, as can a group taking in a row or a leg.
 
 A leg is _added back_ by a row this plan uploads, or a kept leg that counts, with the same currency and amount within a
 day, or about the amount (within 1%, a fee apart) within 5 minutes. A row uploaded with the same amount under another
@@ -596,13 +602,21 @@ its bought currency nor its amount, is shown as a changed swap. The decision als
 same event go, why when they name no txid, when an override keeps a row's type, and which entries named in
 `deleteManualEntries` go beside it.
 
-Each decision has two options, each with the config to add to `summ-sync.json` before planning again:
+Each decision has options, with the lines to add to `summ-sync.json` before planning again:
 
 - **a**: with manual entries, the run is right and they were stand-ins: every manual leg the plan would otherwise hold the entries
   for (fee and ignored legs of their actions, legs naming their txids), for `deleteManualEntries`. It says when they span filed
-  and current years, which a plan takes one kind at a time. With none, the plan is right: nothing to add.
-- **b**: keep what Summ has: a `hold` on each of its deletes, by row ID or old ID, and on each of its rows going ahead, which
-  would otherwise count the event twice. A hold on an old ID with legs in Summ gives no note.
+  and current years, which a plan takes one kind at a time. With none, the plan is right: its key, for `accept`.
+- **b**: not yet: a `hold` on each of its deletes, by row ID or old ID, and on each of its rows going ahead, which would otherwise
+  count the event twice. A hold on an old ID with legs in Summ gives no note.
+- **c**: fix the run or Summ, then pull and plan. Nothing to add.
+
+`accept` (`[{"key": "<key>", "reason": "<why>"}]`) closes any decision as listed, while its key is the same; one matching no decision
+gets a note, as its event changed or has gone, except under `--only`, which leaves decisions out. There is no flag past the refusal,
+since accepting takes one line with the reason. A snippet prints `<why>` for the reason, and a config still holding it is refused. The
+`Decided` section lists what is accepted, named or held in `summ-sync.json`, with its reason: the view for a new session. A choice is
+any edit of `summ-sync.json`: `plan.json` records the file's `configSha`, and apply refuses a plan whose hash is not the file's now
+until that plan has written.
 
 A decision is filed by the entries option a names, or with none by its legs.
 
@@ -874,6 +888,8 @@ fails. A failed write is never retried in the same run: the next run classifies 
   refused, on a complete plan too. A plan that has written nothing can run with other flags, so one run
   without its flag needs no new pull.
 - Complete: a plan that completed under these flags reports it and does nothing, whatever the snapshot.
+- Until the plan has a write line: its `configSha`, when it has one, is the hash of `summ-sync.json` now, and with `--approve-deletes`
+  no decision is open over a delete this apply would make (Decisions above). The way on is to close it in `summ-sync.json` and plan. A plan whose decisions have no keys, from before they did, is told to plan again.
 
 A write line is any line but `skip`, `found`, `apply-start`, `apply-stop` and `torn-line`. So a failed read,
 which logs only `apply-stop`, blocks nothing, and a failed write, which logs an `error` line, counts. An

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { DEFAULTS, type Config } from "../src/config.ts";
+import { configSha, DEFAULTS, type Config } from "../src/config.ts";
 import { ADOPT_WINDOW, makePlan, parseScope, type PlanInput } from "../src/plan.ts";
 import type { Row, RunFile } from "../src/run.ts";
 import { type Leg, legsOf as legsOfDetail, writeSnapshot } from "../src/snapshot.ts";
@@ -1845,6 +1845,7 @@ test("plan writes nothing to the state dir; mergeTables adds its adoptions and c
   assert.ok(!existsSync(join(state, "adopted.csv")) && !existsSync(join(state, "overrides.json")));
   const saved = JSON.parse(readFileSync(join(dir, "plan.json"), "utf8"));
   assert.deepEqual(saved.adopted, [{ legId: "leg-old", id: r.id }]);
+  assert.equal(saved.configSha, configSha(state));
 
   // A reason filled in by hand after the plan is kept when the same override is captured again
   const own: Override = {
@@ -3003,4 +3004,16 @@ test("deleteManualEntries: a hold on an unmanaged row of its tx, or on its own I
     }).plan;
     assert.deepEqual(p.delete, []);
   }
+});
+
+test("plan.md leads with what the deletes leave behind", () => {
+  const sold = {
+    ...legsOf(row({ id: "old-file.csv:9", type: "sell", quoteCurrency: "BTC", quoteAmount: "0.001" }))[0],
+    legId: "leg-sold",
+  };
+  const p = plan({ legs: [sold] }).plan;
+  const text = renderPlan(p, "snap", "run");
+  assert.ok(text.includes("## Decisions (1)"));
+  assert.ok(text.indexOf("## Decisions") < text.indexOf("## Delete"));
+  assert.ok(!renderPlan(plan({}).plan, "snap", "run").includes("## Decisions"));
 });

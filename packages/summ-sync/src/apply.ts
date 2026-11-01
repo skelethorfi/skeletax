@@ -25,6 +25,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { configSha } from "./config.ts";
 import { type ActionDetail, isLegAbsent, parseActions, parseDetail, parsePageHeader } from "./parse.ts";
 import {
   type Change,
@@ -67,7 +68,7 @@ export interface ApplyOptions {
   dryRun: boolean;
 }
 
-export type PlanFile = Plan & { snapshot: string; run: string };
+export type PlanFile = Plan & { snapshot: string; run: string; configSha?: string };
 
 export interface LogLine {
   time: string;
@@ -178,8 +179,25 @@ export function startState(
 ): "first" | "resume" | "complete" {
   const lines = readLogLines<LogLine>(stateDir);
   const starts = lines.filter((l) => l.plan === planName && l.call === "apply-start");
+  // Until the plan has written, it must be the plan of summ-sync.json as it is: a line added since may take back what
+  // this plan does. And a delete a decision is open over waits for that decision: there is no flag past it, since
+  // accepting it takes one line with the reason.
+  const checkBeforeWriting = () => {
+    if (plan.configSha !== undefined && plan.configSha !== configSha(stateDir))
+      throw new Error("summ-sync.json changed since this plan was made: plan again");
+    if (!flags.approveDeletes) return;
+    if (plan.decisions?.some((d) => d.deletes === undefined))
+      throw new Error("This plan's decisions have no keys, from before they did: plan again");
+    const going = new Set(selected(plan.delete, flags).flatMap((d) => d.legIds));
+    const open = (plan.decisions ?? []).filter((d) => d.deletes.some((id) => going.has(id)));
+    if (open.length)
+      throw new Error(
+        `${open.length} decisions are open over this plan's deletes: ${open.map((d) => d.key).join(", ")}. Read them in plan.md, close each in summ-sync.json (an option's lines, or accept), then plan again`,
+      );
+  };
   if (!starts.length) {
     checkFresh(stateDir, plan);
+    checkBeforeWriting();
     return "first";
   }
   const last = starts[starts.length - 1];
@@ -196,6 +214,7 @@ export function startState(
     );
   const finished = lines.filter((l) => l.plan === planName && l.call === "apply-stop" && l.reason === "complete");
   if (finished.some((l) => sameFlags(flagsOf(l.run)))) return "complete";
+  if (!wrote) checkBeforeWriting();
   const takenAt = checkLatest(stateDir, plan);
   const runs = new Set(starts.map((l) => l.run));
   const foreign = lines.filter((l) => l.time > takenAt && isWriteLine(l) && !(l.plan === planName && runs.has(l.run)));
@@ -207,7 +226,7 @@ export function startState(
 }
 
 /** The plan's entries this apply carries out: the current year's, or with approveFiled only the filed years'. */
-export function selected<T extends { filed: boolean }>(entries: T[], opts: ApplyOptions): T[] {
+export function selected<T extends { filed: boolean }>(entries: T[], opts: Pick<ApplyOptions, "approveFiled">): T[] {
   return entries.filter((e) => e.filed === opts.approveFiled);
 }
 
@@ -1205,8 +1224,7 @@ export async function runApply(
     console.log(
       `${opts.dryRun ? "Dry run of" : state === "resume" ? "Resuming" : "Applying"} ${planName} (${opts.approveFiled ? "filed years only" : "current years only"})`,
     );
-    if (plan.decisions?.length)
-      console.log(`${plan.decisions.length} decisions in plan.md are open: this carries out the plan as it stands`);
+    if (plan.decisions?.length) console.log(`${plan.decisions.length} decisions in plan.md are open`);
     const prior = readLogLines<LogLine>(stateDir).filter((l) => l.plan === planName);
     const baseline = readSnapshot(join(stateDir, "snapshots", `${plan.snapshot}.json`)).legs;
     if (!opts.dryRun)

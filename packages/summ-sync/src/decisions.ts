@@ -4,26 +4,31 @@
 //
 // Old legs usually hold no txid, so legs are linked by currency, amount and time: strong for exact amounts, not proof.
 
-import type { DeleteManualEntry, Hold } from "./config.ts";
+import { createHash } from "node:crypto";
+import { type Accept, type DeleteManualEntry, type Hold, WHY } from "./config.ts";
 import { type Plan, sameAmount, sameCurrency, txidsNamedBy, txidsOf } from "./plan.ts";
 import type { Row } from "./run.ts";
 import { type Leg, normaliseTxid } from "./snapshot.ts";
 import { summType } from "./summ-types.ts";
 
 export interface DecisionOption {
-  key: "a" | "b";
+  key: "a" | "b" | "c";
   /** Its entries span filed and current years, which a plan takes one kind at a time. */
   spans?: boolean;
   title: string;
   /** What the next plan does with this option. */
   result: string;
   /** What to add to summ-sync.json. Empty: nothing to add. */
-  config: { deleteManualEntries?: DeleteManualEntry[]; hold?: Hold[] };
+  config: { deleteManualEntries?: DeleteManualEntry[]; hold?: Hold[]; accept?: Accept[] };
 }
 
 export interface Decision {
-  /** Numbered within this plan. */
-  id: string;
+  /** The event's date and a hash of what it is made of and what this plan does with it: reopens when either changes. */
+  key: string;
+  /** The legs this plan deletes that it is about: apply refuses to delete them while it is open. */
+  deletes: string[];
+  /** The largest quantity x Summ's local price among the legs that matter, to tell a large one from a small one. */
+  value: number | null;
   kind: "swap-changed" | "lost-disposal" | "lost-acquisition" | "acquired-twice";
   filed: boolean;
   title: string;
@@ -101,6 +106,12 @@ function legsMade(r: Row): Move[] {
 
 const sameMove = (l: Leg, m: Move) => sameCurrency(l.currency, m.currency) && sameAmount(l.quantity, m.amount);
 const legText = (l: Leg) => `${l.trade} ${l.quantity} ${l.currency}`;
+
+/** What a decision closed by a line in summ-sync.json, for plan.md. */
+export interface Decided {
+  what: string;
+  reason: string;
+}
 
 export function decisionsOf(
   plan: Plan,
@@ -310,10 +321,10 @@ export function decisionsOf(
       }
     }
     for (const l of groupLegs.values()) usedLegs.add(l.legId);
-    decisions.push(decisionOf(`d${decisions.length + 1}`, [...groupLegs.values()], [...groupRows.values()]));
+    decisions.push(decisionOf([...groupLegs.values()], [...groupRows.values()]));
   }
 
-  function decisionOf(id: string, ls: Leg[], rs: Row[]): Decision {
+  function decisionOf(ls: Leg[], rs: Row[]): Decision {
     const manual = ls.filter((l) => l.importType === "manual");
     const groupDeletes = deletes.filter((d) => (legsOfDelete.get(d) as Leg[]).some((l) => ls.includes(l)));
     const disposals = lostDisposals.filter((l) => ls.includes(l));
@@ -395,9 +406,6 @@ export function decisionsOf(
       lines.push(`Already going, named in \`deleteManualEntries\`: manual ${legText(n)} (leg \`${n.legId}\`).`);
     const outside = notGoing.filter((r) => !heldRows.has(r.id) && !hasLeg(r));
     if (outside.length) lines.push(`Rows not in this plan: ${outside.map((r) => `\`${r.id}\``).join(", ")}.`);
-    lines.push(
-      "Linked by currency, amount and time, not by txid. No gain is computed here: Summ shows the effect only after a recalculation.",
-    );
 
     // What the plan refuses to delete an entry beside: every manual leg in its action or naming its txids, fee legs too
     const named = new Map(manual.map((m) => [m.legId, m]));
@@ -419,41 +427,78 @@ export function decisionsOf(
     const toName = [...named.values()];
     const spans = new Set(toName.map((m) => isFiled(m.timestamp))).size > 1;
 
-    const reason = swap
-      ? `the run exports this swap as ${swap.sold.currency} -> ${swap.into.currency}`
-      : "the run's rows stand for this event";
+    // One event's mark, across plans: all it is made of, and what this plan does with it. Row IDs leave out amounts, so
+    // the rows' values go in. Anything of it that changes makes it a new decision: an accept covers only what was read
+    const date = [...ls]
+      .map((l) => l.timestamp)
+      .sort()[0]
+      .slice(0, 10);
+    const key = `${date}-${createHash("sha256")
+      .update(
+        [
+          ...ls.map((l) => `leg ${l.legId} ${l.trade} ${l.currency} ${l.quantity}`),
+          ...groupDeletes.flatMap((d) =>
+            d.legIds.map((id) => `delete ${id} ${legById.get(id)?.currency} ${legById.get(id)?.quantity}`),
+          ),
+          ...[...disposals, ...acquisitions].map((l) => `lost ${l.legId}`),
+          ...rs.map((r) =>
+            [
+              "row",
+              r.id,
+              r.type,
+              r.baseCurrency,
+              r.baseAmount,
+              r.quoteCurrency,
+              r.quoteAmount,
+              r.feeCurrency,
+              r.feeAmount,
+            ].join(" "),
+          ),
+          ...going.map((r) => `going ${r.id}`),
+        ]
+          .sort()
+          .join("\n"),
+      )
+      .digest("hex")
+      .slice(0, 6)}`;
     const options: DecisionOption[] = [
       manual.length
         ? {
             key: "a",
             ...(spans ? { spans: true } : {}),
             title: "The run is right, and the manual entries were stand-ins: delete them.",
-            result: `The next plan deletes these entries${groupDeletes.length ? " with the old rows" : ""}${rs.length ? " and goes ahead with the run's rows" : ""}. Summ has no undo for a delete; apply saves each entry first.${spans ? " These span filed and current years, and a plan takes one kind at a time: add each kind's lines by hand, one kind at a time." : ""}`,
+            result: `The next plan deletes these entries${groupDeletes.length ? " with the old rows" : ""}${rs.length ? " and goes ahead with the run's rows" : ""}. Summ has no undo for a delete; apply saves each entry first.${spans ? " These span filed and current years, and a plan takes one kind at a time: add each kind's lines, one kind at a time." : ""}`,
             config: {
               deleteManualEntries: toName.map((m) => ({
                 legId: m.legId,
                 currency: m.currency,
                 quantity: m.quantity,
-                reason,
+                reason: WHY,
               })),
             },
           }
         : {
             key: "a",
             title: "The plan is right: this is meant to go.",
-            result: `Nothing to add: apply the plan as it is.${held.length ? " Its rows stay held: the rest goes without them." : ""}`,
-            config: {},
+            result: `The next plan lists it as decided.${held.length ? " Its rows stay held: the rest goes without them." : ""}`,
+            config: { accept: [{ key, reason: WHY }] },
           },
       {
         key: "b",
-        title: "Keep what Summ has for now.",
+        title: "Not yet: hold.",
         result: "The next plan leaves these old rows and the run's rows alone, until the holds are removed.",
         config: {
           hold: [...new Set([...groupDeletes.map((d) => d.id ?? d.summId), ...going.map((r) => r.id)])].map((id) => ({
             id,
-            reason: `kept beside what depends on it: ${reason}`,
+            reason: `not yet: decision ${key}`,
           })),
         },
+      },
+      {
+        key: "c",
+        title: "Fix the run or Summ.",
+        result: "Change them, then pull and plan again. If the event changes, so does this key.",
+        config: {},
       },
     ];
     const kind: Decision["kind"] = swap
@@ -463,7 +508,7 @@ export function decisionsOf(
         : acquisitions.length
           ? "lost-acquisition"
           : "acquired-twice";
-    const date = [...ls].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))[0].timestamp.slice(0, 10);
+    const values = [...disposals, ...acquisitions, ...manual].flatMap((l) => (l.price ? [l.quantity * l.price] : []));
     const boughtSentOn = acquisitions.find((l) => isAcquisition(l.trade) && sentOn(l).length);
     const titles: Record<Decision["kind"], string> = {
       "swap-changed": `a swap changed from ${swap?.bought.currency} to ${swap?.into.currency}`,
@@ -472,10 +517,12 @@ export function decisionsOf(
       "acquired-twice": `${twice[0]?.leg.currency} is acquired twice`,
     };
     return {
-      id,
+      key,
+      deletes: groupDeletes.flatMap((d) => d.legIds),
+      value: values.length ? Math.max(...values) : null,
       kind,
       filed: (toName.length ? toName : ls).some((l) => isFiled(l.timestamp)),
-      title: `${date}: ${titles[kind]}`,
+      title: titles[kind],
       lines,
       options,
     };
@@ -510,22 +557,39 @@ export function decisionsOf(
   return { decisions, checks };
 }
 
+/** An option's lines for summ-sync.json: one entry a line, so a long list stays readable. */
+function snippet(config: DecisionOption["config"]): string[] {
+  return Object.entries(config).flatMap(([name, entries]) => [
+    `"${name}": [`,
+    ...(entries as object[]).map((e, i, all) => `  ${JSON.stringify(e)}${i < all.length - 1 ? "," : ""}`),
+    "]",
+  ]);
+}
+
 /** The first section of plan.md: nothing is said when there is nothing to decide. */
-export function decisionLines(decisions: Decision[], checks: PlanCheck[]): string[] {
-  if (!decisions.length && !checks.length) return [];
-  const out = [`## Decisions (${decisions.length})`, ""];
+export function decisionLines(decisions: Decision[], checks: PlanCheck[], decided: Decided[] = []): string[] {
+  if (!decisions.length && !checks.length && !decided.length) return [];
+  const out: string[] = [];
+  if (decisions.length || checks.length) out.push(`## Decisions (${decisions.length})`, "");
   if (decisions.length)
     out.push(
-      "Read these first. The plan does not stop on them: applying it now carries out what it lists below. To choose, add the option's config to `summ-sync.json` and plan again.",
+      `Read these first. \`apply --approve-deletes\` refuses a plan with a decision open over a delete it would make. To close one, add its option's lines to \`summ-sync.json\`, with your reason for \`${WHY}\`, and plan again. To go ahead with any as listed: \`"accept": [{"key": "<its key>", "reason": "${WHY}"}]\`.`,
+      "",
+      "Legs are linked by currency, amount and time, not by txid. No gain is computed here: Summ shows the effect only after a recalculation.",
       "",
     );
   for (const d of decisions) {
-    out.push(`### ${d.id}: ${d.title}${d.filed ? " (filed year)" : ""}`, "", ...d.lines.map((l) => `- ${l}`), "");
+    const worth = d.value === null ? "" : `, about ${Math.round(d.value).toLocaleString("en-US")} in Summ's currency`;
+    out.push(
+      `### ${d.key}: ${d.title}${d.filed ? " (filed year)" : ""}${worth}`,
+      "",
+      ...d.lines.map((l) => `- ${l}`),
+      "",
+    );
     for (const o of d.options) {
       out.push(`**Option ${o.key}: ${o.title}** ${o.result}`, "");
-      if (Object.keys(o.config).length) out.push("```json", JSON.stringify(o.config, null, 2), "```", "");
+      if (Object.keys(o.config).length) out.push("```json", ...snippet(o.config), "```", "");
     }
-    out.push("Neither: change the entries in Summ or the run, then pull and plan again.", "");
   }
   if (checks.length)
     out.push(
@@ -536,6 +600,17 @@ export function decisionLines(decisions: Decision[], checks: PlanCheck[]): strin
       "| Old ID | Removed | Kept legs after it |",
       "| --- | --- | --- |",
       ...checks.map((c) => `| ${c.summId} | ${c.removed} | ${c.kept.join("; ")} |`),
+      "",
+    );
+  if (decided.length)
+    out.push(
+      `## Decided (${decided.length})`,
+      "",
+      "What `summ-sync.json` already says, and why.",
+      "",
+      "| What | Why |",
+      "| --- | --- |",
+      ...decided.map((d) => `| ${d.what} | ${d.reason} |`),
       "",
     );
   return out;
