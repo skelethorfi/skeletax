@@ -28,7 +28,8 @@ plan before you apply it.
    plan has uploads. Read what each delete removes and leaves in `plan.md`.
 5. Upload the files in `<plan dir>/upload/` to Summ, under the account named
    in `managedSources`, once apply lists them. They hold only the rows Summ lacks.
-6. `pull`, `plan`, `apply` again: it categorises Summ's own legs, now that
+6. `pull`, then `verify <state dir> <plan dir>`: whether Summ's legs hold what the plan said, and nothing else moved.
+   Then `plan`, `apply` again: it categorises Summ's own legs, now that
    Summ can pair them with the uploaded rows, and ignores the receives Summ
    made up to pair a send as a transfer.
 7. Recalculate in Summ. Summ may pause its automatic calculation after
@@ -47,6 +48,7 @@ the cost bases of later disposals, in later years and the current one.
     node packages/summ-sync/bin/summ-sync.ts pull  <state dir> [<run dir>] [--all]
     node packages/summ-sync/bin/summ-sync.ts plan  <state dir> <run dir> [--only <scope file>]
     node packages/summ-sync/bin/summ-sync.ts apply <state dir> <plan dir> [--dry-run] [--approve-deletes] [--approve-filed]
+    node packages/summ-sync/bin/summ-sync.ts verify <state dir> <plan dir>
     node packages/summ-sync/bin/summ-sync.ts figures <state dir>
     node packages/summ-sync/bin/summ-sync.ts compare <state dir> <before> <after>
     node packages/summ-sync/bin/summ-sync.ts prune <state dir> [--older-than <days>]
@@ -67,6 +69,8 @@ the cost bases of later disposals, in later years and the current one.
   id: minutes for a year, half an hour for everything. A stopped pull goes on
   from where it stopped when run again. Its snapshot is written only once
   Summ's list has stopped changing.
+- `verify` compares an applied plan's snapshot with the latest. Each entry landed, or why not; then any field, leg or
+  pairing that moved outside the plan. It calls nothing, writes `verify-<snapshot>.md` in the plan's folder and holds nothing back. Spec: Verify.
 - `figures` writes `<state dir>/figures/<time>.json`: Summ's capital gains rows and yearly totals, only when its
   computation is current and they tie to Summ's totals. It needs `taxYearStart` (`MM-DD`) in `summ-sync.json`.
 - `compare` reports what moved between two figures files, by name: gains by year and by disposal, zero-cost parcels,
