@@ -172,7 +172,8 @@ test("a swap whose run asset changed: the plan names what its deletes leave, wit
   assert.equal(p.decisions?.length, 1);
   const d = p.decisions![0];
   assert.equal(d.kind, "swap-changed");
-  assert.match(d.title, /2024-03-01: a swap changed from BBB to TKN/);
+  assert.match(d.key, /^2024-03-01-[0-9a-f]{6}$/);
+  assert.equal(d.title, "a swap changed from BBB to TKN");
   const text = d.lines.join("\n");
   assert.match(text, /Summ: 100 AAA -> 2 BBB \(`old\.csv:2`\)\. The run: 100 AAA -> 50 TKN/);
   assert.match(text, /Disposal removed, nothing adds it back: sell 100 AAA/);
@@ -276,7 +277,8 @@ test("a disposal removed with no row asks, and offers to go ahead when no manual
   const p = plan({ legs: oldLegs().slice(1, 3) });
   const d = p.decisions![0];
   assert.equal(d.kind, "lost-disposal");
-  assert.deepEqual(d.options[0].config, {});
+  assert.deepEqual(d.options[0].config, { accept: [{ key: d.key, reason: "<why>" }] });
+  assert.deepEqual(d.options[2].config, {});
   assert.deepEqual(
     d.options[1].config.hold?.map((h) => h.id),
     ["old.csv:2"],
@@ -376,17 +378,21 @@ test("what leaves after a removed acquisition is listed to check, when nothing l
   assert.equal(check?.kept.length, 1);
 });
 
-test("plan.md leads with the decisions, and says nothing with none", () => {
+test("plan.md leads with the decisions, one entry a line, and says nothing with none", () => {
   const { rows, legs } = swapChanged();
   const p = plan({ rows, legs });
   const text = decisionLines(p.decisions!, p.checks ?? []).join("\n");
   assert.match(text, /^## Decisions \(1\)/);
-  assert.match(text, /The plan does not stop on them/);
-  assert.match(text, /### d1: 2024-03-01/);
+  assert.match(text, /`apply --approve-deletes` refuses/);
+  assert.match(text, /"accept": \[\{"key": "<its key>", "reason": "<why>"\}\]/);
+  assert.match(text, /Legs are linked by currency, amount and time/);
+  assert.match(text, /### 2024-03-01-[0-9a-f]{6}: a swap changed/);
   assert.match(text, /\*\*Option a: The run is right/);
-  assert.match(text, /"deleteManualEntries"/);
-  assert.match(text, /\*\*Option b: Keep what Summ has/);
-  assert.match(text, /"hold"/);
+  assert.match(text, /^"deleteManualEntries": \[$/m);
+  assert.match(text, /^  \{"legId":"[^"]+","currency":"BBB","quantity":2,"reason":"<why>"\},$/m);
+  assert.match(text, /\*\*Option b: Not yet: hold/);
+  assert.match(text, /^"hold": \[$/m);
+  assert.match(text, /\*\*Option c: Fix the run or Summ/);
   assert.deepEqual(decisionLines([], []), []);
   assert.equal(plan({ rows, legs }).counts.decisions, 1);
 });
@@ -609,7 +615,7 @@ test("acquired twice needs a row that acquires, and a manual leg that does; its 
   assert.equal(decided({ rows: [row("receive")], legs: [buy] }).length, 0);
   const d = decided({ rows: [row("bridge-trade-in")], legs: [buy] })[0];
   assert.equal(d.kind, "acquired-twice");
-  assert.equal(d.title, "2024-03-01: TKN is acquired twice");
+  assert.equal(d.title, "TKN is acquired twice");
   assert.equal(d.options[1].config.hold?.length, 1);
   assert.equal(decided({ rows: [row("bridge-trade-in", "2024-03-02T10:01:00.000Z")], legs: [buy] }).length, 1);
   assert.equal(decided({ rows: [row("bridge-trade-in", "2024-03-02T10:01:01.000Z")], legs: [buy] }).length, 0);
@@ -1036,4 +1042,75 @@ test("a kept leg beside a row's receive goes by the type it ends up with", () =>
   const p = plan({ rows: [received, r], legs: [buy, sell, lost] });
   assert.ok(p.categorise.length);
   assert.ok(p.decisions?.some((d) => d.lines.some((l) => l.includes("Left behind"))));
+});
+
+// A real config says why: what a test finishes before planning again
+const finished = <T extends { reason: string }>(entries: T[]) => entries.map((e) => ({ ...e, reason: "checked" }));
+
+test("a key stays with its event across plans, whatever else is decided and whatever else moves", () => {
+  const first = swapChanged();
+  const other = oldTrade()
+    .filter((l) => l.trade === "sell")
+    .map((l) => ({ ...l, id: "old.csv:60", actionId: "o", currency: "OTH", timestamp: "2024-02-01T10:00:00.000Z" }));
+  const both = plan({ rows: first.rows, legs: [...first.legs, ...other] }).decisions!;
+  assert.equal(both.length, 2);
+  const swap = both.find((d) => d.kind === "swap-changed")!;
+  const hold = both.find((d) => d.kind === "lost-disposal")!.options[1].config.hold!;
+  // The earlier one closes; the later one keeps its key where a number would have moved
+  const next = plan({ rows: first.rows, legs: [...first.legs, ...other], config: { ...CONFIG, hold } }).decisions!;
+  assert.deepEqual(
+    next.map((d) => d.key),
+    [swap.key],
+  );
+  // The event changes: a new key
+  const changed = first.legs.map((l) => (l.trade === "buy" && l.currency === "BBB" ? { ...l, quantity: 3 } : l));
+  assert.notEqual(plan({ rows: first.rows, legs: changed }).decisions![0].key, swap.key);
+});
+
+test("accept closes a decision while its event is the same, lists it with the reason, and a stale one is noted", () => {
+  const legs = oldLegs().slice(1, 3);
+  const d = plan({ legs }).decisions![0];
+  const accept = finished(d.options[0].config.accept!);
+  const next = plan({ legs, config: { ...CONFIG, accept } });
+  assert.equal(next.decisions, undefined);
+  assert.equal(next.counts.decisions, undefined);
+  assert.deepEqual(next.decided, [{ what: `accepted ${d.key}: ${d.title}`, reason: "checked" }]);
+  assert.deepEqual(next.notes, []);
+  assert.equal(next.delete.length, d.deletes.length ? next.delete.length : 0);
+  const changed = legs.map((l) => (l.trade === "sell" ? { ...l, quantity: 101 } : l));
+  const stale = plan({ legs: changed, config: { ...CONFIG, accept } });
+  assert.equal(stale.decisions?.length, 1);
+  assert.match(stale.notes.join(), new RegExp(`accept: ${d.key} matches no decision`));
+  // A scope leaves other decisions out, so it says nothing of those
+  assert.deepEqual(
+    plan({ legs: changed, config: { ...CONFIG, accept }, scope: ["other.csv:1"] }).notes.filter((n) =>
+      n.startsWith("accept"),
+    ),
+    [],
+  );
+});
+
+test("what summ-sync.json has decided is listed with its reason, and shown after the decisions", () => {
+  const { rows, legs, m } = swapChanged();
+  const hold = [{ id: "kept.csv:1", reason: "not now" }];
+  const deleteManualEntries = [{ legId: m.send.legId, currency: "TKN", quantity: 50, reason: "stood in" }];
+  const p = plan({ rows, legs, config: { ...CONFIG, hold, deleteManualEntries } });
+  assert.deepEqual(p.decided, [
+    { what: `delete manual 50 TKN (leg ${m.send.legId})`, reason: "stood in" },
+    { what: "hold kept.csv:1", reason: "not now" },
+  ]);
+  const text = decisionLines(p.decisions ?? [], p.checks ?? [], p.decided!).join("\n");
+  assert.match(text, /## Decided \(2\)/);
+  assert.match(text, /\| hold kept\.csv:1 \| not now \|/);
+  assert.deepEqual(decisionLines([], [], p.decided!).slice(0, 1), ["## Decided (2)"]);
+});
+
+test("a decision shows its value, from what matters", () => {
+  const legs = oldLegs()
+    .slice(1, 3)
+    .map((l) => ({ ...l, price: l.trade === "sell" ? 3 : 500 }));
+  const d = plan({ legs }).decisions![0];
+  assert.equal(d.value, 1000);
+  assert.match(decisionLines([d], []).join("\n"), /, about 1,000 in Summ's currency/);
+  assert.equal(plan({ legs: oldLegs().slice(1, 3) }).decisions![0].value, null);
 });
