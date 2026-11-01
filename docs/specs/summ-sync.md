@@ -988,8 +988,7 @@ and none of its upload rows in Summ, as a plan of uploads and categorisations he
 
 **The plan.** Each entry is one of:
 
-- _landed_: a delete's legs are gone with a delete logged or found; a changed field holds the planned value; a leg to
-  ignore is ignored;
+- _landed_: a delete's legs are gone with a delete logged or found; a changed field holds the planned value; a leg to ignore is ignored, or apply reported leaving it in place;
 - _NOT LANDED_, with what differs: it does not hold, and it has lines other than a stop, or the last run stopped on it, or it was selected, not held back, with no lines after a complete stop;
 - _not selected_: otherwise, its filed flag or `--approve-deletes` was not this apply's, taken from the run that wrote;
 - _held back_: otherwise, a categorisation while selected uploads remain;
@@ -1005,7 +1004,7 @@ pairs with. A new row beside an old `manual-csv` leg of that ID, not ignored, is
 
 - A field changed: `id`, `trade`, `currency`, `quantity`, `timestamp`, `from`, `to`, `blockchain`, `description`, `price`,
   `feeQuantity`, `feeCurrency`, `source`, `importType`, `comments`. A field is explained only by a change of an entry with lines, or a log line, for that leg and field: a leg named for one thing is not cleared for another, and a leg of an entry
-  held back or not reached that moves is reported. A change in an action a delete took a leg from is marked as beside it.
+  held back or not reached that moves is reported. A leg left in place is not explained. A change in an action a delete took a leg from is marked as beside it.
   Action ids and `updatedAt` move on their own and are not compared. Each comes with the action's newest history line.
 - A leg gone with no delete logged, and a new leg that is no upload row: Summ's matcher makes up a leg this way.
 - A pairing: a leg's other legs, or its action's category, changed. It shows on no field of a leg. A leg of an entry that ran or

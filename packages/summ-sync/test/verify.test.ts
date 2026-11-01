@@ -833,3 +833,18 @@ test("a leg left in place that Summ then re-types is reported", () => {
     ["m"],
   );
 });
+
+test("a delete's made-up leg left in place that Summ then re-types is reported", () => {
+  const split = log({ entry: "delete-0", kind: "split", madeUp: ["m"], operation: "delete", legIds: ["a"] });
+  const left = log({ entry: "delete-0", call: "skip", leftLeg: "m" });
+  const v = run([leg("a"), leg("m")], [leg("m", { trade: "other" })], plan({ delete: [del(["a"])] }), [
+    start,
+    split,
+    left,
+    done,
+  ]);
+  assert.deepEqual(
+    v.changed.map((c) => c.leg.legId),
+    ["m"],
+  );
+});

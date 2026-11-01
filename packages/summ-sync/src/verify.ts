@@ -303,7 +303,7 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
   }
   for (const l of lines) {
     if (l.legId && l.field) explain(l.legId as string, l.field as string);
-    for (const id of (l.madeUp as string[] | undefined) ?? []) explain(id, "trade");
+    for (const id of (l.madeUp as string[] | undefined) ?? []) if (!left.includes(id)) explain(id, "trade");
     if (l.operation === "ignore") for (const id of (l.legIds as string[] | undefined) ?? []) explain(id, "trade");
     if (l.operation === "delete") for (const id of (l.legIds as string[] | undefined) ?? []) deleted.add(id);
   }
