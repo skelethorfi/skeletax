@@ -3,6 +3,7 @@
 
 import { runApply, WRITE_TOOLS } from "../src/apply.ts";
 import { login, READ_SCOPE, WRITE_SCOPE } from "../src/auth.ts";
+import { runDecide } from "../src/decide.ts";
 import { McpClient, READ_TOOLS } from "../src/mcp.ts";
 import { runPrune } from "../src/prune.ts";
 import { pull } from "../src/pull.ts";
@@ -14,6 +15,8 @@ const USAGE = `Usage:
   summ-sync plan  <state dir> <run dir> [--only <scope file>]
                                           compare a run with the latest snapshot (calls nothing); with
                                           --only, only the rows the file's entries match
+  summ-sync decide <state dir> <plan dir> <d1:a> [<d2:b> ...]
+                                          choose a plan's decision options: adds their config to summ-sync.json
   summ-sync apply <state dir> <plan dir> [--dry-run] [--approve-deletes] [--approve-filed]
                                           carry out a plan (needs login --write)
   summ-sync prune <state dir> [--older-than <days>]
@@ -44,6 +47,10 @@ try {
     const [runDir, ...extra] = args;
     if (!runDir || extra.length) throw new Error(USAGE);
     writePlan(stateDir, runDir, only);
+  } else if (command === "decide") {
+    const [planDir, ...choices] = rest;
+    if (!planDir) throw new Error(USAGE);
+    runDecide(stateDir, planDir, choices);
   } else if (command === "apply") {
     if (!rest[0]) throw new Error(USAGE);
     const dryRun = rest.includes("--dry-run");

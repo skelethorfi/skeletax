@@ -396,7 +396,7 @@ export function decisionLines(decisions: Decision[], checks: PlanCheck[]): strin
   const out = [`## Decisions (${decisions.length})`, ""];
   if (decisions.length)
     out.push(
-      "Read these first. The plan does not stop on them: applying it now carries out what it lists below. To choose, add the option's config to `summ-sync.json` and plan again.",
+      "Read these first. The plan does not stop on them: applying it now carries out what it lists below. To choose: `summ-sync decide <state dir> <plan dir> d1:a`, which adds the option's config to `summ-sync.json`; then plan again.",
       "",
     );
   for (const d of decisions) {

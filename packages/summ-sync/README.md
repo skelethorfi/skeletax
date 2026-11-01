@@ -19,7 +19,7 @@ plan before you apply it.
 2. `login <state dir> --write` once (the token is refreshed after that).
 3. `pull <state dir> <run dir>`, then `plan <state dir> <run dir>`. Read `plan.md`.
    Its Decisions section comes first: what the deletes leave behind, with the options.
-   Applying does not wait for them, so choose first (add the option's config and plan again).
+   Applying does not wait for them, so choose first with `decide`, and plan again.
 4. `apply <state dir> <plan dir>` (`--dry-run` first; `--approve-deletes` if the
    plan deletes). It deletes and edits, and holds back categorisation while the
    plan has uploads. Read what each delete removes and leaves in `plan.md`.
@@ -41,10 +41,13 @@ the cost bases of later disposals, in later years and the current one.
     node packages/summ-sync/bin/summ-sync.ts login <state dir> [--write]
     node packages/summ-sync/bin/summ-sync.ts pull  <state dir> [<run dir>] [--all]
     node packages/summ-sync/bin/summ-sync.ts plan  <state dir> <run dir> [--only <scope file>]
+    node packages/summ-sync/bin/summ-sync.ts decide <state dir> <plan dir> <d1:a> [<d2:b> ...]
     node packages/summ-sync/bin/summ-sync.ts apply <state dir> <plan dir> [--dry-run] [--approve-deletes] [--approve-filed]
     node packages/summ-sync/bin/summ-sync.ts prune <state dir> [--older-than <days>]
     node packages/summ-sync/bin/summ-sync.ts tools <state dir>
 
+- `decide` adds a plan's decision options to `summ-sync.json`, all or none, and writes nothing to Summ. It refuses a plan
+  that is not from the latest snapshot, or one Summ was written to since. Plan again after it.
 - `login` opens the browser to authorise this tool (scope `mcp:read`, or
   `mcp:read mcp:write` with `--write`) and keeps the token in
   `<state dir>/.auth.json` (mode 600).
