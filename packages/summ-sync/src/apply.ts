@@ -26,6 +26,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { configSha } from "./config.ts";
+import { figuresNote } from "./figures.ts";
 import { type ActionDetail, isLegAbsent, parseActions, parseDetail, parsePageHeader } from "./parse.ts";
 import {
   type Change,
@@ -1182,6 +1183,7 @@ export async function runApply(
     appendLogLine(logFile, { time: new Date().toISOString(), plan: planName, run, ...line });
   };
 
+  console.log(figuresNote(stateDir));
   if (!opts.dryRun) {
     tick("lock");
     takeLock(stateDir, hooks.isAlive);

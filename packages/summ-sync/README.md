@@ -17,7 +17,9 @@ plan before you apply it.
 
 1. Export the year with the exporter (a run dir with `csv/`).
 2. `login <state dir> --write` once (the token is refreshed after that).
-3. `pull <state dir> <run dir>`, then `plan <state dir> <run dir>`. Read `plan.md`.
+3. `figures <state dir>`, so there is something to compare with afterwards. It needs `taxYearStart` in
+   `summ-sync.json`; adding it makes apply refuse a plan made earlier, so plan after it.
+   `pull <state dir> <run dir>`, then `plan <state dir> <run dir>`. Read `plan.md`.
    Its Decisions section comes first: what the deletes leave behind, with the options.
    Close each by adding its option's lines, or its key under `accept`, to `summ-sync.json` with your reason, then plan again:
    `apply --approve-deletes` refuses a delete a decision is open over. Each has a key that stays while its event, and what the plan does with it, stay.
@@ -33,6 +35,8 @@ plan before you apply it.
    uploads and edits (its calculation then needs a refresh), and
    until it runs, gains, cost bases and reports show the old figures.
 8. `pull` and `plan`: what is left is under Report, for you to resolve.
+9. `figures <state dir>` again, then `compare <state dir> <before> <after>`: what moved in Summ's disposals, by leg and
+   year. Check it against what the plan was meant to do.
 
 Filed years go in a separate apply with `--approve-filed`. A change there also moves
 the cost bases of later disposals, in later years and the current one.
@@ -43,6 +47,8 @@ the cost bases of later disposals, in later years and the current one.
     node packages/summ-sync/bin/summ-sync.ts pull  <state dir> [<run dir>] [--all]
     node packages/summ-sync/bin/summ-sync.ts plan  <state dir> <run dir> [--only <scope file>]
     node packages/summ-sync/bin/summ-sync.ts apply <state dir> <plan dir> [--dry-run] [--approve-deletes] [--approve-filed]
+    node packages/summ-sync/bin/summ-sync.ts figures <state dir>
+    node packages/summ-sync/bin/summ-sync.ts compare <state dir> <before> <after>
     node packages/summ-sync/bin/summ-sync.ts prune <state dir> [--older-than <days>]
     node packages/summ-sync/bin/summ-sync.ts tools <state dir>
 
@@ -61,6 +67,10 @@ the cost bases of later disposals, in later years and the current one.
   id: minutes for a year, half an hour for everything. A stopped pull goes on
   from where it stopped when run again. Its snapshot is written only once
   Summ's list has stopped changing.
+- `figures` writes `<state dir>/figures/<time>.json`: Summ's capital gains rows and yearly totals, only when its
+  computation is current and they tie to Summ's totals. It needs `taxYearStart` (`MM-DD`) in `summ-sync.json`.
+- `compare` reports what moved between two figures files, by name: gains by year and by disposal, zero-cost parcels,
+  disposals gone or replaced, and the acquisitions drawn on. It calls nothing. Spec: After-check.
 - `plan` compares the run's period wallet files with the latest snapshot
   and writes `<state dir>/plans/<timestamp>/`: `plan.json`, `plan.md` and
   `upload/` (the rows Summ lacks, per file). It calls nothing and changes
