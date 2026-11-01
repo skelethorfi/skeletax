@@ -32,6 +32,7 @@ plan before you apply it.
    Then `plan`, `apply` again: it categorises Summ's own legs, now that
    Summ can pair them with the uploaded rows, and ignores the receives Summ
    made up to pair a send as a transfer.
+   `pull` and `verify` that plan too.
 7. Recalculate in Summ. Summ may pause its automatic calculation after
    uploads and edits (its calculation then needs a refresh), and
    until it runs, gains, cost bases and reports show the old figures.
@@ -48,7 +49,7 @@ the cost bases of later disposals, in later years and the current one.
     node packages/summ-sync/bin/summ-sync.ts pull  <state dir> [<run dir>] [--all]
     node packages/summ-sync/bin/summ-sync.ts plan  <state dir> <run dir> [--only <scope file>]
     node packages/summ-sync/bin/summ-sync.ts apply <state dir> <plan dir> [--dry-run] [--approve-deletes] [--approve-filed]
-    node packages/summ-sync/bin/summ-sync.ts verify <state dir> <plan dir>
+    node packages/summ-sync/bin/summ-sync.ts verify <state dir> <plan dir> [<after snapshot>]
     node packages/summ-sync/bin/summ-sync.ts figures <state dir>
     node packages/summ-sync/bin/summ-sync.ts compare <state dir> <before> <after>
     node packages/summ-sync/bin/summ-sync.ts prune <state dir> [--older-than <days>]

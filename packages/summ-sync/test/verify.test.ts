@@ -732,3 +732,73 @@ test("a plan of uploads alone, once a row is in, is verified with no apply-start
   );
   assert.match(readFileSync(runVerify(dir, planDir), "utf8"), /Rows uploaded: 1, not yet: 0/);
 });
+
+test("an earlier run's stop on an entry explains nothing of it", () => {
+  const p = plan({ edit: [edit("a", "trade", "sell", "buy")] });
+  const early = log({ call: "apply-start", run: "1", flags: FLAGS });
+  const stopped = log({ call: "apply-stop", run: "1", reason: "conflict", entry: "edit-0" });
+  const later = log({ call: "apply-start", run: "2", flags: { approveDeletes: true, approveFiled: true } });
+  const write = log({ run: "2", entry: "edit-9", legId: "z", field: "trade" });
+  const end = log({ call: "apply-stop", run: "2", reason: "complete" });
+  const v = run([leg("a")], [leg("a", { trade: "third" })], p, [early, stopped, later, write, end]);
+  assert.equal(stateOf(v, "edit-0"), "not selected");
+  assert.deepEqual(
+    v.changed.map((c) => c.field),
+    ["trade"],
+  );
+});
+
+test("an entry that ran and does not hold did not land, whatever the last run's flags", () => {
+  const p = plan({ edit: [edit("a", "trade", "sell", "buy")] });
+  const found = log({ run: "1", call: "found", via: "found", entry: "edit-0" });
+  const later = log({ call: "apply-start", run: "2", flags: { approveDeletes: true, approveFiled: true } });
+  const write = log({ run: "2", entry: "edit-9", legId: "z", field: "trade" });
+  const v = run([leg("a")], [leg("a")], p, [
+    found,
+    later,
+    write,
+    log({ run: "2", call: "apply-stop", reason: "complete" }),
+  ]);
+  assert.equal(stateOf(v, "edit-0"), "NOT LANDED");
+});
+
+test("a leg a delete's split left behind says so, and is not beside the plan", () => {
+  const before = [leg("a", { actionId: "t" }), leg("o", { actionId: "t" })];
+  const v = run(before, [leg("o", { actionId: "n" })], plan({ delete: [del(["a"])] }), [start, deleteLine, done]);
+  assert.deepEqual(
+    v.pairing.map((p) => [p.leg.legId, p.beside, p.parted]),
+    [["o", false, true]],
+  );
+  assert.match(verifyMarkdown(v, "p", "x", "y"), /a leg of the plan left it/);
+});
+
+test("an ignored or made-up leg with an upload's ID is no old copy", () => {
+  const p = plan({ upload: [{ file: "f", filed: false, ids: ["same"] }] });
+  const ignored = leg("old", { id: "same", trade: "ignoreIn" });
+  assert.deepEqual(run([ignored], [ignored, leg("new", { id: "same" })], p).besideOldCopy, []);
+  const soft = leg("old", { id: "same", importType: "soft-transfer" });
+  assert.deepEqual(run([soft], [soft, leg("new", { id: "same" })], p).besideOldCopy, []);
+});
+
+test("a leg left in place and later ignored is no longer said to be left", () => {
+  const p = plan({ categorise: [edit("a", "trade", "deposit", "x", { ignore: ["m"] })] });
+  const left = log({ entry: "categorise-0", call: "skip", leftLeg: "m" });
+  const v = run([leg("a"), leg("m")], [leg("a", { trade: "x" }), leg("m", { trade: "ignoreOut" })], p, [
+    start,
+    left,
+    done,
+  ]);
+  assert.deepEqual(v.left, []);
+});
+
+test("a value match of nothing against nothing has not landed", () => {
+  const entry = edit("base", "trade", "sell", "sell", {
+    actionId: "t",
+    match: { legId: "quote", baseLegId: "base", summ: 0, desired: null },
+  });
+  const legs = [
+    leg("base", { actionId: "t", price: 0 }),
+    leg("quote", { actionId: "t", side: "incoming", trade: "buy", price: 0 }),
+  ];
+  assert.equal(stateOf(run(legs, legs, plan({ edit: [entry] })), "edit-0"), "NOT LANDED");
+});

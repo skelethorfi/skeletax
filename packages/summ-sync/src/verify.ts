@@ -94,6 +94,8 @@ export interface Verification {
     matesBefore: number;
     matesAfter: number;
     beside: boolean;
+    /** A leg of the plan left this leg's action: a split of a delete does so. */
+    parted: boolean;
   }[];
   listBefore: string[];
   listAfter: string[];
@@ -207,13 +209,14 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
     return sold > 0 && sameValue(sold, bought) ? null : `value: sold ${sold}, bought ${bought} (leg ${legId})`;
   }
 
+  /** What the entry's runs did: a stop only says where a run stopped, which may be before anything of it. */
+  const ranLines = (key: string) => linesOf(key).filter((l) => l.call !== "apply-stop");
   const stateOf = (problems: string[], key: string, chosen: boolean, heldBack: boolean): EntryState => {
     if (!problems.length) return "landed";
-    if (stopLine?.entry === key) return "NOT LANDED";
+    if (stopLine?.entry === key || ranLines(key).length) return "NOT LANDED";
     if (!chosen) return "not selected";
-    if (heldBack && !linesOf(key).length) return "held back";
-    if (stop !== "complete" && !linesOf(key).length) return "not reached";
-    return "NOT LANDED";
+    if (heldBack) return "held back";
+    return stop === "complete" ? "NOT LANDED" : "not reached";
   };
 
   const left: string[] = [];
@@ -273,7 +276,12 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
   const uploaded = [...uploadIds].filter((id) => newIds.has(id));
   const notUploaded = [...uploadIds].filter((id) => !newIds.has(id));
   const besideOldCopy = before.legs.filter(
-    (l) => uploadIds.has(l.id) && newIds.has(l.id) && now.has(l.legId) && l.importType !== SUMM_FEE,
+    (l) =>
+      uploadIds.has(l.id) &&
+      newIds.has(l.id) &&
+      now.has(l.legId) &&
+      l.importType === UPLOADED &&
+      !IGNORED.has(now.get(l.legId)?.trade ?? ""),
   );
 
   // What the plan explains: by field, as a leg named for one thing is not cleared for another; and only entries that
@@ -287,7 +295,7 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
   for (const kind of ["edit", "categorise"] as const) {
     for (const [i, e] of plan[kind].entries()) {
       const key = `${kind}-${i}`;
-      if (entries.find((x) => x.key === key)?.state !== "landed" && !linesOf(key).length) continue;
+      if (entries.find((x) => x.key === key)?.state !== "landed" && !ranLines(key).length) continue;
       for (const c of e.changes) explain(c.legId, c.field);
       for (const id of e.ignore ?? []) explain(id, "trade");
       if (e.match) explain(e.match.legId, "price");
@@ -377,7 +385,8 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
       categoryAfter: c1,
       matesBefore: m0.length,
       matesAfter: m1.length,
-      beside: [...m0, ...m1].some(inPlan),
+      beside: m1.some(inPlan),
+      parted: !m1.some(inPlan) && m0.some(inPlan),
     });
   }
 
@@ -388,7 +397,8 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
     uploaded,
     notUploaded,
     besideOldCopy,
-    left,
+    // A later run may have ignored it after all
+    left: left.filter((id) => !IGNORED.has(now.get(id)?.trade ?? "")),
     changed,
     gone,
     added,
@@ -467,7 +477,7 @@ export function verifyMarkdown(v: Verification, planName: string, beforeName: st
     v.added.map((l) => `- ${legLine(l)}`),
   );
   const pairLine = (p: Verification["pairing"][number]) =>
-    `- ${legLine(p.leg)}: action ${p.categoryBefore} to ${p.categoryAfter}, other legs ${p.matesBefore} to ${p.matesAfter}`;
+    `- ${legLine(p.leg)}: action ${p.categoryBefore} to ${p.categoryAfter}, other legs ${p.matesBefore} to ${p.matesAfter}${p.parted ? " (a leg of the plan left it)" : ""}`;
   section("Pairing changed outside the plan", v.pairing.filter((p) => !p.beside).map(pairLine));
   section(
     "Paired beside the plan: a leg outside it now shares an action with one in it. Check it is the right pair",
