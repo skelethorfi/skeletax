@@ -8,7 +8,7 @@ import { TcyDistributionService } from "./tcy/TcyDistributionService.ts";
 import type { MayaDistributionService } from "./maya/MayaDistributionService.ts";
 import type { TcyClaimService } from "./tcy/TcyClaimService.ts";
 import { MAYA } from "../domain/Protocol.ts";
-import { getActionDate, needsRunePrice } from "./thorchain/MidgardUtils.ts";
+import { getActionDate, memoDestination, needsRunePrice } from "./thorchain/MidgardUtils.ts";
 import { Viewblock, type ViewblockInbound } from "./viewblock/index.ts";
 import { EvmReceipts, isEvmChain, type EvmReceipt } from "./evm/EvmReceipts.ts";
 import { failedTxPaidFee, type Protocol, THORCHAIN } from "../domain/Protocol.ts";
@@ -114,8 +114,8 @@ function isUnpaidSwap(action: Action): boolean {
 export function getAggregatorOutbound(
   action: Action,
 ): { chain: string; txId: string; to: string; tail: string } | undefined {
-  const parts = ((action.metadata?.swap?.memo as string | undefined) ?? "").split(":");
-  const [to, tail] = [parts[2], parts[7]];
+  const memo = (action.metadata?.swap?.memo as string | undefined) ?? "";
+  const [to, tail] = [memoDestination(memo, 2), memo.split(":")[7]];
   const out = action.out?.find((tx) => tx.address?.toLowerCase() === to?.toLowerCase());
   const asset = out?.coins[0]?.asset;
 
@@ -126,6 +126,7 @@ export function getAggregatorOutbound(
     txType === "loanOpen" ||
     txType === "loanRepayment" ||
     action.in?.[0]?.coins[0]?.asset === "THOR.TOR" ||
+    !to ||
     !tail ||
     !out?.txID ||
     !asset ||

@@ -1,0 +1,49 @@
+id: midgard/swap.4D06EBA992A1FC47C6C387715529518DFB2726048CF7912A21DB634B26FA091D
+protocol: thorchain
+kind: swap
+status: success
+time: 2026-10-20T18:14:00.801Z
+memo: =:l:ltc1qeeyce0sq4l5km6u2fqw0ffgtsfjjdrhg6p3f2j/0x77F8ACf312258dA7e475d1992BbC70ba0dF14ef7:9256977/0/0:-_/t1:0/70
+legs:
+  - direction: out
+    wallet: "0x77f8acf312258da7e475d1992bbc70ba0df14ef7"
+    asset:
+      notation: BSC.USDT-0X55D398326F99059FF775485246999027B3197955
+      kind: token
+    role: principal
+    basis: observed
+    txid: 4D06EBA992A1FC47C6C387715529518DFB2726048CF7912A21DB634B26FA091D
+    amount: "6"
+    decimals: 8
+  - direction: in
+    wallet: ltc1qeeyce0sq4l5km6u2fqw0ffgtsfjjdrhg6p3f2j
+    asset:
+      notation: LTC.LTC
+      kind: native
+    role: principal
+    basis: observed
+    txid: 2D9DCCCC67CBFA8E27717C2C7EF102C4825A7745A06B425EA03FB20A7622B71F
+    amount: "0.09446209"
+    decimals: 8
+  - direction: out
+    wallet: "0x77f8acf312258da7e475d1992bbc70ba0df14ef7"
+    asset:
+      notation: BSC.BNB
+      kind: native
+    role: gas
+    basis: observed
+    txid: 4D06EBA992A1FC47C6C387715529518DFB2726048CF7912A21DB634B26FA091D
+    amount: "0"
+    decimals: 18
+prices:
+  - asset:
+      notation: BSC.USDT-0X55D398326F99059FF775485246999027B3197955
+      kind: token
+    usd: "0.850614625293554"
+    source: midgard:swap.inPriceUSD
+  - asset:
+      notation: LTC.LTC
+      kind: native
+    usd: "60.50443501380249"
+    source: midgard:swap.outPriceUSD
+details: {}

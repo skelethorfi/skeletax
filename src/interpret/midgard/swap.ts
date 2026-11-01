@@ -3,7 +3,7 @@ import type { Activity, Leg, Price } from "../../domain/Activity.ts";
 import { formatAmount, parseAmount } from "../../domain/Amount.ts";
 import { type Asset, toAsset } from "../../domain/Asset.ts";
 import type { Issue } from "../../domain/Issue.ts";
-import { getActionDate, parseMidgardAsset } from "../../sources/thorchain/MidgardUtils.ts";
+import { getActionDate, memoDestination, parseMidgardAsset } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { inboundGas } from "./gas.ts";
@@ -299,7 +299,7 @@ function getOutput(action: Action): Transaction {
     throw new Error("swap: no memo");
   }
 
-  const destAddress = memo.split(":")[SWAP_DESTADDR];
+  const destAddress = memoDestination(memo, SWAP_DESTADDR);
 
   if (!destAddress) {
     // A swap memo with an empty destination (e.g. =:ARB.ETH:::wr:0). Maya paid such a swap out to

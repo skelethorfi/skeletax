@@ -185,6 +185,19 @@ row of 1 RUNE with a 0.02 RUNE fee: today's row. The interpreter is
   activities), so an interpreter bug and an exporter bug fail different
   checks.
 
+## The memo's destination
+
+A swap's or loan's legs paid "to the memo's destination" are the outputs to
+the address in the memo's destination field (`=:ASSET:<destination>:…`,
+`$+:ASSET:<destination>:…`, `$-:ASSET:<destination>:…`), in any case. The
+field can also give a refund address, as `<destination>/<refund address>`
+(`=:l:ltc1q…/0x77F8…:9256977/0/0:-_/t1:0/70`); only the part before the `/` is
+the destination. A swap whose field is empty, or holds only `/<refund
+address>`, is paid to the sender's own address (`swap.ts`).
+
+- **Tests:** `test/MemoDestination.test.ts`; the golden case
+  `swap/bsc-usdt-to-ltc-refund-address`.
+
 ## Aggregator payouts
 
 A swap's memo can end in an aggregator and a final token:

@@ -17,6 +17,13 @@ export function needsRunePrice(action: Action): boolean {
   return contract?.contractType === "wasm-rujira-staking/liquid.bond" && /^\d+x\/brune$/.test(contract.funds ?? "");
 }
 
+// The destination address at a memo's field. A memo can give a refund address after the destination,
+// as DESTADDR/REFUNDADDR (https://dev.thorchain.org/concepts/memos.html#swap); outputs are paid to the
+// destination alone. Undefined when the field is missing or empty.
+export function memoDestination(memo: string, field: number): string | undefined {
+  return memo.split(":")[field]?.split("/")[0] || undefined;
+}
+
 export function toMidgardNanoTimestamp(date: Date): string {
   return (date.getTime() * 1000000).toString();
 }

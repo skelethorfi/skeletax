@@ -1,0 +1,188 @@
+{
+  "description": "swap/swap success: [BSC.USDT-0X55D398326F99059FF775485246999027B3197955] -> [LTC.LTC, THOR.RUNE], memo destination given as DESTADDR/REFUNDADDR",
+  "source": "midgard",
+  "wallet": "0x77f8acf312258da7e475d1992bbc70ba0df14ef7",
+  "data": {
+    "date": "1792520040801717322",
+    "height": "28326335",
+    "in": [
+      {
+        "address": "0x77f8acf312258da7e475d1992bbc70ba0df14ef7",
+        "coins": [
+          {
+            "amount": "600000000",
+            "asset": "BSC.USDT-0X55D398326F99059FF775485246999027B3197955"
+          }
+        ],
+        "txID": "4D06EBA992A1FC47C6C387715529518DFB2726048CF7912A21DB634B26FA091D"
+      }
+    ],
+    "metadata": {
+      "swap": {
+        "affiliateAddress": "-_/t1",
+        "affiliateFee": "0",
+        "inPriceUSD": "0.850614625293554",
+        "isStreamingSwap": true,
+        "liquidityFee": "1804655",
+        "memo": "=:l:ltc1qeeyce0sq4l5km6u2fqw0ffgtsfjjdrhg6p3f2j/0x77F8ACf312258dA7e475d1992BbC70ba0dF14ef7:9256977/0/0:-_/t1:0/70",
+        "networkFees": [
+          {
+            "amount": "414996",
+            "asset": "LTC.LTC"
+          }
+        ],
+        "outPriceUSD": "60.50443501380249",
+        "swapSlip": "20",
+        "swapTarget": "9256977",
+        "txType": "swap"
+      }
+    },
+    "out": [
+      {
+        "address": "thor1dl7un46w7l7f3ewrnrm6nq58nerjtp0dradjtd",
+        "affiliate": true,
+        "coins": [
+          {
+            "amount": "6278801",
+            "asset": "THOR.RUNE"
+          }
+        ],
+        "height": "28326335",
+        "txID": ""
+      },
+      {
+        "address": "ltc1qeeyce0sq4l5km6u2fqw0ffgtsfjjdrhg6p3f2j",
+        "coins": [
+          {
+            "amount": "9446209",
+            "asset": "LTC.LTC"
+          }
+        ],
+        "height": "28326358",
+        "txID": "2D9DCCCC67CBFA8E27717C2C7EF102C4825A7745A06B425EA03FB20A7622B71F"
+      }
+    ],
+    "pools": [
+      "BSC.USDT-0X55D398326F99059FF775485246999027B3197955",
+      "LTC.LTC"
+    ],
+    "status": "success",
+    "type": "swap"
+  },
+  "thornodeTxs": [
+    {
+      "tx": {
+        "id": "4D06EBA992A1FC47C6C387715529518DFB2726048CF7912A21DB634B26FA091D",
+        "chain": "BSC",
+        "from_address": "0x77f8acf312258da7e475d1992bbc70ba0df14ef7",
+        "to_address": "0x718f6C9df785BC4e323086De024CA822efbE8aB9",
+        "coins": [
+          {
+            "asset": "BSC.USDT-0X55D398326F99059FF775485246999027B3197955",
+            "amount": "600000000"
+          }
+        ],
+        "gas": [
+          {
+            "asset": "BSC.BNB",
+            "amount": "1"
+          }
+        ],
+        "memo": "=:l:ltc1qeeyce0sq4l5km6u2fqw0ffgtsfjjdrhg6p3f2j/0x77F8ACf312258dA7e475d1992BbC70ba0dF14ef7:9256977/0/0:-_/t1:0/70"
+      },
+      "planned_out_txs": [
+        {
+          "chain": "LTC",
+          "to_address": "ltc1qeeyce0sq4l5km6u2fqw0ffgtsfjjdrhg6p3f2j",
+          "coin": {
+            "asset": "LTC.LTC",
+            "amount": "9446209"
+          },
+          "refund": false
+        },
+        {
+          "chain": "THOR",
+          "to_address": "thor1dl7un46w7l7f3ewrnrm6nq58nerjtp0dradjtd",
+          "coin": {
+            "asset": "THOR.RUNE",
+            "amount": "6278801"
+          },
+          "refund": false
+        }
+      ],
+      "out_txs": [
+        {
+          "id": "0000000000000000000000000000000000000000000000000000000000000000",
+          "chain": "THOR",
+          "from_address": "thor1g98cy3n9mmjrpn0sxmn63lztelera37n8n67c0",
+          "to_address": "thor1dl7un46w7l7f3ewrnrm6nq58nerjtp0dradjtd",
+          "coins": [
+            {
+              "asset": "THOR.RUNE",
+              "amount": "6278801"
+            }
+          ],
+          "gas": [
+            {
+              "asset": "THOR.RUNE",
+              "amount": "2000000"
+            }
+          ],
+          "memo": "OUT:4D06EBA992A1FC47C6C387715529518DFB2726048CF7912A21DB634B26FA091D"
+        },
+        {
+          "id": "2D9DCCCC67CBFA8E27717C2C7EF102C4825A7745A06B425EA03FB20A7622B71F",
+          "chain": "LTC",
+          "from_address": "ltc1q704ak5tqw547nql6m65rjyaqgryq6h54fxv5jq",
+          "to_address": "ltc1qeeyce0sq4l5km6u2fqw0ffgtsfjjdrhg6p3f2j",
+          "coins": [
+            {
+              "asset": "LTC.LTC",
+              "amount": "9446209"
+            }
+          ],
+          "gas": [
+            {
+              "asset": "LTC.LTC",
+              "amount": "14520"
+            }
+          ],
+          "memo": "OUT:4D06EBA992A1FC47C6C387715529518DFB2726048CF7912A21DB634B26FA091D"
+        }
+      ],
+      "stages": {
+        "inbound_observed": {
+          "pre_confirmation_count": 38,
+          "final_count": 111,
+          "completed": true
+        },
+        "inbound_confirmation_counted": {
+          "remaining_confirmation_seconds": 0,
+          "completed": true
+        },
+        "inbound_finalised": {
+          "completed": true
+        },
+        "swap_status": {
+          "pending": false
+        },
+        "swap_finalised": {
+          "completed": true
+        },
+        "outbound_signed": {
+          "completed": true
+        }
+      }
+    }
+  ],
+  "evmReceipts": [
+    {
+      "chain": "BSC",
+      "transactionHash": "0x4d06eba992a1fc47c6c387715529518dfb2726048cf7912a21db634b26fa091d",
+      "blockNumber": "0x7ad3672",
+      "status": "0x1",
+      "gasUsed": "0xe2f6",
+      "effectiveGasPrice": "0x0"
+    }
+  ]
+}
