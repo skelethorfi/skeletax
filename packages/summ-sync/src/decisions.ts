@@ -159,7 +159,7 @@ export function decisionsOf(
       kept.some(
         (k) =>
           k.side === "outgoing" &&
-          TRANSFER_OUT.has(k.trade) &&
+          TRANSFER_OUT.has(tradeAfter(k)) &&
           sameCurrency(k.currency, m.currency) &&
           sameAmount(k.quantity, m.amount) &&
           gap(k.timestamp, r.timestamp) <= NEAR,

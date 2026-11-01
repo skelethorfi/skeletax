@@ -990,3 +990,50 @@ test("a row's plain receive adds nothing back beside a kept send either, and wha
   const lines = decided({ rows: [row], legs: [earlier, buy] }).flatMap((d) => d.lines);
   assert.ok(!lines.some((l) => l.startsWith("Acquisition removed")));
 });
+
+test("a kept leg beside a row's receive goes by the type it ends up with", () => {
+  const sell = leg({
+    ...manual,
+    id: "m",
+    actionId: "am",
+    trade: "sell",
+    currency: "BBB",
+    quantity: 2,
+    timestamp: at("10:00:50"),
+  });
+  const buy = { ...(oldTrade().find((l) => l.trade === "buy") as Leg), actionId: "x" };
+  const received = soldBack({
+    type: "receive",
+    baseCurrency: "BBB",
+    baseAmount: "2",
+    quoteCurrency: "",
+    quoteAmount: "",
+  });
+  const lost = leg({
+    source: "wallet",
+    importType: "wallet",
+    id: OUT_TX,
+    actionId: "aw",
+    trade: "lost",
+    currency: "BBB",
+    quantity: 2,
+    timestamp: at("10:03:00"),
+    blockchain: "btc",
+  });
+  const r = rowOf({
+    file: FILES[1].name,
+    chain: "BTC",
+    type: "send",
+    baseCurrency: "BBB",
+    baseAmount: "2",
+    quoteCurrency: "",
+    quoteAmount: "",
+    timestamp: at("10:03:00"),
+    id: "2024-03-01T10:03:00.000Z.out.acacacacacac",
+    blockchain: "BTC",
+    txids: [OUT_TX],
+  });
+  const p = plan({ rows: [received, r], legs: [buy, sell, lost] });
+  assert.ok(p.categorise.length);
+  assert.ok(p.decisions?.some((d) => d.lines.some((l) => l.includes("Left behind"))));
+});
