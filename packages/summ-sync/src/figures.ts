@@ -236,7 +236,7 @@ export async function figures(
   // Each year's total is rounded, so the years differ from the whole by up to a rounding each
   const totals = await summary(whole.fromDate, whole.toDate);
   const rounding = CENT * (years.length + 1);
-  if (!near(gains, Number(totals.totalCapitalGains), rounding) || !near(income, Number(totals.totalIncome), rounding)) {
+  if (!near(gains, amount(totals.totalCapitalGains), rounding) || !near(income, amount(totals.totalIncome), rounding)) {
     throw new Error(
       `figures: the years sum to gains ${gains}, income ${income}; the whole range says ${totals.totalCapitalGains}, ${totals.totalIncome}`,
     );
@@ -500,20 +500,21 @@ export function compareFigures(before: Figures, after: Figures): Comparison {
   const added = [...now.values()].filter((l) => !was.has(l.sellUid));
   const replaced: Comparison["replaced"] = [];
   const open = [...added];
-  const unpaired = gone.filter((b) => {
-    const alike = open.filter(
-      (a) => a.currencyId === b.currencyId && a.sellTime === b.sellTime && sameQuantity(a.quantity, b.quantity),
-    );
-    // Among identical legs, the one with the same zero-cost and long-term quantities: else two entries cancel out
-    const match =
-      alike.find((a) => sameQuantity(a.zeroQuantity, b.zeroQuantity) && sameQuantity(a.longQuantity, b.longQuantity)) ??
-      alike[0];
-    const at = match ? open.indexOf(match) : -1;
-    if (at < 0) return true;
-    replaced.push({ before: b, after: open[at] });
-    open.splice(at, 1);
-    return false;
-  });
+  const alike = (a: DisposalLeg, b: DisposalLeg) =>
+    a.currencyId === b.currencyId && a.sellTime === b.sellTime && sameQuantity(a.quantity, b.quantity);
+  // Among identical legs, those with the same zero-cost and long-term quantities first: else two entries cancel out
+  const same = (a: DisposalLeg, b: DisposalLeg) =>
+    alike(a, b) && sameQuantity(a.zeroQuantity, b.zeroQuantity) && sameQuantity(a.longQuantity, b.longQuantity);
+  let unpaired = gone;
+  for (const fits of [same, alike]) {
+    unpaired = unpaired.filter((b) => {
+      const at = open.findIndex((a) => fits(a, b));
+      if (at < 0) return true;
+      replaced.push({ before: b, after: open[at] });
+      open.splice(at, 1);
+      return false;
+    });
+  }
   for (const l of unpaired) part(l.year).gone -= l.gain;
   for (const l of open) part(l.year).added += l.gain;
   for (const { before: b, after: a } of replaced) part(a.year).replaced += a.gain - b.gain;

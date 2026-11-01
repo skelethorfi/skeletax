@@ -1010,7 +1010,7 @@ by disposal leg. It reports:
 2. Zero-cost parcels: each leg whose quantity with Summ's `zeroCostBuy` mark moved, as a leg can be only partly
    zero-cost. By the mark, never by a cost of 0: some zero-cost rows carry a fee as cost, and some costless rows have no mark.
 3. Disposals gone and new. A new leg of the same currency, time and quantity as a gone one is shown as replaced, one to
-   one, with the gain difference: a hint, not proof. Its long-term quantity is shown if it moved. A replaced pair counts as one leg in the zero-cost list.
+   one (equal zero-cost and long-term quantities first), with the gain difference: a hint, not proof. Its long-term quantity is shown if it moved. A replaced pair counts as one leg in the zero-cost list.
 4. Kept disposals whose gain (by a cent), quantity, long-term quantity, type or year moved, by currency, largest
    first. The holding period can change a disposal's tax with no change in its gain.
 5. Acquisitions (`buyUid`) used before and not after, and the reverse: a hint at the cause.

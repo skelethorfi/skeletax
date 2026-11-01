@@ -272,6 +272,12 @@ test("figures refuses while an apply holds the lock, and with no tax year set", 
   await assert.rejects(run(stateDir({ timezone: TZ })), /taxYearStart/);
 });
 
+test("an unreadable figures folder does not stop apply's note", () => {
+  const dir = stateDir();
+  writeFileSync(join(dir, "figures"), "not a folder");
+  assert.match(figuresNote(dir), /cannot be read/);
+});
+
 test("figures refuses a log line or a lock that appears during the read", async () => {
   for (const [name, pattern] of [
     ["apply-log.jsonl", /grew during/],
@@ -407,6 +413,17 @@ test("identical legs pair by their zero-cost quantity, so nothing cancels out", 
     ],
   );
   assert.deepEqual(c.zeroCost, []);
+});
+
+test("exact pairs are made first, whatever the order of the legs", () => {
+  const zero = { error: "zeroCostBuy", buyUid: undefined };
+  const c = compareFigures(
+    data([row({ sellUid: "o1", gain: 1 }), row({ sellUid: "o2", gain: 1, ...zero })]),
+    data([row({ sellUid: "n1", gain: 1, ...zero }), row({ sellUid: "n2", gain: 1, isLongTerm: true })], LATER),
+  );
+  assert.deepEqual(c.zeroCost, []);
+  const flip = c.replaced.find((p) => p.after.sellUid === "n2");
+  assert.equal(flip?.before.sellUid, "o1");
 });
 
 test("a year whose gain moved by a cent shows how", () => {
