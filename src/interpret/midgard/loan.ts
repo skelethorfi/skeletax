@@ -2,7 +2,7 @@ import type { Action, Transaction } from "@xchainjs/xchain-midgard";
 import type { Activity, Leg } from "../../domain/Activity.ts";
 import { parseAmount } from "../../domain/Amount.ts";
 import { toAsset } from "../../domain/Asset.ts";
-import { getActionDate } from "../../sources/thorchain/MidgardUtils.ts";
+import { getActionDate, memoDestination } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { inboundGas } from "./gas.ts";
@@ -104,8 +104,8 @@ function getOutput(action: Action, memo: string | undefined, destIndex: number):
     throw new Error("loan: no memo");
   }
 
-  const dest = memo.split(":")[destIndex];
-  const out = action.out.find((out) => out.address.toLowerCase() === dest.toLowerCase());
+  const dest = memoDestination(memo, destIndex);
+  const out = action.out.find((out) => out.address.toLowerCase() === dest?.toLowerCase());
 
   if (!out) {
     throw new Error("loan: no matching out tx");
