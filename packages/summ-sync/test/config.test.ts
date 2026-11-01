@@ -24,6 +24,7 @@ test("a config overrides the defaults it names", () => {
     keepExtra: [],
     hold: [],
     deleteManualEntries: [],
+    accept: [],
   });
 });
 
