@@ -1,0 +1,178 @@
+{
+  "description": "swap/swap success: [ETH~USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7] -> [LTC~LTC, LTC~LTC]",
+  "source": "midgard",
+  "wallet": "thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55",
+  "data": {
+    "date": "1765144980908221658",
+    "height": "23999979",
+    "in": [
+      {
+        "address": "thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55",
+        "coins": [
+          {
+            "amount": "126291125130",
+            "asset": "ETH~USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7"
+          }
+        ],
+        "txID": "535E8A8DA0B14F1D339E78D3526E1F41E3B254D397E6F0AC1DDD8B89BE527288"
+      }
+    ],
+    "metadata": {
+      "swap": {
+        "affiliateAddress": "",
+        "affiliateFee": "0",
+        "inPriceUSD": "1.000556271294482",
+        "isStreamingSwap": false,
+        "liquidityFee": "382807076",
+        "memo": "=:LTC~LTC:thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55:13977890289/1/9",
+        "networkFees": [],
+        "outPriceUSD": "81.2255374523298",
+        "streamingSwapMeta": {
+          "count": "9",
+          "depositedCoin": {
+            "amount": "1136620126170",
+            "asset": "ETH~USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7"
+          },
+          "failedSwapReasons": [
+            "emit asset 1548708082 less than price limit 1553088012",
+            "emit asset 1548708082 less than price limit 1553088012",
+            "emit asset 1550180528 less than price limit 1553088012",
+            "emit asset 1547089774 less than price limit 1553088012",
+            "emit asset 1547089774 less than price limit 1553088012",
+            "emit asset 1547089774 less than price limit 1553088012",
+            "emit asset 1547089774 less than price limit 1553088012",
+            "emit asset 1547089774 less than price limit 1553088012"
+          ],
+          "failedSwaps": [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8"
+          ],
+          "inCoin": {
+            "amount": "126291125130",
+            "asset": "ETH~USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7"
+          },
+          "interval": "1",
+          "lastHeight": "23999987",
+          "outCoin": {
+            "amount": "1553186189",
+            "asset": "LTC~LTC"
+          },
+          "outEstimation": "13978675701",
+          "quantity": "9"
+        },
+        "swapSlip": "20",
+        "swapTarget": "1553098921",
+        "txType": "swap"
+      }
+    },
+    "out": [
+      {
+        "address": "thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55",
+        "coins": [
+          {
+            "amount": "1553186189",
+            "asset": "LTC~LTC"
+          }
+        ],
+        "height": "23999987",
+        "txID": ""
+      },
+      {
+        "address": "thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55",
+        "coins": [
+          {
+            "amount": "1553186189",
+            "asset": "LTC~LTC"
+          }
+        ],
+        "txID": "535E8A8DA0B14F1D339E78D3526E1F41E3B254D397E6F0AC1DDD8B89BE527288"
+      }
+    ],
+    "pools": [
+      "ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7",
+      "LTC.LTC"
+    ],
+    "status": "success",
+    "type": "swap"
+  },
+  "thornodeTxs": [
+    {
+      "tx": {
+        "id": "535E8A8DA0B14F1D339E78D3526E1F41E3B254D397E6F0AC1DDD8B89BE527288",
+        "chain": "THOR",
+        "from_address": "thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55",
+        "to_address": "thor1g98cy3n9mmjrpn0sxmn63lztelera37n8n67c0",
+        "coins": [
+          {
+            "asset": "ETH~USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7",
+            "amount": "1136620126170"
+          }
+        ],
+        "gas": null,
+        "memo": "=:LTC~LTC:thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55:13977890289/1/9"
+      },
+      "planned_out_txs": [
+        {
+          "chain": "THOR",
+          "to_address": "thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55",
+          "coin": {
+            "asset": "LTC~LTC",
+            "amount": "1553186189"
+          },
+          "refund": false
+        }
+      ],
+      "out_txs": [
+        {
+          "id": "0000000000000000000000000000000000000000000000000000000000000000",
+          "chain": "THOR",
+          "from_address": "thor1g98cy3n9mmjrpn0sxmn63lztelera37n8n67c0",
+          "to_address": "thor14mh37ua4vkyur0l5ra297a4la6tmf95mt96a55",
+          "coins": [
+            {
+              "asset": "LTC~LTC",
+              "amount": "1553186189"
+            }
+          ],
+          "gas": [
+            {
+              "asset": "THOR.RUNE",
+              "amount": "2000000"
+            }
+          ],
+          "memo": "OUT:535E8A8DA0B14F1D339E78D3526E1F41E3B254D397E6F0AC1DDD8B89BE527288"
+        }
+      ],
+      "stages": {
+        "inbound_observed": {
+          "final_count": 0,
+          "completed": true
+        },
+        "inbound_confirmation_counted": {
+          "remaining_confirmation_seconds": 0,
+          "completed": true
+        },
+        "inbound_finalised": {
+          "completed": true
+        },
+        "swap_status": {
+          "pending": false
+        },
+        "swap_finalised": {
+          "completed": true
+        }
+      }
+    }
+  ],
+  "usdPrices": {
+    "ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7": "1.00073981870919",
+    "LTC.LTC": "81.27424960580865",
+    "THOR.RUNE": "0.6681285516953245"
+  }
+}

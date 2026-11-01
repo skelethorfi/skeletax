@@ -1,0 +1,233 @@
+{
+  "description": "swap/unknown success: [TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T] -> [TRON.TRX, TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T]",
+  "source": "midgard",
+  "wallet": "TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF",
+  "data": {
+    "date": "1793447876947160021",
+    "height": "28474469",
+    "in": [
+      {
+        "address": "TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF",
+        "coins": [
+          {
+            "amount": "70000000000",
+            "asset": "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T"
+          }
+        ],
+        "txID": "04EE218E412C40113A7FC8A56DEA1286B318AA44486217BB4DE0F544392582FF"
+      }
+    ],
+    "metadata": {
+      "swap": {
+        "affiliateAddress": "",
+        "affiliateFee": "0",
+        "inPriceUSD": "0.9908564671712805",
+        "isStreamingSwap": false,
+        "liquidityFee": "668874522",
+        "memo": "=<:TRON.TRX:TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF:1109364929293/1800/5",
+        "networkFees": [
+          {
+            "amount": "202933100",
+            "asset": "TRON.TRX"
+          },
+          {
+            "amount": "308777300",
+            "asset": "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T"
+          }
+        ],
+        "outPriceUSD": "0.318276937015767",
+        "streamingSwapMeta": {
+          "count": "11",
+          "depositedCoin": {
+            "amount": "350000000000",
+            "asset": "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T"
+          },
+          "failedSwapReasons": [
+            "emit asset 219923048240 less than price limit 221872985859",
+            "emit asset 219319850640 less than price limit 221872985859",
+            "emit asset 217624699340 less than price limit 221872985859",
+            "emit asset 219922007980 less than price limit 221872985859",
+            "emit asset 219895375980 less than price limit 221872985859",
+            "emit asset 219230341340 less than price limit 221872985859",
+            "emit asset 218934186100 less than price limit 221872985859",
+            "emit asset 218918671240 less than price limit 221872985859",
+            "emit asset 219088998740 less than price limit 221872985859",
+            "emit asset 219941684800 less than price limit 221872985859"
+          ],
+          "failedSwaps": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9"
+          ],
+          "inCoin": {
+            "amount": "70000000000",
+            "asset": "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T"
+          },
+          "interval": "1800",
+          "lastHeight": "28474469",
+          "outCoin": {
+            "amount": "222134674800",
+            "asset": "TRON.TRX"
+          },
+          "outEstimation": "1110673374000",
+          "quantity": "5"
+        },
+        "swapSlip": "64",
+        "swapTarget": "221872985859",
+        "txType": "unknown"
+      }
+    },
+    "out": [
+      {
+        "address": "TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF",
+        "coins": [
+          {
+            "amount": "279691222700",
+            "asset": "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T"
+          }
+        ],
+        "height": "28477365",
+        "txID": "6400AA20D294116E4D6ECA9DFB676DD75E6EE6542244C4DB7EAED38E95379582"
+      },
+      {
+        "address": "TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF",
+        "coins": [
+          {
+            "amount": "221931741700",
+            "asset": "TRON.TRX"
+          }
+        ],
+        "height": "28477366",
+        "txID": "973E797ED58A953459F35EB735F99C13BB5E836948D1D42D8A76377C5C252ED5"
+      }
+    ],
+    "pools": [
+      "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T",
+      "TRON.TRX"
+    ],
+    "status": "success",
+    "type": "swap"
+  },
+  "thornodeTxs": [
+    {
+      "tx": {
+        "id": "04EE218E412C40113A7FC8A56DEA1286B318AA44486217BB4DE0F544392582FF",
+        "chain": "TRON",
+        "from_address": "TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF",
+        "to_address": "TLKfB2goHRY1SykEpVbiGdsesACrkCxCeW",
+        "coins": [
+          {
+            "asset": "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T",
+            "amount": "350000000000",
+            "decimals": 6
+          }
+        ],
+        "gas": [
+          {
+            "asset": "TRON.TRX",
+            "amount": "141400000",
+            "decimals": 6
+          }
+        ],
+        "memo": "=<:TRON.TRX:TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF:1109364929293/1800/5"
+      },
+      "planned_out_txs": [
+        {
+          "chain": "TRON",
+          "to_address": "TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF",
+          "coin": {
+            "asset": "TRON.TRX",
+            "amount": "221931741700"
+          },
+          "refund": false
+        },
+        {
+          "chain": "TRON",
+          "to_address": "TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF",
+          "coin": {
+            "asset": "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T",
+            "amount": "279691222700"
+          },
+          "refund": true
+        }
+      ],
+      "out_txs": [
+        {
+          "id": "6400AA20D294116E4D6ECA9DFB676DD75E6EE6542244C4DB7EAED38E95379582",
+          "chain": "TRON",
+          "from_address": "TLKfB2goHRY1SykEpVbiGdsesACrkCxCeW",
+          "to_address": "TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF",
+          "coins": [
+            {
+              "asset": "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T",
+              "amount": "279691222700",
+              "decimals": 6
+            }
+          ],
+          "gas": [
+            {
+              "asset": "TRON.TRX",
+              "amount": "784650000",
+              "decimals": 6
+            }
+          ],
+          "memo": "REFUND:04EE218E412C40113A7FC8A56DEA1286B318AA44486217BB4DE0F544392582FF"
+        },
+        {
+          "id": "973E797ED58A953459F35EB735F99C13BB5E836948D1D42D8A76377C5C252ED5",
+          "chain": "TRON",
+          "from_address": "THPaGKe6aZkUcNht24hcscZPLwtcJAbpun",
+          "to_address": "TPKiLHN9k9Kg3ZMQrS26m4tbsdqPYK1xZF",
+          "coins": [
+            {
+              "asset": "TRON.TRX",
+              "amount": "221931741700",
+              "decimals": 6
+            }
+          ],
+          "gas": [
+            {
+              "asset": "TRON.TRX",
+              "amount": "133900000",
+              "decimals": 6
+            }
+          ],
+          "memo": "OUT:04EE218E412C40113A7FC8A56DEA1286B318AA44486217BB4DE0F544392582FF"
+        }
+      ],
+      "stages": {
+        "inbound_observed": {
+          "final_count": 109,
+          "completed": true
+        },
+        "inbound_confirmation_counted": {
+          "remaining_confirmation_seconds": 0,
+          "completed": true
+        },
+        "inbound_finalised": {
+          "completed": true
+        },
+        "swap_status": {
+          "pending": false
+        },
+        "swap_finalised": {
+          "completed": true
+        },
+        "outbound_signed": {
+          "completed": true
+        }
+      }
+    }
+  ],
+  "usdPrices": {
+    "TRON.TRX": "0.3189638522038643",
+    "TRON.USDT-TR7NHQJEKQXGTCI8Q8ZY4PL8OTSZGJLJ6T": "0.9825740343339484"
+  }
+}

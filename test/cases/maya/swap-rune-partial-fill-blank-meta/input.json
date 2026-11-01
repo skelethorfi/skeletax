@@ -1,0 +1,111 @@
+{
+  "description": "swap success: [THOR.RUNE] -> [ARB.USDC-0XAF88D065E77C8CC2239327C5EDB3A432268E5831, MAYA.CACAO, THOR.RUNE]",
+  "source": "midgard",
+  "protocol": "maya",
+  "wallet": "thor1rrs3u6ncspuv6rq0ded9xh3xkjchrxyuzd4s2e",
+  "data": {
+    "date": "1793526662990039595",
+    "height": "19083906",
+    "in": [
+      {
+        "address": "thor1rrs3u6ncspuv6rq0ded9xh3xkjchrxyuzd4s2e",
+        "coins": [
+          {
+            "amount": "387200636910",
+            "asset": "THOR.RUNE"
+          }
+        ],
+        "txID": "22592E65355AEFE8E1ED6DE28B3C85D31B1EFAC2F30E2E5EC04CD63EEA3E4A55"
+      }
+    ],
+    "metadata": {
+      "swap": {
+        "affiliateAddress": "w1",
+        "affiliateFee": "50",
+        "inPriceUSD": "0.6234541798889475",
+        "isStreamingSwap": true,
+        "liquidityFee": "415039847376",
+        "memo": "=:ARB.USDC:0xe6da95bfb476fc587cd07b1e56c2b9657ea06b2e:272112574331/3/0:w1:50",
+        "networkFees": [
+          {
+            "amount": "9685400",
+            "asset": "ARB.USDC-0XAF88D065E77C8CC2239327C5EDB3A432268E5831"
+          },
+          {
+            "amount": "16504214",
+            "asset": "THOR.RUNE"
+          }
+        ],
+        "outPriceUSD": "0.995716094568943",
+        "streamingSwapMeta": {
+          "count": "1",
+          "depositedCoin": {
+            "amount": "0",
+            "asset": ""
+          },
+          "inCoin": {
+            "amount": "0",
+            "asset": ""
+          },
+          "interval": "0",
+          "lastHeight": "0",
+          "outCoin": {
+            "amount": "0",
+            "asset": ""
+          },
+          "outEstimation": "1082803016300",
+          "quantity": "1"
+        },
+        "swapSlip": "40",
+        "swapTarget": "1733201110"
+      }
+    },
+    "out": [
+      {
+        "address": "maya1dl7un46w7l7f3ewrnrm6nq58nerjtp0dr2n7aa",
+        "affiliate": true,
+        "coins": [
+          {
+            "amount": "1082803016300",
+            "asset": "MAYA.CACAO"
+          }
+        ],
+        "height": "19084375",
+        "txID": ""
+      },
+      {
+        "address": "0xe6da95bfb476fc587cd07b1e56c2b9657ea06b2e",
+        "coins": [
+          {
+            "amount": "234467255100",
+            "asset": "ARB.USDC-0XAF88D065E77C8CC2239327C5EDB3A432268E5831"
+          }
+        ],
+        "height": "19084378",
+        "txID": "0B86551CE97CA6B172F1FA7DDEDA4C2ED7C145CD6D01E2FF1F145AA47451DB97"
+      },
+      {
+        "address": "thor1rrs3u6ncspuv6rq0ded9xh3xkjchrxyuzd4s2e",
+        "coins": [
+          {
+            "amount": "63082858876",
+            "asset": "THOR.RUNE"
+          }
+        ],
+        "height": "19084381",
+        "txID": "A5A57E48711EB1170433AB78A5F57CC2C6D3023D75C4663C4B1928D3A6162673"
+      }
+    ],
+    "pools": [
+      "THOR.RUNE",
+      "ARB.USDC-0XAF88D065E77C8CC2239327C5EDB3A432268E5831"
+    ],
+    "status": "success",
+    "type": "swap"
+  },
+  "nativeFee": "2000000000",
+  "usdPrices": {
+    "ARB.USDC-0XAF88D065E77C8CC2239327C5EDB3A432268E5831": "1.0051528179158864",
+    "THOR.RUNE": "0.6808752356183645"
+  }
+}

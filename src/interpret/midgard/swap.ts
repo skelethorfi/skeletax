@@ -52,7 +52,7 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
     .flatMap((out) => out.coins)
     .filter((coin) => coin.asset === inputCoin.asset)
     .reduce((sum, coin) => sum + BigInt(coin.amount), 0n);
-  const { sent, issues } = sentCoin(action, inputCoin, returned, protocol);
+  const { sent, issues } = sentCoin(bundle, inputCoin, returned, protocol);
 
   if (returned >= BigInt(sent.amount)) {
     throw new Error(`swap: returned ${returned} of ${sent.amount} sent, so nothing was swapped`);
@@ -127,38 +127,80 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
   };
 }
 
+type Coin = { asset: string; amount: string };
+
 // What the wallet sent (docs/specs/fees.md, Partially filled swaps). A streaming swap that filled only partly lists as
-// its input only the part swapped; the deposit is streamingSwapMeta.depositedCoin, and a refund action of the same txid
-// returns the rest. Until that return is paid, only the part swapped is exported: the refund's own rows cover the rest.
+// its input only the part swapped, and a refund action of the same txid returns the rest. The deposit is
+// streamingSwapMeta.depositedCoin; where Midgard leaves that blank (seen on Maya), THORNode's inbound coin, else the input
+// plus the return and the return's outbound fee (networkFees), which the refund's input equals. A trade or secured asset's
+// unfilled part is credited back on the chain, never returned: the part swapped is what left. Until an L1 return is paid,
+// only the part swapped is exported.
 function sentCoin(
-  action: Action,
-  inputCoin: { asset: string; amount: string },
+  bundle: RawBundle,
+  inputCoin: Coin,
   returned: bigint,
   protocol: Protocol,
-): { sent: { asset: string; amount: string }; issues: Issue[] } {
-  const deposited = action.metadata.swap?.streamingSwapMeta?.depositedCoin;
-
-  if (!deposited || deposited.asset !== inputCoin.asset || BigInt(deposited.amount) <= BigInt(inputCoin.amount)) {
-    return { sent: inputCoin, issues: [] };
-  }
+): { sent: Coin; issues: Issue[] } {
+  const action = bundle.data as Action;
+  const swap = action.metadata.swap;
+  const listed = swap?.streamingSwapMeta?.depositedCoin;
+  const larger = (coin?: Coin) =>
+    !!coin && coin.asset === inputCoin.asset && BigInt(coin.amount) > BigInt(inputCoin.amount);
+  const deposited = larger(listed) ? listed : undefined;
 
   if (returned === 0n) {
-    const unfilled = parseAmount(
-      (BigInt(deposited.amount) - BigInt(inputCoin.amount)).toString(),
-      protocol.decimals(inputCoin.asset),
-    );
+    const credited = ["trade", "secured"].includes(toAsset(inputCoin.asset).kind);
+
+    if (!deposited || credited) {
+      return { sent: inputCoin, issues: [] };
+    }
+
+    const unfilled = BigInt(deposited.amount) - BigInt(inputCoin.amount);
     return {
       sent: inputCoin,
       issues: [
         {
           kind: "warning",
-          message: `streaming swap filled only partly and its unfilled ${formatAmount(unfilled)} ${inputCoin.asset} is not returned yet: only the part swapped is exported until the refund is paid`,
+          message: `streaming swap filled only partly and its unfilled ${formatAmount(parseAmount(unfilled.toString(), protocol.decimals(inputCoin.asset)))} ${inputCoin.asset} is not returned yet: only the part swapped is exported; if it is never returned, enter its loss by hand`,
         },
       ],
     };
   }
 
-  return { sent: deposited, issues: [] };
+  if (deposited) {
+    return { sent: deposited, issues: [] };
+  }
+
+  const inbound = bundle.thornodeTxs.find((tx) => tx.tx?.id === action.in[0].txID)?.tx?.coins?.[0];
+
+  if (larger(inbound)) {
+    return { sent: { asset: inputCoin.asset, amount: inbound!.amount }, issues: [] };
+  }
+
+  // A blank depositedCoin (amount 0): Midgard filled in no meta, so the input is the part swapped
+  if (listed && BigInt(listed.amount || "0") === 0n) {
+    const fee = swap?.networkFees?.find((coin) => coin.asset === inputCoin.asset);
+
+    if (fee) {
+      return {
+        sent: { asset: inputCoin.asset, amount: (BigInt(inputCoin.amount) + returned + BigInt(fee.amount)).toString() },
+        issues: [],
+      };
+    }
+
+    return {
+      sent: inputCoin,
+      issues: [
+        {
+          kind: "warning",
+          message:
+            "partly filled swap with no deposit listed: the return is netted off the input; check the amount sent",
+        },
+      ],
+    };
+  }
+
+  return { sent: inputCoin, issues: [] };
 }
 
 // The token as Midgard would name it. A symbol that would read as another currency (UNI-V2 as UNI, LUNA as LUNC), or that a CSV
@@ -275,7 +317,10 @@ function getOutput(action: Action): Transaction {
     return out;
   }
 
-  const out = action.out.find((out) => out.address.toLowerCase() === destAddress.toLowerCase());
+  // A partly filled swap to the sender's own address also pays it the unfilled part, in the input asset, listed before or
+  // after the swap's output
+  const toDest = action.out.filter((out) => out.address.toLowerCase() === destAddress.toLowerCase());
+  const out = toDest.find((out) => out.coins[0]?.asset !== action.in[0].coins[0]?.asset) ?? toDest[0];
 
   if (!out) {
     throw new Error("swap: no matching out tx");
