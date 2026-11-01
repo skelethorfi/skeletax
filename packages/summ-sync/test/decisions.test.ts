@@ -942,3 +942,51 @@ test("guards: a same-asset trade is no changed swap; a removed spam or ignored l
   const names = plan({ rows, legs: all }).decisions![0].options[0].config.deleteManualEntries!.map((e) => e.legId);
   assert.ok(names.includes(m.send.legId));
 });
+
+test("a row's plain receive adds nothing back beside a kept send either, and what acquires claims first", () => {
+  const sell = leg({
+    ...manual,
+    id: "m",
+    actionId: "am",
+    trade: "sell",
+    currency: "BBB",
+    quantity: 2,
+    timestamp: at("10:00:50"),
+  });
+  const buy = { ...(oldTrade().find((l) => l.trade === "buy") as Leg), actionId: "x" };
+  const received = soldBack({
+    type: "receive",
+    baseCurrency: "BBB",
+    baseAmount: "2",
+    quoteCurrency: "",
+    quoteAmount: "",
+  });
+  const keptSend = leg({
+    source: "wallet",
+    importType: "wallet",
+    id: "w",
+    actionId: "aw",
+    currency: "BBB",
+    quantity: 2,
+    timestamp: at("10:03:00"),
+  });
+  const left = (legs: Leg[], rows: Row[]) =>
+    decided({ rows, legs })
+      .flatMap((d) => d.lines)
+      .filter((l) => l.includes("Left behind"));
+  assert.equal(left([buy, sell], [received]).length, 0);
+  assert.equal(left([buy, sell, keptSend], [received]).length, 1);
+  // One row, and a removed plain receive earlier than the buy: the buy takes the row
+  const earlier = leg({
+    id: "old.csv:50",
+    actionId: "y",
+    side: "incoming",
+    trade: "deposit",
+    currency: "BBB",
+    quantity: 2,
+    timestamp: at("10:00:01"),
+  });
+  const row = soldBack({ type: "sell", baseCurrency: "CCC", baseAmount: "7", quoteCurrency: "BBB", quoteAmount: "2" });
+  const lines = decided({ rows: [row], legs: [earlier, buy] }).flatMap((d) => d.lines);
+  assert.ok(!lines.some((l) => l.startsWith("Acquisition removed")));
+});
