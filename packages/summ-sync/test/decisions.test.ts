@@ -743,3 +743,202 @@ test("deletes naming a txid are not said to name none", () => {
   );
   assert.doesNotMatch(plan({ rows, legs: named }).decisions![0].lines.join("\n"), /they name no txid/);
 });
+
+test("option b holds what a row a fee apart, under another ticker, or two txids away would add", () => {
+  const sell = leg({
+    ...manual,
+    id: "m",
+    actionId: "am",
+    trade: "sell",
+    currency: "BBB",
+    quantity: 2,
+    timestamp: at("10:00:50"),
+  });
+  for (const over of [{ baseAmount: "99.5" }, { baseCurrency: "Renamed.AAA" }]) {
+    const r = soldBack({ type: "sell", quoteCurrency: "CCC", quoteAmount: "7", ...over });
+    const legs = [...oldTrade(), sell];
+    const hold = plan({ rows: [r], legs }).decisions![0].options[1].config.hold!;
+    assert.ok(
+      hold.some((h) => h.id === r.id),
+      JSON.stringify(over),
+    );
+    assert.deepEqual(plan({ rows: [r], legs, config: { ...CONFIG, hold } }).upload, []);
+  }
+  const r1 = soldBack({ type: "bridge-trade-out", quoteCurrency: "CCC", quoteAmount: "7", txids: ["7".repeat(64)] });
+  const r2 = soldBack({
+    id: "2024-03-01T10:04:00.000Z.in.dddddddddd01",
+    type: "receive",
+    baseCurrency: "CCC",
+    baseAmount: "7",
+    quoteCurrency: "",
+    quoteAmount: "",
+    txids: ["7".repeat(64), "8".repeat(64)],
+  });
+  const r3 = soldBack({
+    id: "2024-03-01T10:04:00.000Z.out.dddddddddd02",
+    type: "sell",
+    baseCurrency: "CCC",
+    baseAmount: "7",
+    quoteCurrency: "EEE",
+    quoteAmount: "1",
+    txids: ["8".repeat(64)],
+  });
+  const hold = plan({ rows: [r1, r2, r3], legs: [...oldTrade(), sell] }).decisions![0].options[1].config.hold!;
+  for (const r of [r1, r2, r3])
+    assert.ok(
+      hold.some((h) => h.id === r.id),
+      r.id,
+    );
+});
+
+test("one row or kept leg adds back one removed leg", () => {
+  const sold = oldTrade().filter((l) => l.trade === "sell");
+  const twin = { ...sold[0], legId: "twin-leg", actionId: "twin", id: "old.csv:30" };
+  const r = soldBack({ type: "sell", quoteCurrency: "CCC", quoteAmount: "7" });
+  assert.equal(decided({ rows: [r], legs: sold }).length, 0);
+  assert.equal(decided({ rows: [r], legs: [...sold, twin] }).length, 1);
+  const keptSell = leg({
+    source: "wallet",
+    importType: "wallet",
+    id: "k",
+    actionId: "ak",
+    trade: "sell",
+    timestamp: at("10:00:30"),
+    ...wallet,
+  });
+  assert.equal(decided({ legs: [...sold, keptSell] }).length, 0);
+  assert.equal(decided({ legs: [...sold, twin, keptSell] }).length, 1);
+});
+
+test("what moves without being sold is no disposal, either way", () => {
+  const sold = oldTrade().filter((l) => l.trade === "sell");
+  for (const type of ["staking-deposit", "collateral-deposit", "open-position", "loan-repayment"]) {
+    const r = soldBack({ type, quoteCurrency: "", quoteAmount: "" });
+    assert.equal(decided({ rows: [r], legs: sold })[0]?.kind, "lost-disposal", type);
+  }
+  assert.equal(decided({ legs: [{ ...sold[0], trade: "stakingDeposit" }] }).length, 0);
+});
+
+test("a row's plain receive adds nothing back when a row going ahead sends the same", () => {
+  const sell = leg({
+    ...manual,
+    id: "m",
+    actionId: "am",
+    trade: "sell",
+    currency: "BBB",
+    quantity: 2,
+    timestamp: at("10:00:50"),
+  });
+  const buy = { ...(oldTrade().find((l) => l.trade === "buy") as Leg), actionId: "x" };
+  const received = soldBack({
+    type: "receive",
+    baseCurrency: "BBB",
+    baseAmount: "2",
+    quoteCurrency: "",
+    quoteAmount: "",
+  });
+  const sent = soldBack({
+    id: "2024-03-01T10:04:00.000Z.out.dddddddddd03",
+    type: "send",
+    baseCurrency: "BBB",
+    baseAmount: "2",
+    quoteCurrency: "",
+    quoteAmount: "",
+    txids: ["9".repeat(64)],
+  });
+  const leftBehind = (rows: Row[]) =>
+    decided({ rows, legs: [buy, sell] }).some((d) => d.lines.some((l) => l.includes("Left behind")));
+  assert.equal(leftBehind([received]), false);
+  assert.equal(leftBehind([received, sent]), true);
+});
+
+test("a named manual buy with nothing to replace it is listed to check, and the text says what goes", () => {
+  const buy = leg({
+    ...manual,
+    id: "m",
+    actionId: "am",
+    side: "incoming",
+    trade: "buy",
+    currency: "TKN",
+    quantity: 50,
+  });
+  const sell = leg({
+    source: "wallet",
+    importType: "wallet",
+    id: "w",
+    actionId: "aw",
+    trade: "sell",
+    currency: "TKN",
+    quantity: 50,
+    timestamp: "2024-03-01T12:00:00.000Z",
+  });
+  const deleteManualEntries = [{ legId: buy.legId, currency: "TKN", quantity: 50, reason: "x" }];
+  const p = plan({ legs: [buy, sell], config: { ...CONFIG, deleteManualEntries } });
+  assert.equal(p.checks?.[0].removed, "buy 50 TKN");
+  const m = leg({
+    ...manual,
+    id: "n",
+    actionId: "an",
+    trade: "sell",
+    currency: "BBB",
+    quantity: 2,
+    timestamp: at("10:00:50"),
+  });
+  const d = plan({ legs: [...oldTrade(), m] }).decisions![0];
+  assert.doesNotMatch(d.options[0].result, /goes ahead/);
+  const named = plan({
+    legs: [...oldTrade(), m],
+    config: { ...CONFIG, deleteManualEntries: d.options[0].config.deleteManualEntries! },
+  });
+  assert.match(
+    named.decisions![0].lines.join("\n"),
+    /Already going, named in `deleteManualEntries`: manual sell 2 BBB/,
+  );
+});
+
+test("acquired twice names what the row acquires, and a sell row's quote", () => {
+  const buy = leg({
+    ...manual,
+    id: "m",
+    actionId: "am",
+    side: "incoming",
+    trade: "buy",
+    currency: "TKN",
+    quantity: 50,
+    timestamp: at("10:01:00"),
+  });
+  const r = soldBack({ type: "sell", quoteCurrency: "TKN", quoteAmount: "50" });
+  assert.match(decided({ rows: [r], legs: [buy] })[0].lines.join("\n"), /adds 50 TKN, and manual buy 50 TKN/);
+});
+
+test("guards: a same-asset trade is no changed swap; a removed spam or ignored leg opens nothing; held rows' manual legs join", () => {
+  const legs = oldTrade().map((l) => (l.trade === "buy" ? { ...l, currency: "AAA", quantity: 99 } : l));
+  const r = outRow({ quoteCurrency: "ZZZ", txids: ["a".repeat(64)] });
+  const z = inRow({ baseCurrency: "ZZZ", baseAmount: "5", txids: ["a".repeat(64)] });
+  assert.notEqual(plan({ rows: [r, z], legs }).decisions?.[0]?.kind, "swap-changed");
+  const out = leg({
+    source: "wallet",
+    importType: "wallet",
+    id: "w",
+    actionId: "aw",
+    currency: "BBB",
+    quantity: 1,
+    timestamp: "2024-03-02T10:00:00.000Z",
+  });
+  for (const trade of ["spamIn", "ignoreIn"]) {
+    const spam = leg({ id: "old.csv:40", actionId: "s", side: "incoming", trade, currency: "BBB", quantity: 2 });
+    const sell = leg({
+      ...manual,
+      id: "m",
+      actionId: "am",
+      trade: "sell",
+      currency: "BBB",
+      quantity: 2,
+      timestamp: at("10:00:50"),
+    });
+    assert.equal(plan({ legs: [spam, sell, out] }).decisions, undefined, trade);
+  }
+  const { rows, legs: all, m } = swapChanged();
+  const names = plan({ rows, legs: all }).decisions![0].options[0].config.deleteManualEntries!.map((e) => e.legId);
+  assert.ok(names.includes(m.send.legId));
+});

@@ -12,6 +12,8 @@ import { summType } from "./summ-types.ts";
 
 export interface DecisionOption {
   key: "a" | "b";
+  /** Its entries span filed and current years, which a plan takes one kind at a time. */
+  spans?: boolean;
   title: string;
   /** What the next plan does with this option. */
   result: string;
@@ -46,7 +48,18 @@ const WEEK = 7 * DAY;
 const FEE_APART = 0.01;
 
 const TRANSFER_IN = new Set(["deposit", "bridgeIn", "failedIn", "spamIn"]);
-const TRANSFER_OUT = new Set(["withdrawal", "bridgeOut", "failedOut", "fee", "approval"]);
+// Moves out without being sold: staking, collateral and positions, whose treatment is Summ's to say
+const TRANSFER_OUT = new Set([
+  "withdrawal",
+  "bridgeOut",
+  "failedOut",
+  "fee",
+  "approval",
+  "stakingDeposit",
+  "collateral",
+  "increasePositionWithdrawal",
+  "loanRepayment",
+]);
 const IGNORED = new Set(["ignoreIn", "ignoreOut"]);
 
 /** Comes in, and acquires nothing even alone. */
@@ -128,32 +141,55 @@ export function decisionsOf(
     ((sameAmount(l.quantity, amount) && gap(time, l.timestamp) <= DAY) ||
       (Math.abs(l.quantity - amount) <= FEE_APART * l.quantity && gap(time, l.timestamp) <= NEAR));
 
-  /** A row going ahead in this plan, or a leg that stays and counts, moves the same thing. */
-  const addedBack = (l: Leg): boolean => {
-    const byRow = rows.some(
-      (r) =>
-        uploads.has(r.id) &&
-        legsMade(r).some(
-          (m) =>
-            m.side === l.side &&
-            (l.side === "outgoing" ? isDisposal(m.trade) : !NOTHING_IN.has(m.trade)) &&
-            (fits(l, m.currency, m.amount, r.timestamp) ||
-              // The same amount at about the same time under another name: a ticker the run spells differently
-              (sameAmount(l.quantity, m.amount) && gap(r.timestamp, l.timestamp) <= NEAR)),
+  /** The same thing, or under another name: the same amount at about the time, a ticker the run spells differently. */
+  const rowFits = (l: Leg, r: Row, m: Move) =>
+    fits(l, m.currency, m.amount, r.timestamp) ||
+    (sameAmount(l.quantity, m.amount) && gap(r.timestamp, l.timestamp) <= NEAR);
+  /** Whether a row's plain receive is half of a transfer: a send of the same in the rows going ahead. */
+  const sentByRow = (r: Row, m: Move) =>
+    (m.trade === "deposit" || m.trade === "bridgeIn") &&
+    rows.some(
+      (o) =>
+        uploads.has(o.id) &&
+        gap(o.timestamp, r.timestamp) <= NEAR &&
+        legsMade(o).some(
+          (x) => x.side === "outgoing" && sameCurrency(x.currency, m.currency) && sameAmount(x.amount, m.amount),
         ),
     );
-    if (byRow) return true;
-    return kept.some((k) => {
-      if (k.side !== l.side || !fits(l, k.currency, k.quantity, k.timestamp)) return false;
-      const trade = tradeAfter(k);
-      if (l.side === "outgoing") return isDisposal(trade);
-      if (NOTHING_IN.has(trade)) return false;
-      // A plain receive counts only alone: beside a kept send it is half of a transfer, and acquires nothing
-      return (
-        isAcquisition(trade) ||
-        !(keptByAction.get(k.actionId) ?? []).some((o) => o.side === "outgoing" && o.importType !== "soft-transfer")
-      );
-    });
+  /** What has already added something back: each can do so once, so two removed sells need two rows. */
+  const claimed = new Set<string>();
+
+  /** Whether a row going ahead would add this leg back: it fits, and its type does what the leg did. */
+  const rowAddsBack = (l: Leg, r: Row, m: Move) =>
+    uploads.has(r.id) &&
+    m.side === l.side &&
+    rowFits(l, r, m) &&
+    (l.side === "outgoing" ? isDisposal(m.trade) : !NOTHING_IN.has(m.trade) && !sentByRow(r, m));
+  /** Whether a kept leg stands for this one, by the type it ends up with. */
+  const keptAddsBack = (l: Leg, k: Leg) => {
+    if (k.side !== l.side || !fits(l, k.currency, k.quantity, k.timestamp)) return false;
+    const trade = tradeAfter(k);
+    if (l.side === "outgoing") return isDisposal(trade);
+    if (NOTHING_IN.has(trade)) return false;
+    // A plain receive counts only alone: beside a kept send it is half of a transfer, and acquires nothing
+    return (
+      isAcquisition(trade) ||
+      !(keptByAction.get(k.actionId) ?? []).some((o) => o.side === "outgoing" && o.importType !== "soft-transfer")
+    );
+  };
+  /** The nearest in time of what stands for this leg and is not taken. */
+  const addedBack = (l: Leg): boolean => {
+    const byRow = rows.flatMap((r) =>
+      legsMade(r)
+        .filter((m) => rowAddsBack(l, r, m))
+        .map((m) => ({ key: `${r.id}:${m.side}`, time: r.timestamp })),
+    );
+    const byLeg = kept.filter((k) => keptAddsBack(l, k)).map((k) => ({ key: k.legId, time: k.timestamp }));
+    const nearest = [...byRow, ...byLeg]
+      .filter((c) => !claimed.has(c.key))
+      .sort((a, b) => gap(a.time, l.timestamp) - gap(b.time, l.timestamp))[0];
+    if (nearest) claimed.add(nearest.key);
+    return !!nearest;
   };
 
   /** A kept manual leg sending on what `l` brought in: the same currency and amount, from just before to a day after. */
@@ -167,12 +203,13 @@ export function decisionsOf(
         Date.parse(m.timestamp) - Date.parse(l.timestamp) <= DAY,
     );
 
-  const lostDisposals = [...deleteOfLeg.keys()]
+  const removedInOrder = [...deleteOfLeg.keys()]
     .map((id) => legById.get(id) as Leg)
-    .filter((l) => l.side === "outgoing" && isDisposal(l.trade) && !addedBack(l));
-  const lostAcquisitions = [...deleteOfLeg.keys()]
-    .map((id) => legById.get(id) as Leg)
-    .filter((l) => l.side === "incoming" && !IGNORED.has(l.trade) && !NOTHING_IN.has(l.trade) && !addedBack(l));
+    .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+  const lostDisposals = removedInOrder.filter((l) => l.side === "outgoing" && isDisposal(l.trade) && !addedBack(l));
+  const lostAcquisitions = removedInOrder.filter(
+    (l) => l.side === "incoming" && !IGNORED.has(l.trade) && !NOTHING_IN.has(l.trade) && !addedBack(l),
+  );
   const dependent = lostAcquisitions.filter((l) => sentOn(l).length);
   /** A row adding what a kept manual leg already acquires. */
   const doubled = rows.flatMap((r) => {
@@ -185,7 +222,7 @@ export function decisionsOf(
             (k) =>
               k.side === "incoming" && isAcquisition(k.trade) && sameMove(k, m) && gap(k.timestamp, r.timestamp) <= DAY,
           )
-          .map((k) => ({ row: r, leg: k })),
+          .map((k) => ({ row: r, leg: k, move: m })),
       );
   });
 
@@ -245,10 +282,15 @@ export function decisionsOf(
             (keptByAction.get(m.actionId) ?? []).filter((o) => o.importType === "manual").forEach(addLeg);
           }
         for (const r of rows)
-          if (gap(r.timestamp, l.timestamp) <= NEAR && movesOf(r).some((m) => sameMove(l, m)))
-            eventOfRow(r).forEach(addRow);
+          if (
+            (gap(r.timestamp, l.timestamp) <= NEAR && movesOf(r).some((m) => sameMove(l, m))) ||
+            // What could add it back belongs here too, or holding this event would leave it going
+            legsMade(r).some((m) => rowAddsBack(l, r, m))
+          )
+            addRow(r);
       }
       for (const r of [...groupRows.values()]) {
+        eventOfRow(r).forEach(addRow);
         for (const id of heldManual.get(r.id) ?? []) {
           const m = legById.get(id);
           if (m && !removed.has(id) && !usedLegs.has(id)) addLeg(m);
@@ -309,7 +351,7 @@ export function decisionsOf(
         );
     for (const d of twice)
       lines.push(
-        `Acquired twice: row \`${d.row.id}\` adds ${d.row.baseAmount} ${d.row.baseCurrency}, and manual ${legText(d.leg)} (leg \`${d.leg.legId}\`) stays.`,
+        `Acquired twice: row \`${d.row.id}\` adds ${d.move.amount} ${d.move.currency}, and manual ${legText(d.leg)} (leg \`${d.leg.legId}\`) stays.`,
       );
     const otherManual = manual.filter(
       (m) => !acquisitions.some((l) => sentOn(l).includes(m)) && !twice.some((d) => d.leg === m),
@@ -326,6 +368,21 @@ export function decisionsOf(
         lines.push(
           `Your value stays on row \`${o.override.id}\`: type ${o.override.summ}, where the run has ${o.override.run}. Its \`retainUserEdit\` decides that.`,
         );
+    const namedHere = plan.delete
+      .filter((d) => d.manual)
+      .flatMap((d) => d.legIds.map((id) => legById.get(id) as Leg))
+      .filter(
+        (n) =>
+          n &&
+          ls.some(
+            (l) =>
+              sameCurrency(n.currency, l.currency) &&
+              sameAmount(n.quantity, l.quantity) &&
+              gap(n.timestamp, l.timestamp) <= DAY,
+          ),
+      );
+    for (const n of namedHere)
+      lines.push(`Already going, named in \`deleteManualEntries\`: manual ${legText(n)} (leg \`${n.legId}\`).`);
     const outside = notGoing.filter((r) => !heldRows.has(r.id) && !hasLeg(r));
     if (outside.length) lines.push(`Rows not in this plan: ${outside.map((r) => `\`${r.id}\``).join(", ")}.`);
     lines.push(
@@ -359,8 +416,9 @@ export function decisionsOf(
       manual.length
         ? {
             key: "a",
+            ...(spans ? { spans: true } : {}),
             title: "The run is right, and the manual entries were stand-ins: delete them.",
-            result: `The next plan deletes these entries with the old rows and goes ahead with the run's rows. Summ has no undo for a delete; apply saves each entry first.${spans ? " These span filed and current years, and a plan takes one kind at a time: name each kind in turn." : ""}`,
+            result: `The next plan deletes these entries${groupDeletes.length ? " with the old rows" : ""}${rs.length ? " and goes ahead with the run's rows" : ""}. Summ has no undo for a delete; apply saves each entry first.${spans ? " These span filed and current years, and a plan takes one kind at a time: add each kind's lines by hand, one kind at a time." : ""}`,
             config: {
               deleteManualEntries: toName.map((m) => ({
                 legId: m.legId,
@@ -373,7 +431,7 @@ export function decisionsOf(
         : {
             key: "a",
             title: "The plan is right: this is meant to go.",
-            result: "Nothing to add: apply the plan as it is.",
+            result: `Nothing to add: apply the plan as it is.${held.length ? " Its rows stay held for a manual entry elsewhere: the rest goes without them." : ""}`,
             config: {},
           },
       {
@@ -413,8 +471,13 @@ export function decisionsOf(
     };
   }
 
-  // ---- The rest: an acquisition gone with nothing back, and something of that asset leaving soon after
-  const checks = lostAcquisitions
+  // ---- The rest: an acquisition gone with nothing back, and something of that asset leaving soon after. A manual entry
+  // named for deletion opens no decision, since the user chose it, but what it acquired can still be what is sold later.
+  const namedAcquisitions = plan.delete
+    .filter((d) => d.manual)
+    .flatMap((d) => d.legIds.map((id) => legById.get(id) as Leg))
+    .filter((l) => l && l.side === "incoming" && isAcquisition(l.trade) && !addedBack(l));
+  const checks = [...lostAcquisitions, ...namedAcquisitions]
     .filter((l) => isAcquisition(l.trade) && !usedLegs.has(l.legId))
     .flatMap((l) => {
       const after = kept.filter(
