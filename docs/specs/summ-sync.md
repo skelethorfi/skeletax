@@ -575,7 +575,9 @@ with the entries left out:
   event stays: the delete, its row's event, other deletes moving the same currency and amount within a day, and rows to
   upload that move them, since these would take the amount out twice or count it twice. A manual entry named in
   `deleteManualEntries` sends nothing on. A disposal of part of the amount, under another amount, or added after the pull
-  is not seen, nor is a remaking row whose amount differs by a fee; Summ's zero-cost warnings show the first of these.
+  is not seen, nor is a remaking row whose amount differs by a fee or is only on its quote, nor an old leg with no row of
+  a row held only through its event. This check goes by amounts, so it can also hold unrelated moves of the same amount
+  within a day, which only delays them. Summ's zero-cost warnings show a disposal from nothing.
 
 **Filed years.** An entry whose row or leg is dated before `filedBefore` is
 an amendment: listed under its own heading in each section and applied only

@@ -3269,3 +3269,46 @@ test("the whole old event stays with a held delete, and a replacing row must com
   assert.deepEqual(q.delete, []);
   assert.deepEqual(q.upload, []);
 });
+
+test("the old event held with a delete takes only the same currency and amount, and no spam row", () => {
+  const T = "2024-03-01T10:00:00.000Z";
+  const leg = (legId: string, side: Leg["side"], trade: string, currency: string, quantity: number, n: string) =>
+    ownLeg({
+      legId,
+      actionId: legId,
+      side,
+      trade,
+      currency,
+      quantity,
+      source: "csv-source",
+      importType: "manual-csv",
+      id: `2024-03-01T10:00:00.000Z.in.${n}`,
+      timestamp: T,
+    });
+  const buy = leg("buy", "incoming", "buy", "ETH", 0.5, "000000000001");
+  const manual = ownLeg({
+    legId: "man",
+    actionId: "m",
+    trade: "sell",
+    currency: "ETH",
+    quantity: 0.5,
+    importType: "manual",
+    source: "manual",
+    id: "hand",
+    timestamp: T,
+  });
+  const kept = (other: Leg, rows: Row[] = []) => plan({ rows, legs: [buy, other, manual] }).plan;
+  assert.equal(kept(leg("x", "incoming", "deposit", "ETH", 0.5, "000000000002")).delete.length, 0);
+  assert.equal(kept(leg("x", "incoming", "deposit", "BTC", 0.5, "000000000002")).delete.length, 1);
+  assert.equal(kept(leg("x", "incoming", "deposit", "ETH", 0.4, "000000000002")).delete.length, 1);
+  const other = leg("x", "incoming", "deposit", "BTC", 1, "000000000002");
+  const spam = row({
+    type: "spam",
+    baseCurrency: "ETH",
+    baseAmount: "0.5",
+    quoteCurrency: "",
+    quoteAmount: "",
+    timestamp: T,
+  });
+  assert.ok(!kept(other, [spam]).held.some((h) => h.id === spam.id));
+});
