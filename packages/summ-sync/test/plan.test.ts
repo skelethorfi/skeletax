@@ -3393,3 +3393,53 @@ test("ignoreImportLegs: a duplicate and its made-up deposit plan beside the row 
     [["d", ["dup", "made"]]],
   );
 });
+
+
+test("legs with no row, of a record the run could not map, are held, not deleted", () => {
+  const gone = row({ id: "2024-02-01T00:00:00.000Z.in.cccccccccccc", timestamp: "2024-02-01T00:00:00.000Z" });
+  const byTxid = row({
+    id: "2024-02-02T00:00:00.000Z.out.dddddddddddd",
+    timestamp: "2024-02-02T00:00:00.000Z",
+    txids: [TX2],
+    description: `Sent; ${TX2}`,
+  });
+  const other = row({ id: "2024-02-03T00:00:00.000Z.out.eeeeeeeeeeee", timestamp: "2024-02-03T00:00:00.000Z" });
+  const failed = {
+    kind: "failed",
+    record: "midgard/swap.x",
+    wallet: "wallet-a",
+    time: "2024-02-01T00:00:00.000Z",
+    txids: [],
+    reason: "boom",
+  };
+  const unsupported = {
+    kind: "unsupported",
+    record: "midgard/contract.y",
+    wallet: "wallet-a",
+    time: "2024-01-01T00:00:00.000Z",
+    txids: [TX2],
+    reason: "unsupported action: contract",
+  };
+  const legs = [...legsOf(gone, {}, "a1"), ...legsOf(byTxid, {}, "a2"), ...legsOf(other, {}, "a3")];
+  const { plan: p } = plan({ legs, unmapped: [failed, unsupported] });
+  assert.deepEqual(
+    p.delete.map((d) => d.summId),
+    [other.id],
+  );
+  assert.deepEqual(
+    p.held.map((h) => [h.kind, h.id, h.summId, h.held]),
+    [
+      ["unmapped", null, gone.id, ["delete (no row in the run)"]],
+      ["unmapped", null, byTxid.id, ["delete (no row in the run)"]],
+    ],
+  );
+  assert.match(p.held[0].reason, /could not map midgard\/swap\.x \(failed: boom\)/);
+  assert.deepEqual(p.notes, []);
+  // A run made before unmapped.json: deletes go, with a note
+  const old = plan({ legs, unmapped: null }).plan;
+  assert.equal(old.delete.length, 3);
+  assert.match(old.notes.join("\n"), /no unmapped\.json/);
+  // Nothing failed: the deletes go, with no note
+  const clean = plan({ legs, unmapped: [] }).plan;
+  assert.deepEqual([clean.delete.length, clean.held, clean.notes], [3, [], []]);
+});

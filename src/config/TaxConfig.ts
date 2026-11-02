@@ -94,6 +94,23 @@ export class TaxConfig {
       }
     }
 
+    // A wallet file's name holds the chain (<from>_<to>_<CHAIN>_...), which summ-sync reads back to tell managed rows
+    // from categorised ones: letters and digits, taken in any case and written in upper case
+    if (config.wallets !== undefined) {
+      config = {
+        ...config,
+        wallets: config.wallets.map((wallet) => {
+          const blockchain = typeof wallet.blockchain === "string" ? wallet.blockchain.toUpperCase() : "";
+          if (!/^[A-Z0-9]+$/.test(blockchain)) {
+            throw new Error(
+              `Config: wallet ${wallet.name}: blockchain must be letters and digits, e.g. "THOR" (got ${JSON.stringify(wallet.blockchain)})`,
+            );
+          }
+          return { ...wallet, blockchain };
+        }),
+      };
+    }
+
     const dateToday = dateIn(today, config.timezone);
     const defaults = {
       outputPath: "output",

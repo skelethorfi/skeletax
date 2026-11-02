@@ -88,6 +88,9 @@ the cost bases of later disposals, in later years and the current one.
   currency, quantity, reason) to have the plan set it to ignored.
   A manual entry holds its event until you resolve it in Summ, or name it in `deleteManualEntries` in
   `summ-sync.json` (leg, currency, quantity, reason) to have the plan delete it, which Summ cannot undo.
+  Legs of a record the run could not map (its `unmapped.json`: unsupported or failed actions) are held,
+  not deleted, until a run maps it. Plan refuses a run whose `csv/` holds another `.csv` than its
+  period wallet files and `all*.csv`.
   With `--only <scope file>`, the plan covers only the rows the file's
   entries match, one per line (a `#` at the start or after a space starts
   a comment): a row ID, a txid (any 64 hex digits), or any other text

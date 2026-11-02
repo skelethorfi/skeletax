@@ -25,6 +25,21 @@ describe("TaxConfig", () => {
     assert.equal(result.toDate, "2026-07-01");
   });
 
+  test("a wallet's blockchain is taken in any case and written in upper case; anything else is an error", () => {
+    const wallet = (blockchain: unknown) => ({ name: "Example", address: "thor1example", blockchain }) as any;
+    const result = TaxConfig.applyDefaults({ wallets: [wallet("thor"), wallet("Eth2")] }, new Date());
+    assert.deepEqual(
+      result.wallets.map((w) => w.blockchain),
+      ["THOR", "ETH2"],
+    );
+    for (const bad of ["THOR_X", "", "BNB-CHAIN", undefined]) {
+      assert.throws(
+        () => TaxConfig.applyDefaults({ wallets: [wallet(bad)] }, new Date()),
+        /wallet Example: blockchain must be letters and digits/,
+      );
+    }
+  });
+
   test("an unknown timezone is an error", () => {
     assert.throws(
       () => TaxConfig.applyDefaults({ timezone: "Nowhere/City" }, new Date()),

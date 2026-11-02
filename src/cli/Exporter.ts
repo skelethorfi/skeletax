@@ -249,6 +249,8 @@ export class Exporter {
       }),
     );
     results.forEach((result) => this.handleIssues(result, outputPath));
+    // Always written, so summ-sync can tell a run that failed on nothing from one made before this file
+    fs.outputFileSync(path.join(outputPath, UNMAPPED_FILE), renderUnmapped(results));
     const actionMemos = results
       .flatMap((result) => result.issues)
       .filter((issue) => issue.message.startsWith(ACTION_MEMO_WARNING)).length;
@@ -397,6 +399,51 @@ export class Exporter {
       { spaces: 4 },
     );
   }
+}
+
+// What the run could not map, next to csv/ (not uploaded): each unsupported or failed bundle's record, wallet, time and
+// txids. summ-sync holds back the deletes of the rows these gave in an earlier run (docs/specs/summ-sync.md, Held).
+export const UNMAPPED_FILE = "unmapped.json";
+
+export interface UnmappedRecord {
+  kind: "unsupported" | "failed";
+  record: string;
+  wallet: string;
+  time: string;
+  txids: string[];
+  reason: string;
+}
+
+export function unmappedRecords(results: BundleResult[]): UnmappedRecord[] {
+  return results.flatMap(({ bundle, time, issues }) => {
+    const issue = issues.find((i) => i.kind === "failed") ?? issues.find((i) => i.kind === "unsupported");
+
+    if (!issue) {
+      return [];
+    }
+
+    const txids = [
+      ...new Set(
+        [...JSON.stringify(bundle.data).matchAll(/(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])/g)].map((m) =>
+          m[0].toLowerCase(),
+        ),
+      ),
+    ];
+    return [
+      {
+        kind: issue.kind as "unsupported" | "failed",
+        record: getBundleKey(bundle),
+        wallet: bundle.wallet,
+        time: time.toISOString(),
+        txids,
+        reason: issue.message,
+      },
+    ];
+  });
+}
+
+export function renderUnmapped(results: BundleResult[]): string {
+  return JSON.stringify({ version: 1, records: unmappedRecords(results) }, null, 2) + "\n";
 }
 
 // Where an unsupported Midgard action is saved, under <run>/unsupported/: [<protocol>/]<type>/<record key>.json.

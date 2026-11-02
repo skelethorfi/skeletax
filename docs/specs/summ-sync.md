@@ -177,9 +177,18 @@ with a `pre` line, and so what that snapshot lists. A plan with `pre` lines whos
 
 **Run folder** (written by the exporter): the desired state is its period
 wallet files, `csv/<from>_<to>_<CHAIN>_<wallet>_<name>.csv` (`periods.md`),
-the files the user uploads. `csv/all.csv` is not read: it holds rows outside
-the run's periods. `row-ids.csv` traces an `ID` back to its action for the
-user; plan does not need it. No other file is written for the sync.
+the files the user uploads. The chain in the name is read in any case.
+`csv/all.csv` and `csv/all-<from>_<to>.csv` are not read: they are not
+uploaded, and `all.csv` holds rows outside the run's periods. Any other
+`.csv` in `csv/` is refused (e.g. the file the exporter names after an
+address missing from its config): its rows would be missing from the
+desired state, and plan would delete them from Summ. `row-ids.csv` traces
+an `ID` back to its action for the user; plan does not need it.
+`unmapped.json` lists the records the run could not map (unsupported or
+failed, `run-summary.md`), each with its time and txids: plan holds back
+the deletes their rows would otherwise get (Held). A run made before it
+has none; plan then notes that its deletes of legs with no row could not
+be checked.
 **Extra folders** (`extraDirs` in `summ-sync.json`): files made by hand in
 the same shape and naming, e.g. rows the exporter cannot produce, uploaded
 like the run's. Their rows are part of the desired state; without them, plan
@@ -571,7 +580,7 @@ in its action stops it.
 | held       | rows the plan leaves alone (Held below), with what it left out; a price edit held (Prices, Trades)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | nothing                                                                                                                                                            |
 | overridden | differences an override keeps (undecided ones on every plan), and overrides captured in this plan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | nothing                                                                                                                                                            |
 
-**Held.** Nothing is planned for two kinds of row, which are listed instead
+**Held.** Nothing is planned for three kinds of row, which are listed instead
 with the entries left out:
 
 - a row whose ID is in `hold` in `summ-sync.json`, or that names a txid
@@ -593,6 +602,16 @@ with the entries left out:
 
   The user resolves the pairing in Summ, or the run, and plans again. Or the user names the entry in `deleteManualEntries`
   (below): a manual entry never goes without being named.
+
+- legs with no row in the run, of a record the run could not map (kind
+  `unmapped`, from `unmapped.json`): the run lacks their row because it
+  failed on the record, not because the row is gone (a Midgard data
+  change can make an action that mapped before fail now). A leg is taken
+  as the record's when its ID starts with the record's time (a row ID
+  starts with its action's time, `periods.md`) or it names one of the
+  record's txids. A match too many keeps legs that should go, until a
+  run maps the record; one too few would delete them with no undo. The
+  legs stay until a run maps the record.
 
 **Decisions.** The plan compares Summ with the run row by row, so it cannot tell that an old trade it deletes was what a
 kept entry sold from. `decisions.ts` reads the finished plan (after `--only`) and says what its deletes leave behind, as the

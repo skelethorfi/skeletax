@@ -6,8 +6,13 @@
 // neither is uploaded. Each row's on-chain txids are the 64-hex strings in its description.
 // Extra folders (config.extraDirs) hold hand-made files of the same shape (manual rows, amendments);
 // a file there counts only when its period is one of the run's, so it never widens the plan's scope.
+//
+//   <run dir>/unmapped.json   the records the run could not map (unsupported or failed), with their time and txids
+//
+// The chain in a file's name is read in any case. Any other .csv in csv/ is refused: its rows would be missing
+// from the run, and the plan would delete them from Summ.
 
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 export interface Period {
@@ -70,7 +75,9 @@ const PRICE_COLUMNS: Record<string, keyof Row> = {
   "Reference Price Currency (Optional)": "referencePriceCurrency",
 };
 
-const WALLET_FILE = /^(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})_([A-Z0-9]+)_.+\.csv$/;
+const WALLET_FILE = /^(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})_([A-Za-z0-9]+)_.+\.csv$/;
+/** The files of csv/ that are not uploaded: every row, and every row of one period. */
+const ALL_FILE = /^all(-\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2})?\.csv$/;
 
 /** One CSV line: fields with a comma or a quote are quoted, quotes doubled (RFC 4180); no newline in a field. */
 export function parseCsvLine(line: string): string[] {
@@ -116,7 +123,7 @@ export function parseWalletFile(name: string, text: string): { file: RunFile; ro
   for (const column of Object.keys(COLUMNS)) {
     if (!names.includes(column)) throw new Error(`${name}: no column "${column}"`);
   }
-  const file: RunFile = { name, chain: m[3], period: { from: m[1], to: m[2] }, header };
+  const file: RunFile = { name, chain: m[3].toUpperCase(), period: { from: m[1], to: m[2] }, header };
   const rows = lines.map((line) => {
     const values = parseCsvLine(line);
     if (values.length !== names.length)
@@ -158,10 +165,13 @@ export function readRun(runDir: string, extraDirs: string[] = []): { files: RunF
       rows.push(row);
     }
   };
-  for (const name of readdirSync(dir)
-    .filter((n) => WALLET_FILE.test(n))
-    .sort())
-    add(join(dir, name), name);
+  const csvNames = readdirSync(dir).filter((n) => n.toLowerCase().endsWith(".csv") && !ALL_FILE.test(n));
+  const others = csvNames.filter((n) => !WALLET_FILE.test(n));
+  if (others.length)
+    throw new Error(
+      `Not period wallet files (<from>_<to>_<CHAIN>_<wallet>_<name>.csv) in ${dir}: ${others.join(", ")}. Their rows would be missing from the run, and the plan would delete them from Summ: fix the wallet's blockchain or address in the exporter's config and export again, or move the file out of csv/`,
+    );
+  for (const name of csvNames.sort()) add(join(dir, name), name);
   if (files.length === 0) throw new Error(`No period wallet files (<from>_<to>_<CHAIN>_...csv) in ${dir}`);
   const periods = new Set(files.map((f) => `${f.period.from}_${f.period.to}`));
   for (const extra of extraDirs) {
@@ -175,4 +185,27 @@ export function readRun(runDir: string, extraDirs: string[] = []): { files: RunF
     }
   }
   return { files, rows };
+}
+
+/** A record the run could not map (unmapped.json): the rows an earlier run made of it are not in this one. */
+export interface Unmapped {
+  kind: string;
+  record: string;
+  wallet: string;
+  /** The record's time, as a row ID made from it starts. */
+  time: string;
+  /** Lower case. */
+  txids: string[];
+  reason: string;
+}
+
+export const UNMAPPED_FILE = "unmapped.json";
+
+/** The run's unmapped.json, or null for a run made before it. */
+export function readUnmapped(runDir: string): Unmapped[] | null {
+  const path = join(runDir, UNMAPPED_FILE);
+  if (!existsSync(path)) return null;
+  const parsed = JSON.parse(readFileSync(path, "utf8")) as { version?: number; records?: Unmapped[] };
+  if (parsed.version !== 1 || !Array.isArray(parsed.records)) throw new Error(`${path}: not version 1`);
+  return parsed.records.map((r) => ({ ...r, txids: r.txids.map((t) => t.toLowerCase()) }));
 }
