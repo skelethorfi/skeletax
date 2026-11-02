@@ -16,7 +16,15 @@ import { TaxConfig } from "../config/TaxConfig.ts";
 import { type FetchMode, RecordStore, StoreMissError } from "../sources/store/RecordStore.ts";
 import { SnapshotManifest } from "../sources/store/SnapshotManifest.ts";
 import { getProtocol, MAYA, type Protocol, THORCHAIN, withAssetNames } from "../domain/Protocol.ts";
-import { MayaDistributionSource, MidgardSource, type Source, TcySource, ViewblockSource } from "../sources/Source.ts";
+import {
+  BUNDLE_CONCURRENCY,
+  MayaDistributionSource,
+  MidgardSource,
+  type Source,
+  TcySource,
+  ViewblockSource,
+} from "../sources/Source.ts";
+import { mapConcurrent } from "../utils/Concurrency.ts";
 import { MayaDistributionService } from "../sources/maya/MayaDistributionService.ts";
 import { ageInDays, inboundSends, type NotFinal, type PendingAge, pendingAge } from "../sources/Pending.ts";
 import { getActionDate } from "../sources/thorchain/MidgardUtils.ts";
@@ -263,12 +271,11 @@ export class Exporter {
         return time >= from && time < to;
       }),
     );
-    const priced: RawBundle[] = [];
-
     try {
-      for (const bundle of bundles) {
-        priced.push(exported.has(bundle) ? await prices.add(bundle) : bundle);
-      }
+      // A few at a time, so a slow answer does not hold up the next request (BUNDLE_CONCURRENCY)
+      return await mapConcurrent(bundles, BUNDLE_CONCURRENCY, async (bundle) =>
+        exported.has(bundle) ? prices.add(bundle) : bundle,
+      );
     } catch (error) {
       // A store, or a replayed run, from before reference prices has no price record (docs/specs/prices.md, The
       // option)
@@ -285,8 +292,6 @@ export class Exporter {
 
       throw error;
     }
-
-    return priced;
   }
 
   // Every row of the bundles; issues are logged, and unsupported and failed actions saved

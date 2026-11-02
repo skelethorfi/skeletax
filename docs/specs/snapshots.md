@@ -198,10 +198,24 @@ to one file (`src/export/summ/files.ts`).
 
 Each fetch is retried after a transient error (HTTP 5xx or 429, a connection
 reset, a timeout, a DNS failure), waiting 5 s, 20 s and then 60 s
-(`src/sources/Retry.ts`). Requests to Midgard, THORNode and the TCY API go
-through one client (`src/sources/http.ts`): at most one per second, and one
-that hangs fails after 60 s. A run that
-still fails keeps what it stored so far, and can be run again.
+(`src/sources/Retry.ts`). Every request (Midgard, THORNode, Maya,
+Viewblock, the EVM RPCs, the TCY API) goes through one client
+(`src/sources/http.ts`): at most one a second to each host, each host on its
+own budget (Liquify serves THORChain's Midgard and THORNode from one host, so
+they share one), and one that hangs fails after 60 s. The wait for a slot is
+not part of the timeout. A run that still fails keeps what it stored so far,
+and can be run again.
+
+A wallet's Midgard actions are bundled four at a time (`BUNDLE_CONCURRENCY`
+in `src/sources/Source.ts`), and their reference prices fetched four at a
+time, so one bundle's THORNode lookup and another's EVM receipt are fetched
+together, and a slow answer does not hold up the next request. A bundle's own
+lookups stay in order, and the bundles are listed in Midgard's order, so the
+rows are the same as fetching one at a time. Two bundles that need the same
+record (a swap and its refund share an inbound, two actions share a price
+bucket) fetch it once: the second waits for the first's fetch, and gets its
+error if it fails. A wallet with many actions logs its progress about every
+10 s (`[THORChain] <wallet>: actions n/N, about … left`).
 
 ### Config names
 

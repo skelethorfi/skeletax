@@ -14,6 +14,12 @@ import { EvmReceipts, isEvmChain, type EvmReceipt } from "./evm/EvmReceipts.ts";
 import { failedTxPaidFee, type Protocol, THORCHAIN } from "../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "./RawBundle.ts";
 import type { NotFinal } from "./Pending.ts";
+import { mapConcurrent } from "../utils/Concurrency.ts";
+import { Progress } from "../utils/Progress.ts";
+
+// Bundles built at once: each waits on its own lookups (THORNode, an EVM receipt, Viewblock, a price), so while one
+// waits on one host another can use the next. Each host keeps its own rate limit (src/sources/http.ts).
+export const BUNDLE_CONCURRENCY = 4;
 
 // Lists the raw bundles of one wallet from one API
 export interface Source {
@@ -216,26 +222,31 @@ export class MidgardSource implements Source {
     actions
       .filter((action) => action.type !== ActionTypeEnum.Send && action.in[0]?.txID)
       .forEach((action) => inbounds.set(action.in[0].txID, (inbounds.get(action.in[0].txID) ?? 0) + 1));
-    const bundles: RawBundle[] = [];
+    const included: Action[] = [];
 
     for (const action of actions) {
-      let included = shouldIncludeAction(action);
+      let include = shouldIncludeAction(action);
 
       if (action.status !== ActionStatusEnum.Success) {
         const coveredBy = settled.get(action.in[0]?.txID ?? "");
         // A stuck swap shares its coin with any other action of its txid (e.g. a pending refund): listed only
         const shared = action.type === ActionTypeEnum.Swap && (inbounds.get(action.in[0]?.txID ?? "") ?? 0) > 1;
-        included ||= !coveredBy && !shared && this.isStuckLoss(action);
-        included ||= this.isFailedSendWithFee(action);
-        this.notFinal.push({ key: keyOf(action), action, exported: included, ...(coveredBy ? { coveredBy } : {}) });
+        include ||= !coveredBy && !shared && this.isStuckLoss(action);
+        include ||= this.isFailedSendWithFee(action);
+        this.notFinal.push({ key: keyOf(action), action, exported: include, ...(coveredBy ? { coveredBy } : {}) });
       }
 
-      if (included) {
-        bundles.push(await this.bundle(action, wallet));
+      if (include) {
+        included.push(action);
       }
     }
 
-    return bundles;
+    const progress = new Progress(`[${this.protocol.blockchain}] ${wallet}: actions`, included.length);
+    return mapConcurrent(included, BUNDLE_CONCURRENCY, async (action) => {
+      const bundle = await this.bundle(action, wallet);
+      progress.done();
+      return bundle;
+    });
   }
 
   // A refund, or a swap that paid nothing out, still pending past the cut-off will not be paid out: it is
