@@ -7,10 +7,13 @@ export const MAYA_LIQUIDITY_AUCTION = ["income", "pool-units"] as const;
 export const MAYA_LIQUIDITY_AUCTION_OLD_NAMES: Record<string, MayaLiquidityAuction> = { deposit: "pool-units" };
 export type MayaLiquidityAuction = (typeof MAYA_LIQUIDITY_AUCTION)[number];
 
+export const FREQUENCIES = ["monthly", "yearly", "none"] as const;
+export type Frequency = (typeof FREQUENCIES)[number];
+
 export interface ITaxConfig {
   fromDate: string;
   toDate: string;
-  frequency: "monthly" | "yearly" | "none";
+  frequency: Frequency;
   // The IANA time zone whose calendar days the periods are made of, e.g. "Europe/London": set it to the
   // tax software's timezone (docs/specs/periods.md). Default: UTC
   timezone?: string;

@@ -22,6 +22,15 @@ describe("generateDateRanges", () => {
     assert.throws(() => generateDateRanges("not-a-date", "2025-01-01", "monthly"), /Invalid fromDate/);
   });
 
+  test("should throw on a date that is not on the calendar", () => {
+    assert.throws(() => generateDateRanges("2023-02-30", "2023-12-31", "monthly"), /Invalid fromDate/);
+    assert.throws(() => generateDateRanges("2023-01-01", "2023-04-31", "monthly"), /Invalid toDate/);
+  });
+
+  test("should throw on an unknown frequency", () => {
+    assert.throws(() => generateDateRanges("2023-01-01", "2023-12-31", "annually" as any), /Unknown frequency/);
+  });
+
   test("should throw if toDate is invalid", () => {
     assert.throws(() => generateDateRanges("2025-01-01", "not-a-date", "monthly"), /Invalid toDate/);
   });

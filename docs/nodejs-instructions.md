@@ -39,6 +39,9 @@ with `--offline`. See [reference prices](specs/prices.md).
 The `blockchain` property for each wallet names its CSV files, e.g. "THOR", "BTC", "ETH". It is written
 in upper case, letters and digits only (`bnb-chain` names files `BNBCHAIN`). summ-sync reads it from the file names to tell the chains you upload from the ones Summ imports.
 
+The config is checked before anything is fetched, and a mistake (a misspelled `frequency`, a date not on the
+calendar, two wallets with one address) stops the run with a message naming it ([periods](specs/periods.md)).
+
 ### 4. Run the export
 
 `node src/full-export.ts ../my-tax/wallets-config.toml`

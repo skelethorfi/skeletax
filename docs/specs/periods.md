@@ -18,6 +18,19 @@ layout is `csvFiles` in `src/export/summ/files.ts`.
 - When `toDate` is left out it is today's date in that timezone (UTC
   without the key).
 - An unknown timezone name stops the run before anything is fetched.
+- The config is checked when it is loaded, before anything is fetched
+  (`TaxConfig.applyDefaults`), and a mistake stops the run with a message
+  naming the key:
+  - `fromDate` is required. `fromDate` and `toDate` are calendar dates,
+    `"2025-07-01"`; an unquoted TOML date (`fromDate = 2025-07-01`) is read as
+    the same date, a date-time is refused, and so is a day not on the
+    calendar (`"2023-02-30"`). `toDate` is not before `fromDate`.
+  - `frequency` is required: `"monthly"`, `"yearly"` or `"none"`.
+  - `wallets` is required (it may be empty). Each wallet has a `name`, an
+    `address` no other wallet has (in any letter case) and a `blockchain` of
+    capital letters and digits (`THOR`, `ETH`), the form summ-sync reads
+    back from the file names.
+  - `protocols`, when set, lists `"thorchain"` and `"maya"`, each at most once.
 - File names keep the period's dates (`2025-07-01_2026-06-30_…`); the
   timezone does not appear in them.
 
@@ -85,3 +98,7 @@ one only after the old one is deleted (`summ-sync.md`).
   row later that day was in no period file (only in `all.csv`).
 - October 2026: periods include their whole last day (UTC), and the
   `timezone` key was added.
+- Until November 2026 most config mistakes were found only after every
+  wallet was fetched, and some not at all: an unquoted TOML date skipped the
+  Viewblock source, an unknown `frequency` was read as yearly, and
+  `"2023-02-30"` made a period that ended before it started.
