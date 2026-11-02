@@ -11,6 +11,7 @@ after the terminal is gone. The run prints the same lines as before.
 | Not fetched         | each wallet the run skipped because a source failed for it: its name, address, the source and the error (below)                                                                                                       |
 | Counts              | actions that are not final, by age; actions skipped (listed for an earlier wallet; sends that are another action's inbound), rows exported, the snapshot summary and the records found changed or missing             |
 | Warnings            | warnings about the whole run: config keys no longer used, an old cache, wallets missing from the config, and the end-of-run warnings (e.g. sends with an action memo, or what Viewblock could not give, `sends.md`)   |
+| Balance check       | each holding below zero, each bank balance that differs from the rows, and each wallet whose balance could not be read (below)                                                                                        |
 | Enter by hand       | actions to enter by hand, with their message                                                                                                                                                                          |
 | Action warnings     | warnings on one action                                                                                                                                                                                                |
 | Not final           | every Midgard action whose status is not `success`, oldest first: its status, age, whether it is recent, waiting or stuck, and whether it was exported, what covers it, or which send stands in for it (`pending.md`) |
@@ -64,3 +65,53 @@ A price fetch, which runs after every wallet's bundles are listed, still stops
 the run. An error before fetching (a bad argument or config, a replayed run
 that cannot be read) and a record missing from the store print `Error:` and
 the message, without a stack, and exit 1.
+
+## Balance check
+
+The biggest risk in a tax export is a missing or wrong row. After the CSV
+files are written, the run adds up what its rows say each wallet holds and
+compares it with what the chain says (`src/pipeline/balances.ts`). A row it
+cannot read (an amount that is no decimal) skips the check with a warning.
+
+What the rows say, for each wallet and currency, over every row of the run
+(`all.csv`, inside and outside its periods):
+
+- A row whose To is its wallet brought the base amount in; one whose From is
+  its wallet sent it out. A sell (From and To both the wallet, a FIN swap)
+  sent the base out and brought the quote in.
+- The fee is paid by the row's wallet.
+- Spam rows (price helpers) move nothing. A `failed-in` or `failed-out` row
+  moves only its fee, as in Summ.
+
+What it reports, each finding only when it is 0.000001 or more of the asset:
+
+| Finding                                | For                                                                                                                                                                  | Likely cause                                                                                                                                                                                                                                         |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a holding below zero                   | every currency of a THORChain (`thor1`) or Maya (`maya1`) wallet; position tokens (`ThorLP.`, `ThorSavers.`, `MayaLP.`, `MayaSavers.`, `RujiraMerge.`) of any wallet | a row exported with the wrong sign, or a missing acquisition                                                                                                                                                                                         |
+| the bank balance differs from the rows | each `thor1` wallet (THORNode, when `thorchain` is among the protocols) and `maya1` wallet (Mayanode, when `maya` is), every currency but position tokens            | a missing or wrong row; or activity the export does not cover: rows not supported yet (README), unsupported or failed actions, sends before April 2022 when the period starts later, IBC transfers, trade account holdings (not in the bank balance) |
+| bank balance not checked               | a `thor1` or `maya1` wallet whose balance could not be read                                                                                                          | offline with no balance stored, a replayed run that read none, or a failed fetch                                                                                                                                                                     |
+
+An L1 wallet (BTC, ETH, ...) also moves funds outside THORChain, which no row
+shows, so its L1 holdings are not flagged below zero and have no balance to
+compare; only its position tokens are checked.
+
+The difference is the bank balance minus what the rows give, e.g.
+`main (thor1…) RUNE: rows give 100, THORNode balance 98.5 (difference -1.5)`.
+A position token is not compared with the bank balance: LP units, savers
+positions, RUNEPool units and merge shares are held by the protocol, not in
+the wallet.
+
+The bank balance is `/cosmos/bank/v1beta1/balances/<address>` now, each denom
+named as the rows name its asset (`assets.md`): `rune` is `RUNE`, `btc/btc`
+`ThorSynth.BTC.BTC`, `btc-btc` `BTC` (or `ThorSecured.BTC.BTC`), `x/ruji`
+`RUJI`, `x/staking-x/ruji` `SRUJI`; a denom that is no asset Midgard names
+(an IBC denom) keeps its denom. Amounts have 8 decimals, CACAO 10 and MAYA 4.
+It is stored like any record (`snapshots.md`, sources `thornode-balance` and
+`mayanode-balance`, keyed by the address): every run that fetches asks again,
+and stores a new copy only when the balance changed, so a changed balance is
+listed among the records the run found changed. `--offline` compares with the
+latest stored balance; `--replay` with the one the replayed run read. The
+Counts section says how many wallets were compared and what was found.
+
+Not checked yet: LP, savers and RUNEPool positions against Midgard's member
+endpoints, trade account balances, and L1 balances.

@@ -54,7 +54,7 @@ export const RUJIRA_CONTRACT_TYPES = [
 
 // A liquid bond's receipt token is the staking contract's `staking-<bond denom>` TokenFactory denom. Named by the
 // symbol in its on-chain denom metadata (`/cosmos/bank/v1beta1/denoms_metadata`).
-const RECEIPT_TOKENS: { [denom: string]: string } = {
+export const RECEIPT_TOKENS: { [denom: string]: string } = {
   "x/staking-x/ruji": "X/SRUJI",
   "x/staking-x/brune": "X/YBRUNE",
 };

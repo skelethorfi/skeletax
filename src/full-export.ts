@@ -82,7 +82,11 @@ async function main(): Promise<number> {
   // A wallet a source failed for is skipped; the others go on (docs/specs/run-summary.md, Not fetched)
   const bundles = await exporter.collectBundles();
   exporter.writeNotFetched(outputPath);
-  exporter.saveToCsv(exporter.getRows(await exporter.withPrices(bundles), outputPath), path.join(outputPath, "csv"));
+  const rows = exporter.getRows(await exporter.withPrices(bundles), outputPath);
+  exporter.saveToCsv(rows, path.join(outputPath, "csv"));
+
+  // Before the snapshot is written, so it lists the balances the check read
+  await exporter.checkBalances(rows);
 
   // Which snapshot of each source this run used, for --replay
   exporter.snapshots.write(outputPath).forEach((line) => report.info(line));
