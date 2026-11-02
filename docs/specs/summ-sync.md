@@ -120,6 +120,11 @@ in this repo. It is meant to be kept in git (prune relies on it).
     figures/<time>.json, figures/compare-<a>-<b>.md  After-check; prune leaves them
     adopted.csv, overrides.json, apply-log.jsonl, summ-sync.json, .lock (while an apply runs)
 
+Each `<time>` is a second, in UTC (`2024-01-02T03-04-05`), so the names sort in time order. Two
+in the same second must not share a name: a snapshot or a figures file takes the next free
+second; a plan folder keeps its second, which times its upload files, and takes `-2`, `-3` and so
+on, read as a number when plans are put in order.
+
 **Pull.** Every pull reads the detail of every action the plan needs. There is
 no reuse by id, and no cheaper signal is safe: an edit can keep its action id, the
 list shows no price, and Summ's last-modified sort is not reliably ordered. It is

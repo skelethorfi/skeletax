@@ -1,8 +1,8 @@
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { configSha, DEFAULTS, type Config } from "../src/config.ts";
 import { ADOPT_WINDOW, makePlan, parseScope, type PlanInput } from "../src/plan.ts";
 import type { Row, RunFile } from "../src/run.ts";
@@ -3515,4 +3515,52 @@ test("legs with no row, of a record the run could not map, are held, not deleted
   // Nothing failed: the deletes go, with no note
   const clean = plan({ legs, unmapped: [] }).plan;
   assert.deepEqual([clean.delete.length, clean.held, clean.notes], [3, [], []]);
+});
+
+
+test("two plans made in the same second get folders of their own, oldest first", () => {
+  const header =
+    "Timestamp (UTC),Type,Base Currency,Base Amount,Quote Currency (Optional),Quote Amount (Optional),Fee Currency (Optional),Fee Amount (Optional),From (Optional),To (Optional),Blockchain (Optional),ID (Optional),Description (Optional)";
+  const id = "2023-08-01T00:00:00.000Z.out.aaaaaaaaaaaa";
+  const state = mkdtempSync(join(tmpdir(), "summ-sync-"));
+  writeFileSync(join(state, "summ-sync.json"), JSON.stringify({ managedSources: ["csv-source"] }));
+  const run = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
+  mkdirSync(join(run, "csv"));
+  writeFileSync(
+    join(run, "csv", "2023-07-01_2024-06-30_THOR_abc_Wallet.csv"),
+    `${header}\n2023-08-01T00:00:00.000Z,send,RUNE,1,,,,,a,b,THORChain,${id},x\n`,
+  );
+  const file = join(state, "snapshots", "2026-01-01T00-00-00.json");
+  writeSnapshot(file, {
+    version: 2,
+    takenAt: "",
+    total: 0,
+    run: resolve(run),
+    managedSources: ["csv-source"],
+    managedChains: DEFAULTS.managedChains,
+    actions: [],
+  });
+  writeFileSync(file.replace(".json", ".details.jsonl"), "{}\n");
+
+  mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-24T23:53:23.400Z") });
+  try {
+    const dirs = Array.from({ length: 11 }, () => writePlan(state, run));
+    assert.equal(new Set(dirs).size, 11);
+    const names = dirs.map((d) => basename(d));
+    assert.equal(names[0], "2026-10-24T23-53-23");
+    assert.equal(names[1], "2026-10-24T23-53-23-2");
+    assert.equal(names[10], "2026-10-24T23-53-23-11");
+    for (const d of dirs) assert.ok(existsSync(join(d, "plan.json")) && existsSync(join(d, "plan.md")));
+
+    // Each is timed by the second it was made in, and read in the order made: the last one's price wins
+    const prices = "ID (Optional),Reference Price Per Unit (Optional),Reference Price Currency (Optional)";
+    dirs.forEach((d, i) => writeFileSync(join(d, "upload", "f.csv"), `${prices}\nr,${i + 1},USD\n`));
+    assert.deepEqual([...uploadedPrices(state)], [["r", 11]]);
+    assert.deepEqual(
+      uploadPriceFiles(state).get("r"),
+      dirs.map((_, i) => ({ planTime: Date.parse("2026-10-24T23:53:23Z"), price: i + 1 })),
+    );
+  } finally {
+    mock.timers.reset();
+  }
 });

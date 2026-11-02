@@ -78,7 +78,8 @@ the cost bases of later disposals, in later years and the current one.
   disposals gone or replaced, and the acquisitions drawn on. It calls nothing. Spec: After-check.
 - `plan` compares the run's period wallet files with the latest snapshot
   and writes `<state dir>/plans/<timestamp>/`: `plan.json`, `plan.md` and
-  `upload/` (the rows Summ lacks, per file). It calls nothing and changes
+  `upload/` (the rows Summ lacks, per file). A second plan in the same second
+  gets `<timestamp>-2/`. It calls nothing and changes
   nothing in the state dir. `plan.json` lists the legs it adopted (old
   `<file>:<n>` IDs) and the values you changed in Summ that it captured;
   `apply` adds them to `adopted.csv` and `overrides.json`, where overrides

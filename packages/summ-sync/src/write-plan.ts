@@ -4,6 +4,8 @@
 //   <state dir>/plans/<timestamp>/plan.md          the same, for review
 //   <state dir>/plans/<timestamp>/upload/<file>    per CSV file, the rows Summ lacks, for the user to upload
 //
+// <timestamp> is the second the plan was made in (UTC), with -2, -3 and so on for later plans in the same second.
+//
 // It writes nothing else: apply adds what the plan adopted and captured to adopted.csv and overrides.json.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -230,12 +232,33 @@ function priceColumns(file: string): { id: string; price: number | null }[] {
   }));
 }
 
+/**
+ * A new folder for a plan made at `time`, named by its second (`2024-01-02T03-04-05`), and claimed by creating it:
+ * another plan in the same second gets `-2`, `-3` and so on, so neither overwrites the other.
+ */
+function planDir(stateDir: string, time: string): string {
+  const stamp = join(stateDir, "plans", time.slice(0, 19).replace(/:/g, "-"));
+  mkdirSync(join(stateDir, "plans"), { recursive: true });
+  for (let n = 1; ; n++) {
+    const dir = n === 1 ? stamp : `${stamp}-${n}`;
+    try {
+      mkdirSync(dir);
+      return dir;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    }
+  }
+}
+
+/** Plan folders oldest first: by name, a same-second plan's number read as a number (`-10` after `-9`). */
+const byPlanName = (a: string, b: string): number => a.localeCompare(b, "en", { numeric: true });
+
 /** The USD price of each row in the newest upload file holding it: a plan's file is what the user uploaded. */
 export function uploadedPrices(stateDir: string): Map<string, number> {
   const prices = new Map<string, number>();
   const plans = join(stateDir, "plans");
   if (!existsSync(plans)) return prices;
-  for (const name of readdirSync(plans).sort()) {
+  for (const name of readdirSync(plans).sort(byPlanName)) {
     const dir = join(plans, name, "upload");
     if (!existsSync(dir)) continue;
     for (const file of readdirSync(dir).filter((f) => f.endsWith(".csv"))) {
@@ -253,7 +276,7 @@ export function uploadPriceFiles(stateDir: string): Map<string, UploadedFile[]> 
   const files = new Map<string, UploadedFile[]>();
   const plans = join(stateDir, "plans");
   if (!existsSync(plans)) return files;
-  for (const name of readdirSync(plans).sort()) {
+  for (const name of readdirSync(plans).sort(byPlanName)) {
     const stamp = /^(\d{4}-\d\d-\d\dT\d\d)-(\d\d)-(\d\d)/.exec(name);
     const dir = join(plans, name, "upload");
     if (!stamp || !existsSync(dir)) continue;
@@ -373,8 +396,8 @@ export function writePlan(stateDir: string, runDir: string, only?: string): stri
     );
   }
 
-  const dir = join(stateDir, "plans", now.slice(0, 19).replace(/:/g, "-"));
-  mkdirSync(join(dir, "upload"), { recursive: true });
+  const dir = planDir(stateDir, now);
+  mkdirSync(join(dir, "upload"));
   writeFileSync(
     join(dir, "plan.json"),
     JSON.stringify(
