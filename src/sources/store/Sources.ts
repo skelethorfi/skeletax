@@ -16,9 +16,16 @@ import type { TcyClaimData } from "../tcy/TcyClaimService.ts";
 // contract actions: one wasm call gives an action per event, so they add the event. The few with no txid
 // (e.g. some refunds) fall back to their date. The store is shared by every wallet, so actions that one tx
 // gave to several members are told apart by the members' addresses: old Midgard's genesisTx placeholders
-// (also by pool), and Maya's donate adds. A FIN trade also adds a hash of its event's attributes: one call can
-// fill at several price levels, each a trade event of the same tx.
+// (also by pool), and Maya's donate adds. A FIN trade also adds a hash of the attributes that tell its fill apart:
+// one call can fill at several price levels, each a trade event of the same tx.
 export function midgardActionKey(action: Action): string {
+  return [midgardActionBaseKey(action), fillHash(action)].filter(Boolean).join(".");
+}
+
+// The key without a FIN trade's fill hash: what a FIN swap's activity, and so its row IDs, are named by. Only the
+// swap's first fill gives an activity (docs/specs/rujira.md, FIN fills), so it is unique among them, and the row IDs
+// of swaps exported before fills had their own keys stay the same (docs/specs/periods.md, Row IDs).
+export function midgardActionBaseKey(action: Action): string {
   const txId = action.in.find((tx) => tx.txID)?.txID || action.out.find((tx) => tx.txID)?.txID;
   const contractType = action.metadata.contract?.contractType;
   const members = action.in.map((tx) => tx.address || "-").join("+");
@@ -31,25 +38,23 @@ export function midgardActionKey(action: Action): string {
     return [action.type, txId, members].join(".");
   }
 
-  return [action.type, txId || `date-${action.date}`, contractType, repeatedEventHash(action)]
-    .filter(Boolean)
-    .join(".");
+  return [action.type, txId || `date-${action.date}`, contractType].filter(Boolean).join(".");
 }
 
-// Contract events that one tx can give several of
-const REPEATED_EVENTS = ["wasm-rujira-fin/trade"];
+// The attributes that tell a FIN trade's fills apart: its side, price level and the amounts filled there. Others
+// (e.g. the long `ranges`) are left out, so a change in how Midgard reports them does not re-key the record.
+const FILL_ATTRIBUTES = ["side", "price", "bid", "offer"];
 
-// The first 12 hex digits of SHA-256 over the event's attributes, sorted by name, for a contract event that can
-// repeat in one tx; none for other actions
-function repeatedEventHash(action: Action): string | undefined {
+// The first 12 hex digits of SHA-256 over a FIN trade's fill attributes; none for other actions
+export function fillHash(action: Action): string | undefined {
   const contract = (action.metadata as any).contract;
 
-  if (!REPEATED_EVENTS.includes(contract?.contractType)) {
+  if (contract?.contractType !== "wasm-rujira-fin/trade") {
     return undefined;
   }
 
-  const attributes = Object.entries(contract.attributes ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return crypto.createHash("sha256").update(JSON.stringify(attributes)).digest("hex").slice(0, 12);
+  const fill = FILL_ATTRIBUTES.map((name) => [name, contract.attributes?.[name] ?? null]);
+  return crypto.createHash("sha256").update(JSON.stringify(fill)).digest("hex").slice(0, 12);
 }
 
 // Maya made LP positions for many members in one tx, each an add with the memo 'donate:<pool>' and that txid

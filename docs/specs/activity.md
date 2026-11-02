@@ -28,17 +28,17 @@ The types are in `src/domain/` (`Activity.ts`, `Asset.ts`, `Amount.ts`,
 
 ## Shape
 
-| Field      | Meaning                                                                                                                                                        |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`       | The bundle's store record key, e.g. `midgard/bond.<txid>` or `maya-midgard/swap.<txid>` (`getBundleKey`). An action listed for several wallets is one activity |
-| `protocol` | `thorchain` or `maya`                                                                                                                                          |
-| `kind`     | What happened (see Kinds)                                                                                                                                      |
-| `status`   | `success`, `pending` or `failed`, as the source reports it. The exporter decides what a pending or failed action gives                                         |
-| `time`     | When the action happened (Midgard's date)                                                                                                                      |
-| `memo`     | The memo the wallet sent, when there is one                                                                                                                    |
-| `legs`     | Every amount that moved into or out of a wallet (see Legs)                                                                                                     |
-| `prices`   | USD prices the source observed at the time, with where each came from (e.g. `midgard:swap.inPriceUSD`, `midgard:history.depths`; `prices.md`)                  |
-| `details`  | Strings a kind needs in order to be described, e.g. a bond's `node`                                                                                            |
+| Field      | Meaning                                                                                                                                                                                                                     |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`       | The bundle's store record key, e.g. `midgard/bond.<txid>` or `maya-midgard/swap.<txid>` (`getBundleKey`); a FIN swap's without its fill hash (`rujira.md`, FIN fills). An action listed for several wallets is one activity |
+| `protocol` | `thorchain` or `maya`                                                                                                                                                                                                       |
+| `kind`     | What happened (see Kinds)                                                                                                                                                                                                   |
+| `status`   | `success`, `pending` or `failed`, as the source reports it. The exporter decides what a pending or failed action gives                                                                                                      |
+| `time`     | When the action happened (Midgard's date)                                                                                                                                                                                   |
+| `memo`     | The memo the wallet sent, when there is one                                                                                                                                                                                 |
+| `legs`     | Every amount that moved into or out of a wallet (see Legs)                                                                                                                                                                  |
+| `prices`   | USD prices the source observed at the time, with where each came from (e.g. `midgard:swap.inPriceUSD`, `midgard:history.depths`; `prices.md`)                                                                               |
+| `details`  | Strings a kind needs in order to be described, e.g. a bond's `node`                                                                                                                                                         |
 
 ### Legs
 

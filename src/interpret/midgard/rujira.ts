@@ -6,7 +6,8 @@ import type { Issue } from "../../domain/Issue.ts";
 import type { CosmosTx } from "../../sources/thorchain/CosmosTxService.ts";
 import { getActionDate } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
-import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
+import { getBundleKey, getBundleSourceName, type RawBundle } from "../../sources/RawBundle.ts";
+import { midgardActionBaseKey } from "../../sources/store/Sources.ts";
 
 // Rujira contract actions (wasm calls on THORChain). See docs/specs/rujira.md.
 
@@ -295,7 +296,7 @@ class Call {
     return {
       activities: [
         {
-          id: getBundleKey(this.bundle),
+          id: this.activityId(),
           protocol: this.protocol.id,
           kind,
           status: this.action.status as Activity["status"],
@@ -310,6 +311,13 @@ class Call {
       ],
       issues: [],
     };
+  }
+
+  // A FIN swap is named by its record key without the fill hash (midgardActionBaseKey); other calls by their key
+  private activityId(): string {
+    return this.contract.contractType === "wasm-rujira-fin/trade"
+      ? `${getBundleSourceName(this.bundle)}/${midgardActionBaseKey(this.action)}`
+      : getBundleKey(this.bundle);
   }
 
   // The gas of the wasm call, from the Cosmos tx; none without it or when none was paid. Not THORChain's
@@ -336,6 +344,11 @@ class Call {
 
     if (events.length <= 1) {
       return 0;
+    }
+
+    // Two messages to the same pair in one tx would each look like fills of the other
+    if (new Set(events.map((attributes) => attributes.msg_index)).size > 1) {
+      throw new Error(`rujira: FIN trades from several messages in one tx are not supported`);
     }
 
     const index = events.findIndex((attributes) =>

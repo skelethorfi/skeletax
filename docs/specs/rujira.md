@@ -64,9 +64,16 @@ event per level, and Midgard an action per event, each carrying the whole
 call's `funds` and `msg`. The `transfer` to the wallet is the whole swap's
 too. So the swap is mapped once: from the action whose attributes match the
 called contract's first trade event in the Cosmos tx. The other fills give no
-rows (an `ignored` issue), and an action that matches none of those events
-fails. Midgard does not list the fills in the Cosmos tx's order. Each fill is
-its own store record (`snapshots.md`).
+rows (an `ignored` issue). When the called contract has several trade events,
+an action that matches none of them fails, and so do trade events from more
+than one message of the tx (their `msg_index` differs), which would otherwise
+look like fills of one swap. Midgard does not list the fills in the Cosmos
+tx's order.
+
+Each fill is its own store record, keyed with a fill hash (`snapshots.md`).
+The swap's activity, and so its row IDs (`periods.md`), are named by the key
+without the hash: only the first fill gives one, and a swap exported before
+fills had their own keys keeps its row IDs.
 
 ### Liquid and account bonds
 

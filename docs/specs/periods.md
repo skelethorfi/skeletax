@@ -59,7 +59,7 @@ Each row's `ID` column says what the row is, never its amounts or wording:
 - **Hash**: the first 12 hex digits of SHA-256 over `v1|<record>|<wallet>|
 <role>|<asset>`: the action's store record key (source, type, txid, and
   the contract event or members where they tell actions apart,
-  `snapshots.md`), the row's wallet, the role, and the leg's asset as the
+  `snapshots.md`; a FIN swap's without its fill hash, `rujira.md`, FIN fills), the row's wallet, the role, and the leg's asset as the
   source names it (`BTC.BTC`, whatever the CSV calls it). Twelve hex digits
   only have to tell apart the rows that share a time and role.
 
@@ -84,5 +84,3 @@ one only after the old one is deleted (`summ-sync.md`).
   row later that day was in no period file (only in `all.csv`).
 - October 2026: periods include their whole last day (UTC), and the
   `timezone` key was added.
-- November 2026: a FIN trade's record key gained a hash of its event's
-  attributes (`snapshots.md`), so the ID of every FIN swap row changed once.
