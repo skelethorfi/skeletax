@@ -39,9 +39,10 @@ Why:
   currency breaks Summ's ledger view.
 - Trade and secured assets are the L1 asset held 1:1 on THORChain, like a
   bridged token on another chain, so they keep the L1 asset's name with
-  THORChain as the blockchain. Moving an asset into or out of them is still
-  exported as a swap today; exporting it as a bridge (not a disposal) is an
-  open item.
+  THORChain as the blockchain. A trade account deposit or withdrawal
+  (Midgard `trade`) is exported as a bridge (`trade.md`); a swap into or
+  out of them is still exported as a swap, and exporting that as a bridge
+  (not a disposal) is an open item.
 - Native THORChain tokens use their ticker, as Summ prices them: `RUNE`,
   `TCY`, `RUJI`. `x/ruji` in contract actions is the same token as
   `THOR.RUJI`.

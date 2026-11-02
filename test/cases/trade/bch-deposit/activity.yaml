@@ -1,0 +1,48 @@
+id: midgard/trade.313FEF87E25E1D14E7CE35EC13B8D6AE2D2654158FF59B317768769883D67A54
+protocol: thorchain
+kind: trade.deposit
+status: success
+time: 2026-10-22T05:26:48.393Z
+legs:
+  - direction: out
+    wallet: qqrf6me079vxmh30yu5p07nckl2a4qs4gcn2jdwyms
+    asset:
+      notation: BCH.BCH
+      kind: native
+    role: principal
+    basis: observed
+    txid: 313FEF87E25E1D14E7CE35EC13B8D6AE2D2654158FF59B317768769883D67A54
+    amount: "38.11880243"
+    decimals: 8
+  - direction: out
+    wallet: qqrf6me079vxmh30yu5p07nckl2a4qs4gcn2jdwyms
+    asset:
+      notation: BCH.BCH
+      kind: native
+    role: gas
+    basis: observed
+    txid: 313FEF87E25E1D14E7CE35EC13B8D6AE2D2654158FF59B317768769883D67A54
+    amount: "0.00001308"
+    decimals: 8
+  - direction: in
+    wallet: thor1kqsy8kqhyld04gerhry2z2tw04gwf655zw3uk2
+    asset:
+      notation: BCH~BCH
+      kind: trade
+    role: principal
+    basis: observed
+    txid: 313FEF87E25E1D14E7CE35EC13B8D6AE2D2654158FF59B317768769883D67A54
+    amount: "38.11880243"
+    decimals: 8
+prices:
+  - asset:
+      notation: BCH.BCH
+      kind: native
+    usd: "280.5123267136775"
+    source: midgard:history.depths
+  - asset:
+      notation: BCH~BCH
+      kind: trade
+    usd: "280.5123267136775"
+    source: midgard:history.depths
+details: {}

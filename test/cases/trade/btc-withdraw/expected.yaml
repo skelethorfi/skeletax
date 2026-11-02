@@ -1,0 +1,40 @@
+wallet: thor1kqsy8kqhyld04gerhry2z2tw04gwf655zw3uk2
+timestamp: 2026-10-29T23:17:15.641Z
+type: bridge-out
+baseCurrency: BTC
+baseAmount: "0.81586418"
+feeCurrency: RUNE
+feeAmount: "0.02"
+from: thor1kqsy8kqhyld04gerhry2z2tw04gwf655zw3uk2
+to: 199JVFuJgimybw4RXBmftLAVufPeyP2GwG
+blockchain: THORChain
+description: "1/2 - Trade account withdrawal: send 0.81586418 BTC~BTC; BA517DAFC40EEC2B17E8C2804DF8634D960EFA8EFC7746D9ED9538D5548FE83E"
+referencePricePerUnit: "79017.55114660703"
+referencePriceCurrency: USD
+id: 2026-10-29T23:17:15.641Z.out.021a66b8e0a2
+---
+wallet: 199JVFuJgimybw4RXBmftLAVufPeyP2GwG
+timestamp: 2026-10-29T23:17:25.641Z
+type: bridge-in
+baseCurrency: BTC
+baseAmount: "0.81586418"
+from: thor1kqsy8kqhyld04gerhry2z2tw04gwf655zw3uk2
+to: 199JVFuJgimybw4RXBmftLAVufPeyP2GwG
+blockchain: BTC
+description: "2/2 - Trade account withdrawal: receive 0.81586418 BTC.BTC; BA517DAFC40EEC2B17E8C2804DF8634D960EFA8EFC7746D9ED9538D5548FE83E; paid out in 03611C3FF8A09C9F59CF369D489C507BC2E6D5C90DB322DF669FF83EC9C82411"
+referencePricePerUnit: "79017.55114660703"
+referencePriceCurrency: USD
+id: 2026-10-29T23:17:15.641Z.in.c4f6d1328d13
+---
+wallet: thor1kqsy8kqhyld04gerhry2z2tw04gwf655zw3uk2
+timestamp: 2026-10-29T23:17:15.641Z
+type: fee
+baseCurrency: BTC
+baseAmount: "0.00002641"
+from: thor1kqsy8kqhyld04gerhry2z2tw04gwf655zw3uk2
+to: thorchain
+blockchain: THORChain
+description: "Fee: trade account withdrawal outbound fee, 0.81589059 BTC~BTC sent, 0.81586418 BTC.BTC paid out; BA517DAFC40EEC2B17E8C2804DF8634D960EFA8EFC7746D9ED9538D5548FE83E"
+referencePricePerUnit: "79017.55114660703"
+referencePriceCurrency: USD
+id: 2026-10-29T23:17:15.641Z.outbound-fee.21165c55a150

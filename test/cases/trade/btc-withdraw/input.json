@@ -1,0 +1,42 @@
+{
+  "description": "trade success: [BTC~BTC] -> [BTC.BTC]",
+  "source": "midgard",
+  "wallet": "thor1kqsy8kqhyld04gerhry2z2tw04gwf655zw3uk2",
+  "data": {
+    "date": "1793315835641553166",
+    "height": "28453601",
+    "in": [
+      {
+        "address": "thor1kqsy8kqhyld04gerhry2z2tw04gwf655zw3uk2",
+        "coins": [
+          {
+            "amount": "81589059",
+            "asset": "BTC~BTC"
+          }
+        ],
+        "txID": "BA517DAFC40EEC2B17E8C2804DF8634D960EFA8EFC7746D9ED9538D5548FE83E"
+      }
+    ],
+    "metadata": {},
+    "out": [
+      {
+        "address": "199JVFuJgimybw4RXBmftLAVufPeyP2GwG",
+        "coins": [
+          {
+            "amount": "81586418",
+            "asset": "BTC.BTC"
+          }
+        ],
+        "height": "28453657",
+        "txID": "03611C3FF8A09C9F59CF369D489C507BC2E6D5C90DB322DF669FF83EC9C82411"
+      }
+    ],
+    "pools": [],
+    "status": "success",
+    "type": "trade"
+  },
+  "usdPrices": {
+    "BTC.BTC": "79017.55114660703",
+    "THOR.RUNE": "0.6401308647725699"
+  }
+}

@@ -27,6 +27,7 @@ which values are observed on-chain and which are assumed.
 - **Bond and unbond, RUNEPool, TCY** (claim, stake, unstake, distributions),
   **THORNames**, and **switches** (BEP2 RUNE upgrade, KUJI):
   [activity.md](docs/specs/activity.md)
+- **Trade account deposits and withdrawals**: [trade.md](docs/specs/trade.md)
 - **Synths, trade and secured assets**, and how every asset is named:
   [assets.md](docs/specs/assets.md)
 - **Fees**: which fee goes on which row: [fees.md](docs/specs/fees.md)

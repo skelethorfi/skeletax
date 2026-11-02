@@ -40,8 +40,13 @@ export function getInboundTxs(action: Action, protocol: Protocol = THORCHAIN): I
     action.type === ActionTypeEnum.Refund
   ) {
     txs = inbounds.slice(0, 1).map(sent);
-  } else if (action.type === ActionTypeEnum.AddLiquidity || action.type === ActionTypeEnum.Withdraw) {
-    // Deposits and withdrawal requests sent on THORChain pay the native fee, so only L1 ones are looked up
+  } else if (
+    action.type === ActionTypeEnum.AddLiquidity ||
+    action.type === ActionTypeEnum.Withdraw ||
+    (action.type as string) === "trade"
+  ) {
+    // Deposits and withdrawal requests sent on THORChain pay the native fee, so only L1 ones are looked up (a
+    // trade account deposit is sent on its L1 chain, a withdrawal on THORChain; docs/specs/trade.md)
     txs = inbounds.map(sent).filter((tx) => isL1Asset(tx.asset));
   }
 

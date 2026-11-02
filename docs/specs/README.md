@@ -13,6 +13,7 @@
 - [Source data snapshots](./snapshots.md)
 - [Run diff](./run-diff.md)
 - [Sends](./sends.md)
+- [Trade accounts](./trade.md)
 - [Failed deposits](./failed.md)
 - [Run summary](./run-summary.md)
 - [Periods and CSV files](./periods.md)

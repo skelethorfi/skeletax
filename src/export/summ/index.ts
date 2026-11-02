@@ -10,6 +10,7 @@ import { tcyClaimRows, tcyDistributionRows, tcyStakeRows, thornameRows } from ".
 import { rujiraStakeRows, rujiraTradeRows } from "./rujira.ts";
 import { failedDepositRows, sendRows } from "./send.ts";
 import { mayaDistributionRows } from "./maya.ts";
+import { tradeRows } from "./trade.ts";
 import type { MayaLiquidityAuction } from "../../config/ITaxConfig.ts";
 import { type ReferencePrices, withReferencePrice } from "./prices.ts";
 import { type AssetNamesConfig, getProtocol, type Protocol, withAssetNames } from "../../domain/Protocol.ts";
@@ -66,6 +67,9 @@ function toRows(activity: Activity, protocol: Protocol, treatment: Treatment): S
       return withdrawRows(activity, protocol);
     case "switch":
       return switchRows(activity, protocol);
+    case "trade.deposit":
+    case "trade.withdraw":
+      return tradeRows(activity, protocol);
     case "runepool.deposit":
     case "runepool.withdraw":
       return runePoolRows(activity, protocol);
