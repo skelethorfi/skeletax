@@ -51,6 +51,9 @@ export interface RawBundle {
   // THORChain sends that are this action's inbounds although no txid links them: a Maya liquidity auction's
   // deposits (docs/specs/maya.md, attachAuctionDeposits)
   inbounds?: Action[];
+  // A savers deposit's swap into the synth: the Midgard action of the same inbound txid, left pending, whose coin
+  // is what an L1 wallet sent (docs/specs/savers.md)
+  depositSwap?: Action;
   // A TCY claim's claim-list entries, and the claiming address's savers positions and loans (docs/specs/thorfi-collapse.md)
   tcyClaim?: TcyClaimData;
   // The pending add a Viewblock withdrawal pays back (docs/specs/fees.md, Pending adds that are withdrawn)

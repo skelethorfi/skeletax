@@ -48,18 +48,25 @@ export function interpretAddLiquidity(
     const sentAsset = sentOnL1 ? coin.asset.replace("/", ".") : coin.asset;
     const txid = deposit.txID ?? "";
     const gas = inboundGas(txid, bundle, wallet, sentAsset, protocol);
-    // Midgard's coin is the synth minted, after the swap's fee; what the wallet sent is THORNode's inbound coin
+    // Midgard's coin is the synth minted, after the swap's fee; what the wallet sent is THORNode's inbound coin,
+    // or else the coin of the deposit's swap into the synth (Maya's only source)
+    const isSentCoin = (c: { asset: string }) => c.asset.toUpperCase() === sentAsset.toUpperCase();
     const status =
       sentOnL1 && protocol.id === THORCHAIN.id ? bundle.thornodeTxs.find((tx) => tx.tx?.id === txid) : undefined;
-    const sent = status?.tx?.coins?.find((c) => c.asset.toUpperCase() === sentAsset.toUpperCase());
+    const swapIn = sentOnL1
+      ? bundle.depositSwap?.in.find((tx) => tx.txID?.toUpperCase() === txid.toUpperCase())
+      : undefined;
+    const sent = status?.tx?.coins?.find(isSentCoin) ?? swapIn?.coins.find(isSentCoin);
 
     if (sentOnL1 && !sent) {
-      const reason =
+      const swapReason = swapIn ? `its swap has no ${sentAsset} coin` : "Midgard lists no swap for it";
+      const nodeReason =
         protocol.id !== THORCHAIN.id
           ? `${protocol.id} inbounds are not looked up on a node`
           : status
             ? `THORNode's inbound has no ${sentAsset} coin`
             : "THORNode has no inbound for the tx";
+      const reason = `${nodeReason} and ${swapReason}`;
       issues.push({
         kind: "warning",
         message: `savers deposit ${txid}: ${reason}, so the amount is the synth minted, not the ${sentAsset} sent`,

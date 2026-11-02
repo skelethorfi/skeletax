@@ -1,0 +1,37 @@
+wallet: bc1qw2kel623n947d0xagnaylswj20m2zgefdsxqm6
+timestamp: 2025-03-03T00:02:02.508Z
+type: spam
+baseCurrency: BTC
+baseAmount: "0.5902"
+from: mayaprotocol
+to: bc1qw2kel623n947d0xagnaylswj20m2zgefdsxqm6
+description: 3/3 - Dummy transaction to get market price to then manually apply to the receive LP token transaction MayaSavers.BTC.BTC (savers); C1E80FA20DCB21F12582A458F1EF7468227D5E8F3895B4CD24694E9799216B95
+id: 2025-03-03T00:01:42.508Z.price-helper.86a40b877882
+---
+wallet: bc1qw2kel623n947d0xagnaylswj20m2zgefdsxqm6
+timestamp: 2025-03-03T00:01:52.508Z
+type: receive-lp-token
+baseCurrency: MayaSavers.BTC.BTC
+baseAmount: "0.56874615"
+from: mayaprotocol
+to: bc1qw2kel623n947d0xagnaylswj20m2zgefdsxqm6
+blockchain: Mayachain
+description: 2/3 - Receive LP token from MayaSavers.BTC.BTC (savers); C1E80FA20DCB21F12582A458F1EF7468227D5E8F3895B4CD24694E9799216B95
+referencePricePerUnit: "94608.5912137079"
+referencePriceCurrency: USD
+id: 2025-03-03T00:01:42.508Z.in.4a4e98226238
+---
+wallet: bc1qw2kel623n947d0xagnaylswj20m2zgefdsxqm6
+timestamp: 2025-03-03T00:01:42.508Z
+type: add-liquidity
+baseCurrency: BTC
+baseAmount: "0.5902"
+feeCurrency: ""
+feeAmount: ""
+from: bc1qw2kel623n947d0xagnaylswj20m2zgefdsxqm6
+to: mayaprotocol
+blockchain: BTC
+description: 1/3 - Add liquidity BTC to MayaSavers.BTC.BTC (savers); C1E80FA20DCB21F12582A458F1EF7468227D5E8F3895B4CD24694E9799216B95
+referencePricePerUnit: "91169.55609915314"
+referencePriceCurrency: USD
+id: 2025-03-03T00:01:42.508Z.out.d79c0d87da98

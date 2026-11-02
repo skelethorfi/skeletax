@@ -46,6 +46,8 @@ export interface GoldenCaseInput {
   tokenPayout?: EvmTokenPayout;
   // THORChain sends attached as the action's inbounds (a Maya liquidity auction's deposits)
   inbounds?: Action[];
+  // A savers deposit's swap into the synth, what an L1 wallet sent (docs/specs/savers.md)
+  depositSwap?: Action;
   // The native fee at the action's height (Maya), base units
   nativeFee?: string;
   // RUNE's USD price at the action's time (a contract action that sends bRUNE)
@@ -167,6 +169,7 @@ export function toBundle(input: GoldenCaseInput): RawBundle {
     ...(input.evmReceipts ? { evmReceipts: input.evmReceipts } : {}),
     ...(input.tokenPayout ? { tokenPayout: input.tokenPayout } : {}),
     ...(input.inbounds ? { inbounds: input.inbounds } : {}),
+    ...(input.depositSwap ? { depositSwap: input.depositSwap } : {}),
     ...(input.nativeFee ? { nativeFee: input.nativeFee } : {}),
     ...(input.runePriceUsd ? { runePriceUsd: input.runePriceUsd } : {}),
     ...(input.usdPrices ? { usdPrices: input.usdPrices } : {}),
@@ -188,6 +191,7 @@ export function toCaseInput(bundle: RawBundle, description: string): GoldenCaseI
     ...(bundle.evmReceipts?.length ? { evmReceipts: bundle.evmReceipts } : {}),
     ...(bundle.tokenPayout ? { tokenPayout: bundle.tokenPayout } : {}),
     ...(bundle.inbounds?.length ? { inbounds: bundle.inbounds } : {}),
+    ...(bundle.depositSwap ? { depositSwap: bundle.depositSwap } : {}),
     ...(bundle.nativeFee ? { nativeFee: bundle.nativeFee } : {}),
     ...(bundle.runePriceUsd ? { runePriceUsd: bundle.runePriceUsd } : {}),
     ...(bundle.usdPrices ? { usdPrices: bundle.usdPrices } : {}),
