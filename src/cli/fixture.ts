@@ -94,6 +94,7 @@ async function fetchInput(txid: string, protocol: Protocol, index?: number): Pro
   const action = actions[index ?? 0];
   // The exporter's bundle builder; related txs go to a throwaway store, as the tx may be anyone's
   const store = new RecordStore(fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-fixture-")));
+  const viewblock = new Viewblock(store);
   const source = new MidgardSource(
     protocol,
     new MidgardService(store, `${protocol.id}-midgard`, protocol.midgardUrl),
@@ -102,7 +103,7 @@ async function fetchInput(txid: string, protocol: Protocol, index?: number): Pro
     [],
     undefined,
     protocol.nodeUrl ? new MayanodeService(store, protocol.nodeUrl) : undefined,
-    { viewblock: new Viewblock(store), evm: new EvmReceipts(store) },
+    { viewblock, evm: new EvmReceipts(store) },
     new TcyClaimService(store),
   );
   // USD prices of its legs (docs/specs/prices.md), so the case maps with referencePrices = 'all' too
@@ -111,6 +112,11 @@ async function fetchInput(txid: string, protocol: Protocol, index?: number): Pro
     midgards.set(protocol.id, new MidgardService(store, `${protocol.id}-midgard`, protocol.midgardUrl));
   }
   const bundle = await new PriceSource(midgards).add(await source.bundle(action, action.in[0]?.address ?? ""));
+
+  // A run carries on without what Viewblock could not give; a golden case must not
+  if (viewblock.warnings().length) {
+    throw new Error(viewblock.warnings().join("\n"));
+  }
 
   return toCaseInput(bundle, describeShape(getActionShape(action)));
 }

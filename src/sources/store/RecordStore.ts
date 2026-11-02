@@ -59,6 +59,12 @@ export interface RecordRules<T = any> {
 export interface ListOptions<T> {
   keyOf: (item: T) => string;
   rules?: RecordRules<T>;
+  // What the source lists does not change (e.g. Viewblock's sends from before 2022-04): once a list of the wallet is
+  // stored, it is fetched again only by fetch 'all'
+  fetchOnce?: boolean;
+  // A best-effort source: a failed fetch is passed to this instead of failing the run, which carries on with the
+  // stored lists of the wallet (none: an empty list). stored: whether there are any. It may rethrow.
+  onFetchError?: (error: unknown, stored: boolean) => void;
 }
 
 // What a fetch did: the record's first copy, a new copy, or the same as the latest copy
@@ -193,6 +199,12 @@ export class RecordStore {
     return !!this.replay && !this.replay.hasSource(source);
   }
 
+  // Replaying a run that has no copy of the record: a best-effort source (Viewblock) that run could not reach gave
+  // it nothing
+  notInReplay(source: string, key: string): boolean {
+    return !!this.replay && !this.replay.findRecord(source, key);
+  }
+
   // One record, e.g. a THORNode tx. date: when the record started (e.g. the date of the action it belongs
   // to), for filing a record with no date of its own
   async record<T>(
@@ -253,13 +265,26 @@ export class RecordStore {
 
     let fetchedNow = new Map<string, Stored<T>>();
 
-    if (this.shouldFetchList(source, wallet)) {
+    if (this.shouldFetchList(source, wallet, options.fetchOnce)) {
       this.assertCanFetch(`${source} list ${wallet}`);
-      const fetched = await withRetry(fetch, `${source} list ${wallet}`);
-      fetchedNow = this.storeList(source, wallet, fetched.data, options, {
-        fetchedAt: new Date().toISOString(),
-        url: fetched.url,
-      });
+      let fetched: Fetched<T[]> | undefined;
+
+      try {
+        fetched = await withRetry(fetch, `${source} list ${wallet}`);
+      } catch (error) {
+        if (!options.onFetchError) {
+          throw error;
+        }
+
+        options.onFetchError(error, this.lists(source, wallet).length > 0);
+      }
+
+      if (fetched) {
+        fetchedNow = this.storeList(source, wallet, fetched.data, options, {
+          fetchedAt: new Date().toISOString(),
+          url: fetched.url,
+        });
+      }
     }
 
     const lists = this.lists(source, wallet);
@@ -302,10 +327,15 @@ export class RecordStore {
     return wanted && this.firstFetchThisRun(`records/${source}/${key}`);
   }
 
-  // A wallet's list is fetched again on every run that isn't offline, for new activity and changed records
-  private shouldFetchList(source: string, wallet: string): boolean {
+  // A wallet's list is fetched again on every run that isn't offline, for new activity and changed records; one
+  // fetched once is fetched again only by 'all'
+  private shouldFetchList(source: string, wallet: string, fetchOnce = false): boolean {
     if (this.offline) {
       return this.lists(source, wallet).length === 0;
+    }
+
+    if (fetchOnce && this.fetchMode !== "all" && this.lists(source, wallet).length > 0) {
+      return false;
     }
 
     return this.firstFetchThisRun(`lists/${source}/${wallet}`);

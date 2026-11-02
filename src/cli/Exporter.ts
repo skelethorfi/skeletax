@@ -262,6 +262,8 @@ export class Exporter {
     const distributors = knownDistributorReport(rows, this.config.incomeFrom);
     distributors.info.forEach((line) => this.report.info(line));
     this.endWarnings.push(...distributors.warnings);
+    // Viewblock is best-effort: what it could not give is said here, not fatal (docs/specs/sends.md)
+    this.endWarnings.push(...this.viewblock.warnings());
 
     return rows;
   }

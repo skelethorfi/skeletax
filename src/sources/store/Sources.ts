@@ -171,8 +171,11 @@ export function withoutCurrentValues<T>(value: T): T {
 
 export const MIDGARD_LIST: ListOptions<Action> = { keyOf: midgardActionKey, rules: MIDGARD_RULES };
 
+// Only the txs before 2022-04 are used, and those do not change: a stored list is fetched again only by
+// --refetch-all (docs/specs/sends.md)
 export const VIEWBLOCK_LIST: ListOptions<ViewblockTx> = {
   keyOf: (tx) => tx.hash,
+  fetchOnce: true,
   rules: { normalise: withoutCurrentValues, folderOf: (tx) => monthFolder(new Date(Number((tx as any).timestamp))) },
 };
 

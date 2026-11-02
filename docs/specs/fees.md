@@ -182,6 +182,10 @@ while its action is newer than `pendingStuckDays` (`snapshots.md`); an older
 miss, the usual case for a tx THORNode has pruned, is asked again only by
 `--refetch-all`.
 
+Viewblock is best-effort (`sends.md`): when it cannot be reached (a 429, or
+an error after the retries) the fee stays blank, and the run summary lists
+those inbounds. `--replay` of such a run gives the same blank fee.
+
 Both are records in the store, like THORNode's statuses (`snapshots.md`):
 `evm-receipt/<chain>.<hash>` (trimmed to the fee fields) and
 `viewblock-tx/<hash>` (trimmed to `observation.gas`). A receipt is final,

@@ -6,6 +6,7 @@ import path from "path";
 import { Viewblock } from "../src/sources/viewblock/index.ts";
 import { withoutCurrentValues } from "../src/sources/store/Sources.ts";
 import { RecordStore } from "../src/sources/store/RecordStore.ts";
+import { SnapshotManifest } from "../src/sources/store/SnapshotManifest.ts";
 import { http } from "../src/sources/http.ts";
 import { interpretViewblockSend } from "../src/interpret/viewblock/send.ts";
 import { THORCHAIN } from "../src/domain/Protocol.ts";
@@ -53,11 +54,92 @@ describe("Viewblock", () => {
     assert.deepEqual(await new Viewblock(new RecordStore(dir, { offline: true })).getTxs("thor1-empty-wallet"), []);
   });
 
-  test("refuses a listing shorter than the total it reports", async () => {
-    mock.method(http, "get", async () => ({ data: { docs: [tx("A")], pages: 1, total: 2 } }) as any);
-    const store = new RecordStore(fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-viewblock-")));
+  const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-viewblock-"));
+  const rateLimited = (value?: number) =>
+    Object.assign(new Error("Request failed with status code 429"), {
+      response: { status: 429, data: { message: "errors.rateLimited", code: 429, value } },
+    });
 
-    await assert.rejects(new Viewblock(store).getTxs("thor1-wallet"), /Viewblock listed 1 txs but reports 2/);
+  test("keeps a listing shorter than the total it reports, with a warning", async () => {
+    mock.method(http, "get", async () => ({ data: { docs: [tx("A")], pages: 1, total: 2 } }) as any);
+    const viewblock = new Viewblock(new RecordStore(tmp()));
+
+    assert.deepEqual(
+      (await viewblock.getTxs("thor1-wallet")).map((t) => t.hash),
+      ["A"],
+    );
+    assert.match(viewblock.warnings().join("\n"), /Viewblock listed 1 txs of thor1-wallet but reports 2/);
+  });
+
+  test("pages past the page count it reports, until the total or a page with nothing new", async () => {
+    // pages says 1, but the total is 3 and page 2 has more; page 3 repeats page 2
+    const docs = [[tx("A")], [tx("B"), tx("C")]];
+    const get = mock.method(http, "get", async (url: string) => {
+      const page = Number(new URL(url).searchParams.get("page"));
+      return { data: { docs: docs[page - 1] ?? docs[1], pages: 1, total: 4 } } as any;
+    });
+    const viewblock = new Viewblock(new RecordStore(tmp()));
+
+    assert.deepEqual(
+      (await viewblock.getTxs("thor1-wallet")).map((t) => t.hash),
+      ["A", "B", "C"],
+    );
+    assert.equal(get.mock.calls.length, 3);
+    assert.match(viewblock.warnings().join("\n"), /listed 3 txs of thor1-wallet but reports 4/);
+  });
+
+  test("fetches a stored list again only with --refetch-all", async () => {
+    const get = pages([tx("A")]);
+    const dir = tmp();
+    await new Viewblock(new RecordStore(dir)).getTxs("thor1-wallet");
+
+    assert.deepEqual(
+      (await new Viewblock(new RecordStore(dir)).getTxs("thor1-wallet")).map((t) => t.hash),
+      ["A"],
+    );
+    assert.equal(get.mock.calls.length, 1);
+
+    await new Viewblock(new RecordStore(dir, { fetch: "all" })).getTxs("thor1-wallet");
+    assert.equal(get.mock.calls.length, 2);
+  });
+
+  test("a 429 is not retried, skips Viewblock for the rest of the run, and is a warning, not an error", async () => {
+    const get = mock.method(http, "get", async () => {
+      throw rateLimited(604_371_525);
+    });
+    const viewblock = new Viewblock(new RecordStore(tmp()));
+
+    assert.deepEqual(await viewblock.getTxs("thor1-first"), []);
+    assert.deepEqual(await viewblock.getTxs("thor1-second"), []);
+    assert.equal(await viewblock.getInbound("H"), undefined);
+    assert.equal(get.mock.calls.length, 1);
+
+    const warnings = viewblock.warnings().join("\n");
+    assert.match(warnings, /Viewblock answered 429 \(rate-limited until \d{4}-/);
+    assert.match(warnings, /could not list the txs of thor1-first .*sends before 2022-04-01 .* are missing/);
+    assert.match(warnings, /could not list the txs of thor1-second/);
+    assert.match(warnings, /could not fetch the gas of 1 inbound\(s\).*H \(/);
+  });
+
+  test("a failed refetch uses the list stored by an earlier run", async () => {
+    pages([tx("A")]);
+    const dir = tmp();
+    await new Viewblock(new RecordStore(dir)).getTxs("thor1-wallet");
+    mock.restoreAll();
+    mock.method(http, "get", async () => {
+      throw rateLimited();
+    });
+    const viewblock = new Viewblock(new RecordStore(dir, { fetch: "all" }));
+
+    assert.deepEqual(
+      (await viewblock.getTxs("thor1-wallet")).map((t) => t.hash),
+      ["A"],
+    );
+    assert.match(viewblock.warnings().join("\n"), /using the list stored by an earlier run/);
+  });
+
+  test("offline, a list not stored is still an error", async () => {
+    await assert.rejects(new Viewblock(new RecordStore(tmp(), { offline: true })).getTxs("thor1-wallet"), /Offline/);
   });
 });
 
@@ -95,6 +177,30 @@ describe("Viewblock.getInbound", () => {
       found: true,
       gas: [{ asset: "BTC.BTC", amount: "5000" }],
     });
+  });
+
+  test("a run that could not reach Viewblock replays without the gas it could not fetch", async () => {
+    mock.method(http, "get", async (url: string) => {
+      if (url.includes("/txs/H2")) {
+        throw Object.assign(new Error("429"), { response: { status: 429, data: { value: 1000 } } });
+      }
+      return { status: 200, data: { observation: { gas: [{ asset: "BTC.BTC", amount: "5000" }] } } } as any;
+    });
+    const dir = tmp();
+    const manifest = new SnapshotManifest();
+    const viewblock = new Viewblock(new RecordStore(dir, { manifest }));
+
+    assert.equal((await viewblock.getInbound("H1"))?.found, true);
+    assert.equal(await viewblock.getInbound("H2"), undefined);
+    manifest.write(path.join(dir, "run"));
+
+    const replay = new Viewblock(new RecordStore(dir, { replay: SnapshotManifest.load(path.join(dir, "run")) }));
+    assert.equal((await replay.getInbound("H1"))?.found, true);
+    assert.equal(await replay.getInbound("H2"), undefined);
+  });
+
+  test("offline, an inbound not stored is still an error", async () => {
+    await assert.rejects(new Viewblock(new RecordStore(tmp(), { offline: true })).getInbound("H"), /Offline/);
   });
 
   test("stores a hash it does not know as not found", async () => {
