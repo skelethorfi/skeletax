@@ -132,7 +132,7 @@ export interface SummRow {
 }
 
 export interface RowTrace {
-  // The store record of the action, e.g. 'midgard/swap.<txid>'
+  // The store record of the action, e.g. 'midgard/swap.<txid>'; a FIN swap's without its fill hash (the activity id)
   record?: string;
   // What the row is in the action, e.g. 'trade-out', 'add', 'price-helper'
   role: string;

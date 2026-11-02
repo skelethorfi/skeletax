@@ -7,7 +7,7 @@ import type { CosmosTx } from "../../sources/thorchain/CosmosTxService.ts";
 import { getActionDate } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, getBundleSourceName, type RawBundle } from "../../sources/RawBundle.ts";
-import { midgardActionBaseKey } from "../../sources/store/Sources.ts";
+import { FILL_ATTRIBUTES, midgardActionBaseKey } from "../../sources/store/Sources.ts";
 
 // Rujira contract actions (wasm calls on THORChain). See docs/specs/rujira.md.
 
@@ -334,7 +334,8 @@ class Call {
       ?.attributes.find((attribute) => attribute.key === "_contract_address")?.value;
   }
 
-  // Which of the called contract's events of this type in the Cosmos tx this action is, matched by its attributes
+  // Which of the called contract's events of this type in the Cosmos tx this action is, matched by the attributes
+  // that tell fills apart (FILL_ATTRIBUTES, as the record key is)
   private fillIndex(): number {
     const called = this.calledContract();
     const events = this.requireCosmosTx()
@@ -346,13 +347,16 @@ class Call {
       return 0;
     }
 
-    // Two messages to the same pair in one tx would each look like fills of the other
-    if (new Set(events.map((attributes) => attributes.msg_index)).size > 1) {
-      throw new Error(`rujira: FIN trades from several messages in one tx are not supported`);
+    // Two messages to the same pair in one tx would each look like fills of the other; without `msg_index` they
+    // can't be told apart
+    const messages = new Set<string | undefined>(events.map((attributes) => attributes.msg_index));
+
+    if (messages.size > 1 || messages.has(undefined)) {
+      throw new Error(`rujira: FIN trades from several messages in one tx, or with no msg_index, are not supported`);
     }
 
     const index = events.findIndex((attributes) =>
-      Object.entries(this.contract.attributes).every(([key, value]) => attributes[key] === value),
+      FILL_ATTRIBUTES.every((name) => attributes[name] === this.contract.attributes[name]),
     );
 
     if (index === -1) {

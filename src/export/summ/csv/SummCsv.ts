@@ -52,8 +52,8 @@ export function renderCsv(txs: SummRow[]): string {
 
 // A row's ID depends only on what the row is, never on its amounts or wording, so it is the same in every
 // file and every run (docs/specs/periods.md, Row IDs): `<action time>.<role>.<hash>`, the hash being the first
-// 12 hex digits of SHA-256 over the format version, the action's store record, the wallet, the role and the
-// asset. It traces a row in Summ (its "Tx Hash") back to the action.
+// 12 hex digits of SHA-256 over the format version, the action's store record (a FIN swap's without its fill
+// hash), the wallet, the role and the asset. It traces a row in Summ (its "Tx Hash") back to the action.
 export function rowId(time: Date, wallet: string, trace: RowTrace): string {
   const identity = ["v1", trace.record ?? "", wallet, trace.role, trace.asset ?? ""].join("|");
   return `${time.toISOString()}.${trace.role}.${crypto.createHash("sha256").update(identity).digest("hex").slice(0, 12)}`;

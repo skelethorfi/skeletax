@@ -43,7 +43,7 @@ export function midgardActionBaseKey(action: Action): string {
 
 // The attributes that tell a FIN trade's fills apart: its side, price level and the amounts filled there. Others
 // (e.g. the long `ranges`) are left out, so a change in how Midgard reports them does not re-key the record.
-const FILL_ATTRIBUTES = ["side", "price", "bid", "offer"];
+export const FILL_ATTRIBUTES = ["side", "price", "bid", "offer"];
 
 // The first 12 hex digits of SHA-256 over a FIN trade's fill attributes; none for other actions
 export function fillHash(action: Action): string | undefined {

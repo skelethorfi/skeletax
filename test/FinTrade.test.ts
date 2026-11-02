@@ -134,4 +134,37 @@ describe("FIN trades: several in one tx", () => {
     );
     assert.match(result.issues[0].message, /several messages/);
   });
+
+  // The multi-fill golden swap, changed by `change`: what its first and a later fill give
+  const multiFill = (change: (input: any) => void) =>
+    ["fin-swap-several-fills", "fin-swap-several-fills-later-fill"].map((name) => {
+      const input = structuredClone(readCaseInput(path.join(import.meta.dirname, "cases/rujira", name))) as any;
+      change(input);
+      return runBundle(toBundle(input), THORCHAIN);
+    });
+
+  test("fills are matched by the attributes the fill hash covers: a reported `ranges` that differs still matches", () => {
+    const [first, later] = multiFill((input) => (input.data.metadata.contract.attributes.ranges = "reformatted"));
+
+    assert.equal(first.rows.length, 1);
+    assert.deepEqual(
+      later.issues.map((issue) => issue.kind),
+      ["ignored"],
+    );
+  });
+
+  test("several trade events with no msg_index are an error", () => {
+    const results = multiFill((input) =>
+      input.cosmosTxs[0].events.forEach(
+        (event: any) => (event.attributes = event.attributes.filter((attribute: any) => attribute.key !== "msg_index")),
+      ),
+    );
+
+    for (const result of results) {
+      assert.deepEqual(
+        result.issues.map((issue) => issue.kind),
+        ["failed"],
+      );
+    }
+  });
 });
