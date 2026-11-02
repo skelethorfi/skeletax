@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "fs-extra";
 import os from "os";
 import path from "path";
+import { http } from "../src/sources/http.ts";
 import { RecordStore } from "../src/sources/store/RecordStore.ts";
 import { MidgardService, midgardAddress } from "../src/sources/thorchain/MidgardService.ts";
 
@@ -29,16 +30,17 @@ describe("Midgard address (case)", () => {
       "midgard",
       "https://midgard",
     );
-    const getActions = mock.method(
-      midgard.api,
-      "getActions",
-      async () => ({ data: { count: "0", actions: [] } }) as any,
+    const get = mock.method(
+      http,
+      "get",
+      async () => ({ data: { count: "0", actions: [], meta: { nextPageToken: "" } } }) as any,
     );
 
     await midgard.getActions("0x5a0b54d5dc17e0aadc383d2db43b0a0d3e029c4c");
     assert.equal(
-      getActions.mock.calls[0].arguments[0],
+      new URL(get.mock.calls[0].arguments[0] as string).searchParams.get("address"),
       "0x5a0b54d5dc17e0aadc383d2db43b0a0d3e029c4c,0x5A0b54D5dc17e0AadC383d2db43B0a0D3E029c4c",
     );
+    get.mock.restore();
   });
 });
