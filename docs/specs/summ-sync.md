@@ -101,6 +101,7 @@ nothing from it; the only link is the files below. It speaks MCP over
     summ-sync pull  <state dir> [<run dir>] [--all]  # writes a snapshot; resumes a stopped pull
     summ-sync plan  <state dir> <run dir> [--only <scope file>]  # reads files only; calls nothing
     summ-sync apply <state dir> <plan dir> [--dry-run] [--approve-deletes] [--approve-filed]
+    summ-sync verify <state dir> <plan dir> [<after snapshot>]  # whether legs hold what an applied plan said; calls nothing
     summ-sync figures <state dir>  # saves Summ's disposals and yearly totals; reads only
     summ-sync compare <state dir> <before> <after>  # what moved between two figures files; calls nothing
     summ-sync prune <state dir> [--older-than <days>]  # removes old committed snapshots and actions
@@ -970,6 +971,55 @@ gains, cost bases and reports show the figures from before the change. The
 sync compares the rows' fields and recorded prices, not value or gain, so its
 plans are unaffected, but any tax figure is read only after a
 recalculation (which is safe: it changes no transaction).
+
+## Verify
+
+Whether Summ's legs hold what an applied plan said, and nothing else moved. `apply` reads each write back as it goes; this
+looks again after a pull, across every leg the pull read, since Summ can pair, re-type or make up legs after a write. It
+moves no tax outcome, calls nothing, writes `<plan dir>/verify-<after>.md`, prints it and gates nothing. `plan` compares rows
+with legs and `compare` says what moved in tax, so neither is repeated here.
+
+`verify <state dir> <plan dir> [<after snapshot>]` compares the plan's snapshot with the latest, or the one named: once a
+later plan has written, this one is verified between its own pulls. It refuses: while `.lock` is held; a folder with no
+`plan.json`; a plan whose snapshot is gone, or a named snapshot not there; an after snapshot that is the plan's own, or whose pull began before the plan's
+last log line; a snapshot of version 1, whose store has moved on since; snapshots with another run, range or managed sources
+or chains; another plan's writes between the first pull's start and the second's finish; and a plan with no `apply-start`
+and none of its upload rows in Summ, as a plan of uploads and categorisations held back writes nothing.
+
+**The plan.** Each entry is one of:
+
+- _landed_: a delete's legs are gone with a delete logged or found; a changed field holds the planned value; a leg to ignore is ignored, or apply reported leaving it in place;
+- _NOT LANDED_, with what differs: it does not hold, and it has lines other than a stop, or the last run stopped on it, or it was selected, not held back, with no lines after a complete stop;
+- _not selected_: otherwise, its filed flag or `--approve-deletes` was not this apply's, taken from the run that wrote;
+- _held back_: otherwise, a categorisation while selected uploads remain;
+- _not reached_: otherwise, the last run did not stop as `complete`.
+
+A price cannot be read back in USD: it lands when the leg's local price equals apply's last read-back and the leg has the
+USD mark, and the report gives the rate, so a USD price stored as if local reads as 1. A value match compares what the
+base sold with what the quote bought, above 0. A categorisation also names its action's category and its other legs. A
+plan's upload rows are found by their IDs on new `manual-csv` legs, as a leg Summ makes up can carry the ID of the row it
+pairs with. A new row beside an old `manual-csv` leg of that ID, not ignored, is flagged, as both count.
+
+**Outside the plan.** By leg id:
+
+- A field changed: `id`, `trade`, `currency`, `quantity`, `timestamp`, `from`, `to`, `blockchain`, `description`, `price`,
+  `feeQuantity`, `feeCurrency`, `source`, `importType`, `comments`. A field is explained only by a change of an entry with lines, or a log line, for that leg and field: a leg named for one thing is not cleared for another, and a leg of an entry
+  held back or not reached that moves is reported. A leg left in place is not explained. A change in an action a delete took a leg from is marked as beside it.
+  Action ids and `updatedAt` move on their own and are not compared. Each comes with the action's newest history line.
+- A leg gone with no delete logged, and a new leg that is no upload row: Summ's matcher makes up a leg this way.
+- A pairing: a leg's other legs, or its action's category, changed. It shows on no field of a leg. A leg of an entry that ran or
+  an upload pairing, and a row's own fee with it, are expected and not listed. A held-back entry's leg that Summ pairs at an
+  upload is listed. Any other leg that now shares an action with one is listed apart, as beside the plan, since that does not
+  make it the right pair. A leg a leg of the plan left says so.
+- Summ's `assumed-fee` legs, which it issues again under new ids, pair by ID, currency, quantity and time. What does not pair
+  is listed apart, as these are still small disposals.
+- A leg can leave or enter the details a pull reads as its tx moves on or off an action it needs. Such a leg, with its tx on a
+  listed action with no detail or created before the first pull, is listed as not read.
+- Listed actions with no detail: tx hash, category and tags, as multisets. No values, and it leaves out `REVIEWED`, which a
+  review session in Summ's app sets.
+
+Limits: no values for actions with no detail, so a change there that keeps its category rests on `figures`. It checks against
+the plan: a wrong plan verifies. A pull is not a point-in-time copy. A write in Summ's app reads as outside the plan.
 
 ## After-check
 
