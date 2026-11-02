@@ -334,7 +334,8 @@ swap's rows already account for everything sent and returned, including the
 outbound fee on the returned part, and its `BridgeTradeOut` carries the
 inbound fee.
 
-The return goes back to the sender, so a swap to the sender's own address
+The return goes back to the sender, or to the refund address the memo gives
+after its destination (`activity.md`, The memo's destination), so a swap to the sender's own address
 (e.g. TRON.USDT to TRON.TRX, or between trade assets) pays that address twice:
 the swap's output is the one in another asset than the input, whichever Midgard
 lists first.

@@ -1,0 +1,29 @@
+wallet: "0x77f8acf312258da7e475d1992bbc70ba0df14ef7"
+timestamp: 2026-10-20T18:14:00.801Z
+type: bridge-trade-out
+baseCurrency: USDT
+baseAmount: "6"
+quoteCurrency: LTC
+quoteAmount: "0.09446209"
+feeCurrency: BNB
+feeAmount: "0"
+from: "0x77f8acf312258da7e475d1992bbc70ba0df14ef7"
+to: thorchain
+blockchain: BSC
+referencePricePerUnit: "0.850614625293554"
+referencePriceCurrency: USD
+description: 1/2 - Swap 6 USDT to 0.09446209 LTC; 4D06EBA992A1FC47C6C387715529518DFB2726048CF7912A21DB634B26FA091D
+id: 2026-10-20T18:14:00.801Z.out.286e99f3e171
+---
+wallet: ltc1qeeyce0sq4l5km6u2fqw0ffgtsfjjdrhg6p3f2j
+timestamp: 2026-10-20T18:14:10.801Z
+type: bridge-trade-in
+baseCurrency: LTC
+baseAmount: "0.09446209"
+from: thorchain
+to: ltc1qeeyce0sq4l5km6u2fqw0ffgtsfjjdrhg6p3f2j
+blockchain: LTC
+referencePricePerUnit: "60.50443501380249"
+referencePriceCurrency: USD
+description: 2/2 - Swap 6 USDT to 0.09446209 LTC; 4D06EBA992A1FC47C6C387715529518DFB2726048CF7912A21DB634B26FA091D; paid out in 2D9DCCCC67CBFA8E27717C2C7EF102C4825A7745A06B425EA03FB20A7622B71F
+id: 2026-10-20T18:14:00.801Z.in.b439006d8a48

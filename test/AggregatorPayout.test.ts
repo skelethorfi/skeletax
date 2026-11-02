@@ -78,6 +78,10 @@ describe("getAggregatorOutbound", () => {
     });
   });
 
+  test("a destination followed by a refund address", () => {
+    assert.equal(getAggregatorOutbound(swap(`=:ETH.ETH:${WALLET}/bc1refund:1:t:15:f2:2a6F:4`))?.to, WALLET);
+  });
+
   test("not a loan", () => {
     const memo = `=:ETH.ETH:${WALLET}:1:t:15:f2:2a6F:4`;
     const loan = (txType: string, asset = "THOR.RUNE") => ({
