@@ -13,6 +13,12 @@ For a new type: add a case, write or extend its spec in [specs/](specs/README.md
 review the rows with `npm run fixture -- show test/cases/<group/name>` before
 saving them with `--write`. Run `npm run format`, `npm run typecheck` and `npm test`.
 
+CI (`.github/workflows/ci.yaml`) also runs `npm audit --audit-level=high` and
+the tests with a coverage floor (`npm run test:coverage`, here and in
+`packages/summ-sync`): a change that drops line, branch or function coverage
+below it fails. Its actions are pinned to commit SHAs; to update one, take the
+SHA the new release tag points to and keep the tag in the comment.
+
 ## Reporting issues
 
 This tool was built mainly to cover one person's own usage, so you may well run
