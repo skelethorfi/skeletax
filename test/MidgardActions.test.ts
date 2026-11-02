@@ -30,10 +30,17 @@ const actions = (n: number) =>
 // A fake Midgard serving `all` in pages of 50 by cursor. Tokens are 64-bit, past Number.MAX_SAFE_INTEGER, so a token
 // that went through a JS number would not be found. `count` is on the first page only, as Midgard does; the last page
 // is answered with `last` (an empty page with no token, or a short page with none).
-function fakeMidgard(all: any[], options: { count?: string; emptyLastPage?: boolean } = {}) {
+function fakeMidgard(
+  all: any[],
+  options: { count?: string; emptyLastPage?: boolean; fail?: (url: string) => boolean } = {},
+) {
   const base = 283844929000000173n;
   const tokenAt = (i: number) => String(base - BigInt(i));
   const get = mock.method(http, "get", async (url: string) => {
+    if (options.fail?.(url)) {
+      throw Object.assign(new Error("Request failed with status code 503"), { response: { status: 503 } });
+    }
+
     const params = new URL(url).searchParams;
     assert.equal(params.get("limit"), "50");
     assert.equal(params.has("offset"), false);
@@ -60,7 +67,10 @@ function fakeMidgard(all: any[], options: { count?: string; emptyLastPage?: bool
   return get;
 }
 
-afterEach(() => mock.restoreAll());
+afterEach(() => mock.reset());
+
+const tokens = (get: any) =>
+  get.mock.calls.map((call: any) => new URL(call.arguments[0]).searchParams.get("nextPageToken"));
 
 describe("Midgard actions list (cursor paging)", () => {
   for (const n of [0, 49, 50, 100, 101, 5_000, 5_519]) {
@@ -84,10 +94,23 @@ describe("Midgard actions list (cursor paging)", () => {
     assert.equal(get.mock.calls.length, 3);
   });
 
-  test("count -1 is not checked", async () => {
-    fakeMidgard(actions(75), { count: "-1" });
+  test("count is only a check: -1 is ignored, a mismatch logged", async () => {
+    const log = mock.method(console, "log", () => {});
+    const counted = () => log.mock.calls.filter((call) => /Midgard counted/.test(String(call.arguments[0]))).length;
 
+    fakeMidgard(actions(75), { count: "-1" });
     assert.equal((await midgard().getActions("thor1w")).length, 75);
+    assert.equal(counted(), 0);
+
+    mock.method(http, "get", async () => ({ data: { count: "80", actions: actions(75), meta: {} } }) as any);
+    assert.equal((await midgard().getActions("thor1w")).length, 75);
+    assert.equal(counted(), 1);
+  });
+
+  test("a page with no actions array is an error, not the end of the list", async () => {
+    mock.method(http, "get", async () => ({ data: "<html>Bad gateway</html>" }) as any);
+
+    await assert.rejects(midgard().getActions("thor1w"), /page 0: no actions in the answer/);
   });
 
   test("the token reaches the URL as Midgard wrote it", async () => {
@@ -103,31 +126,36 @@ describe("Midgard actions list (cursor paging)", () => {
     await assert.rejects(midgard().getActions("thor1w"), /same nextPageToken 7/);
   });
 
+  // withRetry waits 5s, 20s and 60s between tries; the fake clock is moved on until the list settles
+  async function settle<T>(listing: Promise<T>): Promise<T> {
+    let done = false;
+    listing.then(
+      () => (done = true),
+      () => (done = true),
+    );
+    while (!done) {
+      await new Promise((resolve) => setImmediate(resolve));
+      mock.timers.tick(60_000);
+    }
+    return listing;
+  }
+
   test("a transient error retries that page, not the list", async () => {
     mock.timers.enable({ apis: ["setTimeout"] });
-    const all = actions(120);
     let failed = false;
-    fakeMidgard(all);
-    const urls: string[] = [];
-    const serve = http.get;
-    mock.method(http, "get", async (url: string) => {
-      urls.push(url);
-      if (url.includes("nextPageToken") && !failed) {
-        failed = true;
-        throw Object.assign(new Error("Request failed with status code 503"), { response: { status: 503 } });
-      }
-      return serve.call(http, url);
+    const get = fakeMidgard(actions(120), {
+      fail: (url) => url.includes("nextPageToken") && !failed && (failed = true),
     });
 
-    const listing = midgard().getActions("thor1w");
-    while (urls.length < 3) {
-      await new Promise((resolve) => setImmediate(resolve));
-      mock.timers.tick(5_000);
-    }
-    assert.equal((await listing).length, 120);
-    assert.deepEqual(
-      urls.map((url) => new URL(url).searchParams.get("nextPageToken")),
-      [null, "283844929000000123", "283844929000000123", "283844929000000073"],
-    );
+    assert.equal((await settle(midgard().getActions("thor1w"))).length, 120);
+    assert.deepEqual(tokens(get), [null, "283844929000000123", "283844929000000123", "283844929000000073"]);
+  });
+
+  test("a page that keeps failing fails the list once, without restarting it", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    const get = fakeMidgard(actions(120), { fail: (url) => url.includes("nextPageToken") });
+
+    await assert.rejects(settle(midgard().getActions("thor1w")), /actions of thor1w, page 1: 503/);
+    assert.deepEqual(tokens(get), [null, ...Array(4).fill("283844929000000123")]);
   });
 });

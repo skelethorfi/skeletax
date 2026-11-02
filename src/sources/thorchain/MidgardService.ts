@@ -232,7 +232,9 @@ export class MidgardService {
   // while the list is fetched don't shift items between pages (offset paging did, and was capped at 101 pages).
   // The list ends at an empty token or an empty page. The token is a 64-bit integer, past what a JS number holds
   // exactly, so it is sent as the string Midgard returned (the xchainjs client types it as a number). Each page is
-  // retried on its own, so a transient error doesn't restart the list. `count` is only a check: Midgard leaves it
+  // retried on its own, so a transient error doesn't restart the list; once its retries are spent, the error is
+  // not transient, so the store doesn't restart the list either. A page with no `actions` array (e.g. a gateway's
+  // error page answered with 200) is an error, not the end of the list. `count` is only a check: Midgard leaves it
   // out of cursor pages and answers -1 for some addresses.
   private async fetchActions(address: string): Promise<Action[]> {
     let actions: Action[] = [];
@@ -247,8 +249,21 @@ export class MidgardService {
       }
 
       const url = `${this.basePath}/v2/actions?${params}`;
-      const data = (await withRetry(() => http.get(url), `${this.source} actions page ${page}`)).data;
-      const pageActions: Action[] = data?.actions ?? [];
+      let data: any;
+
+      try {
+        data = (await withRetry(() => http.get(url), `${this.source} actions page ${page}`)).data;
+      } catch (error: any) {
+        // A plain error (no status, code or cause), which withRetry does not retry again
+        const reason = error?.response?.status ?? error?.code ?? error?.message;
+        throw new Error(`[Midgard] actions of ${address}, page ${page}: ${reason}`);
+      }
+
+      if (!Array.isArray(data?.actions)) {
+        throw new Error(`[Midgard] actions of ${address}, page ${page}: no actions in the answer`);
+      }
+
+      const pageActions: Action[] = data.actions;
 
       if (page === 0 && data?.count !== undefined) {
         count = parseInt(data.count);
@@ -262,7 +277,7 @@ export class MidgardService {
         );
       }
 
-      const next = data?.meta?.nextPageToken ?? "";
+      const next = data.meta?.nextPageToken ?? "";
 
       if (pageActions.length === 0 || !next) {
         break;
