@@ -54,7 +54,7 @@ describe("CSV file layout", () => {
 
   test("a row late on a month-end day is in that month's files", () => {
     const rows = [row("2025-07-31T18:00:00.000Z"), row("2025-08-01T01:00:00.000Z")];
-    const { files, exported } = csvFiles(rows, [july, { from: "2025-08-01", to: "2025-08-31" }], wallets);
+    const { files, exported, outside } = csvFiles(rows, [july, { from: "2025-08-01", to: "2025-08-31" }], wallets);
     assert.deepEqual(names(files), [
       "all.csv (2)",
       "all-2025-07-01_2025-07-31.csv (1)",
@@ -63,12 +63,22 @@ describe("CSV file layout", () => {
       "2025-08-01_2025-08-31_THOR_11111_Main.csv (1)",
     ]);
     assert.equal(exported, 2);
+    assert.equal(outside, 0);
   });
 
   test("rows outside every period are only in all.csv", () => {
-    const { files, exported } = csvFiles([row("2024-01-01T00:00:00.000Z")], [july], wallets);
-    assert.deepEqual(names(files), ["all.csv (1)", "all-2025-07-01_2025-07-31.csv (0)"]);
-    assert.equal(exported, 0);
+    const { files, exported, outside } = csvFiles(
+      [row("2024-01-01T00:00:00.000Z"), row("2025-07-02T00:00:00.000Z")],
+      [july],
+      wallets,
+    );
+    assert.deepEqual(names(files), [
+      "all.csv (2)",
+      "all-2025-07-01_2025-07-31.csv (1)",
+      "2025-07-01_2025-07-31_THOR_11111_Main.csv (1)",
+    ]);
+    assert.equal(exported, 1);
+    assert.equal(outside, 1);
   });
 
   test("thorchain rows go to the swaps file; an unknown wallet is named by its address, with a warning", () => {

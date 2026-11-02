@@ -16,6 +16,7 @@ export interface CsvFile {
 //                                 the period's rows of one wallet, for Summ to import
 //   <from>_<to>_THOR_thorchain_swaps.csv
 //                                 the period's rows of the 'thorchain' wallet (each from or to it)
+// exported counts the rows in the wallet files; outside, the rows in no period (so in all.csv only).
 // A period's days are calendar days in timeZone (docs/specs/periods.md). Throws when a row in a period lands
 // in no wallet file.
 export function csvFiles(
@@ -23,7 +24,7 @@ export function csvFiles(
   ranges: DateRange[],
   wallets: IWallet[],
   timeZone: string = "UTC",
-): { files: CsvFile[]; exported: number; warnings: string[] } {
+): { files: CsvFile[]; exported: number; outside: number; warnings: string[] } {
   const rows = assignRowIds(allRows);
   const warnings: string[] = [];
   const files: CsvFile[] = [{ name: "all.csv", rows }];
@@ -61,7 +62,9 @@ export function csvFiles(
     throw new Error(`failed to export all txs. expected ${expectedExportCount}, exported ${count}`);
   }
 
-  return { files, exported: count, warnings };
+  const outside = rows.filter((row) => !ranges.some((range) => isInRange(row.timestamp, range, timeZone))).length;
+
+  return { files, exported: count, outside, warnings };
 }
 
 // A period runs from midnight at the start of its first day to midnight at the end of its last day, in timeZone

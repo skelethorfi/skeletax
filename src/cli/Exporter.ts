@@ -531,12 +531,16 @@ export class Exporter {
   // Writes the CSV files that csvFiles lays out
   saveToCsv(txs: SummRow[], outputPath: string) {
     const ranges = generateDateRanges(this.config.fromDate, this.config.toDate, this.config.frequency);
-    const { files, exported, warnings } = csvFiles(txs, ranges, this.config.wallets, this.config.timezone);
+    const { files, exported, outside, warnings } = csvFiles(txs, ranges, this.config.wallets, this.config.timezone);
     warnings.forEach((warning) => this.report.warn(`WARN: ${warning}`));
     files.forEach((file) => writeCsv(path.join(outputPath, file.name), file.rows));
     // Next to csv/, so it is not uploaded: it names wallets and records
     fs.outputFileSync(path.join(path.dirname(outputPath), ROW_IDS_FILE), renderRowIds(files[0].rows));
     this.report.info(`Total exported: ${exported}`);
+
+    if (outside > 0) {
+      this.report.info(`${outside} rows outside the periods (all.csv only)`);
+    }
   }
 
   private saveFailure(
