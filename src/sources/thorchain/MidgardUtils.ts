@@ -24,6 +24,13 @@ export function memoDestination(memo: string, field: number): string | undefined
   return memo.split(":")[field]?.split("/")[0] || undefined;
 }
 
+// Whether a memo's destination is a THORName (or Maya's MAYAName) rather than an address: 1 to 30 letters, digits, "-",
+// "_" or "+" (https://dev.thorchain.org/concepts/thornames.html). The protocol pays the address the name resolves to, so
+// no output carries the name. Addresses are longer, bar some XRP ones; callers ask only when no output matches the field.
+export function isMemoName(destination: string): boolean {
+  return /^[a-z0-9+_-]{1,30}$/i.test(destination);
+}
+
 // The refund address a memo's field gives after its destination (DESTADDR/REFUNDADDR), when it gives one
 export function memoRefundAddress(memo: string, field: number): string | undefined {
   return memo.split(":")[field]?.split("/")[1] || undefined;

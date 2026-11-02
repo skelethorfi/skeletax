@@ -212,6 +212,18 @@ field can also give a refund address, as `<destination>/<refund address>`
 the destination. A swap whose field is empty, or holds only `/<refund
 address>`, is paid to the sender's own address (`swap.ts`).
 
+The destination can be a THORName (on Maya, a MAYAName) instead of an address:
+1 to 30 letters, digits, `-`, `_` or `+` (`=:BTC.BTC:myname`). The protocol pays
+the address the name resolves to on the outbound chain, so no output carries the
+name, and the exporter does not look names up. When no output is paid to a
+swap's destination and the destination is a name, the destination is the one
+address paid in an asset other than the input, leaving out affiliate outputs
+(`affiliate: true`); returns are in the input asset, so they are not counted.
+The swap's legs are then those of a swap to that address. If no address, or
+more than one, is paid that way, the swap fails with `no matching out tx`,
+saying the destination is a name. A loan's destination is not resolved: a loan
+to a name fails the same way.
+
 The unfilled part of a partly filled swap can go to that refund address instead
 of the sender. An output in the input asset to either address is the return,
 and its `returned` leg is in the wallet it was paid to. The CSV nets the return
@@ -224,7 +236,7 @@ leave the leg on the sender with a warning to check where they went
 (`refund.ts`).
 
 - **Tests:** `test/MemoDestination.test.ts` (including a partly filled swap
-  and a refund returned to a refund address); the golden case
+  and a refund returned to a refund address, and swaps and a loan to a THORName); the golden case
   `swap/bsc-usdt-to-ltc-refund-address`.
 
 ## Aggregator payouts
