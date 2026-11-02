@@ -241,6 +241,11 @@ and THORNode return both:
 On an L1 the outbound is a real transaction on the original chain back to the
 wallet. On THORChain the outbound has no txid of its own.
 
+The outbound goes to the sender, or to the refund address the memo gives after
+its destination (`activity.md`, The memo's destination). The rows below are on
+the sending wallet either way; a return paid to another address carries a
+warning to record that transfer by hand.
+
 **What the wallet loses.** The gas to send the inbound, plus whatever the
 protocol kept: the amount sent minus the amount returned. A modern THORChain
 refund returns the full amount; an L1 refund returns less, because the
