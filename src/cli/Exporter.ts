@@ -38,6 +38,19 @@ import { csvFiles } from "../export/summ/files.ts";
 import type { Action } from "@xchainjs/xchain-midgard";
 import { midgardActionKey } from "../sources/store/Sources.ts";
 import { PriceSource } from "../sources/Prices.ts";
+import type { IWallet } from "../config/IWallet.ts";
+import { addressKey } from "../utils/Address.ts";
+
+// Written to the run's folder when a wallet could not be fetched: summ-sync refuses such a run, since the wallet's
+// files are missing and a plan would delete its rows in Summ (docs/specs/run-summary.md, Not fetched)
+export const NOT_FETCHED_FILE = "not-fetched.json";
+
+// A wallet the run skipped: the source that failed, and its error
+export interface NotFetched {
+  wallet: IWallet;
+  source: string;
+  error: string;
+}
 
 export interface ExportOptions {
   // Only read cached snapshots; fail on anything not cached
@@ -75,6 +88,8 @@ export class Exporter {
   endWarnings: string[] = [];
   // Midgard actions whose status is not 'success', filled by the Midgard sources
   notFinal: NotFinal[] = [];
+  // Wallets skipped because a source failed for them, filled by collectBundles
+  notFetched: NotFetched[] = [];
   private readonly today: Date;
 
   constructor(filename: string, options: ExportOptions = {}) {
@@ -155,17 +170,62 @@ export class Exporter {
     ];
   }
 
-  // Every wallet's bundles, wallet by wallet in config order
+  // Every wallet's bundles, wallet by wallet in config order. A wallet one of whose sources fails (after its own
+  // retries) is skipped whole: its error goes in the run summary and notFetched, and the other wallets go on, so
+  // the run never writes a wallet file that misses a source's rows (docs/specs/run-summary.md, Not fetched)
   async collectBundles(): Promise<RawBundle[]> {
     const bundles: RawBundle[] = [];
 
     for (const wallet of this.config.wallets) {
-      for (const source of this.sources()) {
-        bundles.push(...(await source.bundlesFor(wallet.address)));
+      const walletBundles: RawBundle[] = [];
+      const notFinal = this.notFinal.length;
+      let current: Source | undefined;
+
+      try {
+        for (const source of this.sources()) {
+          current = source;
+          walletBundles.push(...(await source.bundlesFor(wallet.address)));
+        }
+      } catch (error) {
+        // The failed wallet's actions are not reported as not final either
+        this.notFinal.splice(notFinal);
+        const message = error instanceof Error ? error.message : String(error);
+        this.notFetched.push({ wallet, source: current?.name ?? "unknown", error: message });
+        this.report.notFetchedWallet(`${wallet.name} (${wallet.address}): ${current?.name ?? "unknown"}: ${message}`);
+
+        // A known error needs no stack; another one keeps it, to debug
+        if (!(error instanceof StoreMissError) && error instanceof Error && error.stack) {
+          console.error(error.stack);
+        }
+
+        continue;
       }
+
+      bundles.push(...walletBundles);
     }
 
     return bundles;
+  }
+
+  // Lists the skipped wallets in the run's folder for summ-sync; nothing is written when every wallet was fetched
+  writeNotFetched(outputPath: string) {
+    if (this.notFetched.length === 0) {
+      return;
+    }
+
+    fs.outputJsonSync(
+      path.join(outputPath, NOT_FETCHED_FILE),
+      {
+        version: 1,
+        wallets: this.notFetched.map(({ wallet, source, error }) => ({
+          name: wallet.name,
+          address: wallet.address,
+          source,
+          error,
+        })),
+      },
+      { spaces: 2 },
+    );
   }
 
   // With referencePrices = 'all' (the default), each bundle with the USD prices of its legs (docs/specs/prices.md); otherwise the
@@ -258,7 +318,15 @@ export class Exporter {
       (line): line is string => !!line,
     );
 
-    const rows = collectRows(results);
+    // A skipped wallet gets no rows, even from another wallet's action, so no file of it is written
+    const skipped = new Set(this.notFetched.map(({ wallet }) => addressKey(wallet.address)));
+    const allRows = collectRows(results);
+    const rows = allRows.filter((row) => !row.wallet || !skipped.has(addressKey(row.wallet)));
+
+    if (rows.length < allRows.length) {
+      this.report.info(`Skipped ${allRows.length - rows.length} rows of wallets not fetched`);
+    }
+
     const distributors = knownDistributorReport(rows, this.config.incomeFrom);
     distributors.info.forEach((line) => this.report.info(line));
     this.endWarnings.push(...distributors.warnings);

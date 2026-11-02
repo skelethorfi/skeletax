@@ -145,7 +145,25 @@ export function periodsOf(files: { period: Period }[]): Period[] {
   return [...new Map(files.map((f) => [`${f.period.from}_${f.period.to}`, f.period])).values()];
 }
 
+/** Written by the exporter when it skipped a wallet a source failed for (docs/specs/run-summary.md, Not fetched). */
+export const NOT_FETCHED_FILE = "not-fetched.json";
+
 export function readRun(runDir: string, extraDirs: string[] = []): { files: RunFile[]; rows: Row[] } {
+  // A skipped wallet has no file, so every row of it in Summ would be planned for deletion
+  const notFetched = join(runDir, NOT_FETCHED_FILE);
+  if (existsSync(notFetched)) {
+    let names = "";
+    try {
+      const wallets = (JSON.parse(readFileSync(notFetched, "utf8")) as { wallets?: { name?: string }[] }).wallets;
+      names = (wallets ?? []).map((w) => w.name).join(", ");
+    } catch {
+      // The refusal stands without the names
+    }
+    throw new Error(
+      `${runDir}: the export could not fetch every wallet${names ? ` (${names})` : ""} and wrote no file for it, ` +
+        `so a plan would delete its rows in Summ: export again until every wallet is fetched (${NOT_FETCHED_FILE}, summary.md)`,
+    );
+  }
   const dir = join(runDir, "csv");
   const files: RunFile[] = [];
   const rows: Row[] = [];
