@@ -1,0 +1,38 @@
+id: midgard/contract.1F30DD5F81AB6DF070A1FA9AFA741AF29D872ABBE4E4A3761C724467E514930F.wasm-rujira-fin/trade.0a975e7799df
+protocol: thorchain
+kind: rujira.fin.trade
+status: success
+time: 2026-10-25T00:13:13.905Z
+legs:
+  - direction: out
+    wallet: thor1zml2yga4s46mrfhc2knf46dfajptux0d6mpcu2
+    asset:
+      notation: THOR.TCY
+      kind: native
+    role: principal
+    basis: observed
+    txid: 1F30DD5F81AB6DF070A1FA9AFA741AF29D872ABBE4E4A3761C724467E514930F
+    amount: "153.29840174"
+    decimals: 8
+  - direction: in
+    wallet: thor1zml2yga4s46mrfhc2knf46dfajptux0d6mpcu2
+    asset:
+      notation: THOR.TCY
+      kind: native
+    role: returned
+    basis: observed
+    txid: 1F30DD5F81AB6DF070A1FA9AFA741AF29D872ABBE4E4A3761C724467E514930F
+    amount: "0.00391727"
+    decimals: 8
+  - direction: in
+    wallet: thor1zml2yga4s46mrfhc2knf46dfajptux0d6mpcu2
+    asset:
+      notation: BTC-BTC
+      kind: secured
+    role: principal
+    basis: observed
+    txid: 1F30DD5F81AB6DF070A1FA9AFA741AF29D872ABBE4E4A3761C724467E514930F
+    amount: "0.00031267"
+    decimals: 8
+prices: []
+details: {}

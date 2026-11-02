@@ -84,3 +84,5 @@ one only after the old one is deleted (`summ-sync.md`).
   row later that day was in no period file (only in `all.csv`).
 - October 2026: periods include their whole last day (UTC), and the
   `timezone` key was added.
+- November 2026: a FIN trade's record key gained a hash of its event's
+  attributes (`snapshots.md`), so the ID of every FIN swap row changed once.

@@ -1,0 +1,615 @@
+{
+  "description": "A FIN market swap of TCY for secured BTC that filled at four price levels: four trade events, each with the whole call. The first in the Cosmos tx maps the swap, net of the TCY returned",
+  "source": "midgard",
+  "wallet": "thor1zml2yga4s46mrfhc2knf46dfajptux0d6mpcu2",
+  "data": {
+    "date": "1792887193905864119",
+    "height": "28384579",
+    "in": [
+      {
+        "address": "thor1zml2yga4s46mrfhc2knf46dfajptux0d6mpcu2",
+        "coins": [],
+        "txID": "1F30DD5F81AB6DF070A1FA9AFA741AF29D872ABBE4E4A3761C724467E514930F"
+      }
+    ],
+    "metadata": {
+      "contract": {
+        "attributes": {
+          "bid": "3",
+          "offer": "1466990",
+          "price": "ccl:0.000002045005013055",
+          "ranges": "25:0.00000116114-0.0000025956:65549718120.057551166066065979:297378.400066383632792179:2.234133696192943428:1090605.259453712318704292:1605.549889734867363519:,20:0.0000013-0.0000025:18986871673.330718838690167147:84093.284449260951853642:0.765866303807056572:373513.478880533930625939:898.964276018883306251:",
+          "rate": "0.000002045005013055",
+          "side": "quote"
+        },
+        "contractType": "wasm-rujira-fin/trade",
+        "funds": "15329840174tcy",
+        "msg": {
+          "swap": {
+            "min_return": "31260"
+          }
+        }
+      }
+    },
+    "out": [
+      {
+        "address": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y",
+        "coins": [],
+        "txID": "1F30DD5F81AB6DF070A1FA9AFA741AF29D872ABBE4E4A3761C724467E514930F"
+      }
+    ],
+    "pools": [],
+    "status": "success",
+    "type": "contract"
+  },
+  "cosmosTxs": [
+    {
+      "txhash": "1F30DD5F81AB6DF070A1FA9AFA741AF29D872ABBE4E4A3761C724467E514930F",
+      "height": "28384579",
+      "timestamp": "2026-10-25T00:13:13Z",
+      "code": 0,
+      "fee": [],
+      "events": [
+        {
+          "type": "message",
+          "attributes": [
+            {
+              "key": "action",
+              "value": "/cosmwasm.wasm.v1.MsgExecuteContract"
+            },
+            {
+              "key": "sender",
+              "value": "thor1zml2yga4s46mrfhc2knf46dfajptux0d6mpcu2"
+            },
+            {
+              "key": "module",
+              "value": "wasm"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_spent",
+          "attributes": [
+            {
+              "key": "spender",
+              "value": "thor1zml2yga4s46mrfhc2knf46dfajptux0d6mpcu2"
+            },
+            {
+              "key": "amount",
+              "value": "15329840174tcy"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_received",
+          "attributes": [
+            {
+              "key": "receiver",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "amount",
+              "value": "15329840174tcy"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "transfer",
+          "attributes": [
+            {
+              "key": "recipient",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "sender",
+              "value": "thor1zml2yga4s46mrfhc2knf46dfajptux0d6mpcu2"
+            },
+            {
+              "key": "amount",
+              "value": "15329840174tcy"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "execute",
+          "attributes": [
+            {
+              "key": "_contract_address",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_spent",
+          "attributes": [
+            {
+              "key": "amount",
+              "value": "15329840174tcy"
+            },
+            {
+              "key": "spender",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_received",
+          "attributes": [
+            {
+              "key": "amount",
+              "value": "15329840174tcy"
+            },
+            {
+              "key": "receiver",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "transfer",
+          "attributes": [
+            {
+              "key": "amount",
+              "value": "15329840174tcy"
+            },
+            {
+              "key": "recipient",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "sender",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "execute",
+          "attributes": [
+            {
+              "key": "_contract_address",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_spent",
+          "attributes": [
+            {
+              "key": "amount",
+              "value": "15329840174tcy"
+            },
+            {
+              "key": "spender",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_received",
+          "attributes": [
+            {
+              "key": "amount",
+              "value": "15329840174tcy"
+            },
+            {
+              "key": "receiver",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "transfer",
+          "attributes": [
+            {
+              "key": "amount",
+              "value": "15329840174tcy"
+            },
+            {
+              "key": "recipient",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "sender",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "execute",
+          "attributes": [
+            {
+              "key": "_contract_address",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "wasm-rujira-fin/trade",
+          "attributes": [
+            {
+              "key": "_contract_address",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "bid",
+              "value": "3"
+            },
+            {
+              "key": "offer",
+              "value": "1466990"
+            },
+            {
+              "key": "price",
+              "value": "ccl:0.000002045005013055"
+            },
+            {
+              "key": "ranges",
+              "value": "25:0.00000116114-0.0000025956:65549718120.057551166066065979:297378.400066383632792179:2.234133696192943428:1090605.259453712318704292:1605.549889734867363519:,20:0.0000013-0.0000025:18986871673.330718838690167147:84093.284449260951853642:0.765866303807056572:373513.478880533930625939:898.964276018883306251:"
+            },
+            {
+              "key": "rate",
+              "value": "0.000002045005013055"
+            },
+            {
+              "key": "side",
+              "value": "quote"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "wasm-rujira-fin/trade",
+          "attributes": [
+            {
+              "key": "_contract_address",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "bid",
+              "value": "14535"
+            },
+            {
+              "key": "offer",
+              "value": "7111135920"
+            },
+            {
+              "key": "price",
+              "value": "ccl:0.000002043977244137"
+            },
+            {
+              "key": "ranges",
+              "value": "5:0.00000085-0.0000025:858208565315.02753898628994868:6496772.905398400440252676:9152.915324036278476212:4476873273.287887929171218636:0:,10:0.000000977074-0.00000228684:359737353.169308925221237408:4236.75627604427324623:6.847834479657558557:3342880.945436271565842326:6531.353983869274638938:,25:0.00000116114-0.0000025956:65843356554.621002347389371533:296777.175903540100787929:601.22416284353200425:293638434.563451181323305554:432283.9562239224024769:,20:0.0000013-0.0000025:19087437769.350999941976512047:83887.183387266913497:206.101061994038356642:100566096.0202811032863449:242040.335389966237927778:,27:0.0000014-0.0000025:422930278281.67144033418264211:1584554.841875113137265149:4567.911616646493604339:2232413333.866010946488935918:1843261.691334810249309052:"
+            },
+            {
+              "key": "rate",
+              "value": "0.000002043977244137"
+            },
+            {
+              "key": "side",
+              "value": "quote"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "wasm-rujira-fin/trade",
+          "attributes": [
+            {
+              "key": "_contract_address",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "bid",
+              "value": "14528"
+            },
+            {
+              "key": "offer",
+              "value": "7114826050"
+            },
+            {
+              "key": "price",
+              "value": "ccl:0.000002041933267091"
+            },
+            {
+              "key": "ranges",
+              "value": "5:0.00000085-0.0000025:862687757492.995790045090141681:6487624.406756520550505072:9148.498641879889747604:4479192177.968251058800193001:0:,10:0.000000977074-0.00000228684:363081965.52000244728392451:4229.91174619139929752:6.84452985287394871:3344612.350693522062687102:6534.736820652640671549:,25:0.00000116114-0.0000025956:66137147067.666852336314263707:296176.241895789761836926:600.934007750338951003:293790513.045849988924892174:432507.84070323323657736:,20:0.0000013-0.0000025:19188055953.556732165924894113:83681.181783077695763501:206.001604189217733499:100618184.205732223948382066:242165.700123960699339178:,27:0.0000014-0.0000025:425163854707.276463250448157694:1579989.120658785457645965:4565.721216327679619184:2233576425.605022916265515584:1844222.034302443421741987:"
+            },
+            {
+              "key": "rate",
+              "value": "0.000002041933267091"
+            },
+            {
+              "key": "side",
+              "value": "quote"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "wasm-rujira-fin/trade",
+          "attributes": [
+            {
+              "key": "_contract_address",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "bid",
+              "value": "2248"
+            },
+            {
+              "key": "offer",
+              "value": "1102019487"
+            },
+            {
+              "key": "price",
+              "value": "ccl:0.000002039891333675"
+            },
+            {
+              "key": "ranges",
+              "value": "5:0.00000085-0.0000025:863381541480.275729964709951868:6486208.808914640299130952:1415.59784188025137412:693783987.279939919619810187:0:,10:0.000000977074-0.00000228684:363600013.935852049160560965:4228.852654231984312548:1.059091959414984972:518048.415849601876636455:1012.16813877733947141:,25:0.00000116114-0.0000025956:66182652402.728205237203053109:296083.25605573380778078:92.985840055954056146:45505335.061352900888789402:66991.31978026575496632:,20:0.0000013-0.0000025:19203640746.685729834475626425:83649.306015124485552158:31.875767953210211343:15584793.128997668550732312:37509.147766510794608162:,27:0.0000014-0.0000025:425509815359.680762305530124085:1579282.639200634288272546:706.481458151169373419:345960652.404299055081966391:285653.202125300093019363:"
+            },
+            {
+              "key": "rate",
+              "value": "0.000002039891333675"
+            },
+            {
+              "key": "side",
+              "value": "quote"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "wasm-rujira-fin/range.fee",
+          "attributes": [
+            {
+              "key": "_contract_address",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "base",
+              "value": "3832354"
+            },
+            {
+              "key": "quote",
+              "value": "0"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_spent",
+          "attributes": [
+            {
+              "key": "amount",
+              "value": "3832354tcy"
+            },
+            {
+              "key": "spender",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_received",
+          "attributes": [
+            {
+              "key": "amount",
+              "value": "3832354tcy"
+            },
+            {
+              "key": "receiver",
+              "value": "thor1gm8q2gr25nzzsxzdp2mpja4hyvyhjlr4s6krcsgv2y953uu0js3qhwpus7"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "transfer",
+          "attributes": [
+            {
+              "key": "amount",
+              "value": "3832354tcy"
+            },
+            {
+              "key": "recipient",
+              "value": "thor1gm8q2gr25nzzsxzdp2mpja4hyvyhjlr4s6krcsgv2y953uu0js3qhwpus7"
+            },
+            {
+              "key": "sender",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_spent",
+          "attributes": [
+            {
+              "key": "amount",
+              "value": "31267btc-btc,391727tcy"
+            },
+            {
+              "key": "spender",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_received",
+          "attributes": [
+            {
+              "key": "amount",
+              "value": "31267btc-btc,391727tcy"
+            },
+            {
+              "key": "receiver",
+              "value": "thor1zml2yga4s46mrfhc2knf46dfajptux0d6mpcu2"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "transfer",
+          "attributes": [
+            {
+              "key": "amount",
+              "value": "31267btc-btc,391727tcy"
+            },
+            {
+              "key": "recipient",
+              "value": "thor1zml2yga4s46mrfhc2knf46dfajptux0d6mpcu2"
+            },
+            {
+              "key": "sender",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_spent",
+          "attributes": [
+            {
+              "key": "amount",
+              "value": "47btc-btc"
+            },
+            {
+              "key": "spender",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "coin_received",
+          "attributes": [
+            {
+              "key": "amount",
+              "value": "47btc-btc"
+            },
+            {
+              "key": "receiver",
+              "value": "thor1gm8q2gr25nzzsxzdp2mpja4hyvyhjlr4s6krcsgv2y953uu0js3qhwpus7"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "type": "transfer",
+          "attributes": [
+            {
+              "key": "amount",
+              "value": "47btc-btc"
+            },
+            {
+              "key": "recipient",
+              "value": "thor1gm8q2gr25nzzsxzdp2mpja4hyvyhjlr4s6krcsgv2y953uu0js3qhwpus7"
+            },
+            {
+              "key": "sender",
+              "value": "thor1jshw3secvxhzfyza6aj530hrc73zave42zgs525n0xkc3e9d6wkqrm8j3y"
+            },
+            {
+              "key": "msg_index",
+              "value": "0"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

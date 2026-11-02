@@ -1,4 +1,5 @@
 import type { Action } from "@xchainjs/xchain-midgard";
+import crypto from "crypto";
 import type { TxStatusResponse } from "@xchainjs/xchain-thornode";
 import { type ListOptions, monthFolder, type RecordRules } from "./RecordStore.ts";
 import type { ViewblockInbound, ViewblockTx } from "../viewblock/ViewblockTx.ts";
@@ -15,7 +16,8 @@ import type { TcyClaimData } from "../tcy/TcyClaimService.ts";
 // contract actions: one wasm call gives an action per event, so they add the event. The few with no txid
 // (e.g. some refunds) fall back to their date. The store is shared by every wallet, so actions that one tx
 // gave to several members are told apart by the members' addresses: old Midgard's genesisTx placeholders
-// (also by pool), and Maya's donate adds.
+// (also by pool), and Maya's donate adds. A FIN trade also adds a hash of its event's attributes: one call can
+// fill at several price levels, each a trade event of the same tx.
 export function midgardActionKey(action: Action): string {
   const txId = action.in.find((tx) => tx.txID)?.txID || action.out.find((tx) => tx.txID)?.txID;
   const contractType = action.metadata.contract?.contractType;
@@ -29,7 +31,25 @@ export function midgardActionKey(action: Action): string {
     return [action.type, txId, members].join(".");
   }
 
-  return [action.type, txId || `date-${action.date}`, contractType].filter(Boolean).join(".");
+  return [action.type, txId || `date-${action.date}`, contractType, repeatedEventHash(action)]
+    .filter(Boolean)
+    .join(".");
+}
+
+// Contract events that one tx can give several of
+const REPEATED_EVENTS = ["wasm-rujira-fin/trade"];
+
+// The first 12 hex digits of SHA-256 over the event's attributes, sorted by name, for a contract event that can
+// repeat in one tx; none for other actions
+function repeatedEventHash(action: Action): string | undefined {
+  const contract = (action.metadata as any).contract;
+
+  if (!REPEATED_EVENTS.includes(contract?.contractType)) {
+    return undefined;
+  }
+
+  const attributes = Object.entries(contract.attributes ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return crypto.createHash("sha256").update(JSON.stringify(attributes)).digest("hex").slice(0, 12);
 }
 
 // Maya made LP positions for many members in one tx, each an add with the memo 'donate:<pool>' and that txid

@@ -92,10 +92,10 @@ export function parseCoins(coins: string): Coin[] {
     });
 }
 
-// Cosmos denom → Midgard asset: rune → THOR.RUNE, x/ruji → X/RUJI, thor.kuji → THOR.KUJI, eth-usdc-0x… → ETH-USDC-0X…
-// (Rujira runs on THORChain only)
+// Cosmos denom → Midgard asset: a bare name is THORChain's own (rune → THOR.RUNE, tcy → THOR.TCY), x/ruji → X/RUJI,
+// thor.kuji → THOR.KUJI, eth-usdc-0x… → ETH-USDC-0X… (Rujira runs on THORChain only)
 function denomToAsset(denom: string): string {
-  return denom === "rune" ? "THOR.RUNE" : denom.toUpperCase();
+  return /^[a-z0-9]+$/.test(denom) ? `THOR.${denom.toUpperCase()}` : denom.toUpperCase();
 }
 
 type Result = { activities: Activity[]; issues: Issue[] };
@@ -240,6 +240,14 @@ class Call {
       return ignored("FIN trade made by the called contract itself, e.g. a staking contract selling its revenue");
     }
 
+    // A swap that fills at several price levels gives a trade event per level, each with the whole call's funds:
+    // the first maps the swap (what the wallet sent and received), the others give nothing
+    const fill = this.fillIndex();
+
+    if (fill > 0) {
+      return ignored(`FIN trade: fill ${fill + 1} of a swap, mapped with its first fill`);
+    }
+
     const sent = parseCoins(this.contract.funds ?? "");
 
     if (sent.length !== 1) {
@@ -316,6 +324,29 @@ class Call {
     return this.requireCosmosTx()
       .events.find((event) => event.type === "execute")
       ?.attributes.find((attribute) => attribute.key === "_contract_address")?.value;
+  }
+
+  // Which of the called contract's events of this type in the Cosmos tx this action is, matched by its attributes
+  private fillIndex(): number {
+    const called = this.calledContract();
+    const events = this.requireCosmosTx()
+      .events.filter((event) => event.type === this.contract.contractType)
+      .map((event) => Object.fromEntries(event.attributes.map(({ key, value }) => [key, value])))
+      .filter((attributes) => attributes._contract_address === called);
+
+    if (events.length <= 1) {
+      return 0;
+    }
+
+    const index = events.findIndex((attributes) =>
+      Object.entries(this.contract.attributes).every(([key, value]) => attributes[key] === value),
+    );
+
+    if (index === -1) {
+      throw new Error(`rujira: ${this.contract.contractType} matches none of the ${events.length} in its Cosmos tx`);
+    }
+
+    return index;
   }
 
   private requireCosmosTx(): CosmosTx {

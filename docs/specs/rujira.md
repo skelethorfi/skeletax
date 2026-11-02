@@ -12,6 +12,10 @@ the contract event's attributes. `coins` is empty on `in` and `out`. It does
 not say what the wallet received, the gas paid, or the fees taken inside the
 contract.
 
+A denom names its asset in Midgard notation: a bare name is THORChain's own
+(`rune` is `THOR.RUNE`, `tcy` is `THOR.TCY`), and other denoms are upper-cased
+(`x/ruji` is `X/RUJI`, `btc-btc` the secured `BTC-BTC`).
+
 So every contract action is paired with its **Cosmos tx** from THORNode
 (`/cosmos/tx/v1beta1/txs/{hash}`), trimmed to the txid, height, result code,
 fee and events. The `transfer` events give what the wallet received, and
@@ -48,10 +52,21 @@ the pair; a merge position has no price, so set its prices in Summ.
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `wasm-rujira-staking/liquid.bond`                             | one `sell` of the bonded asset (`RUJI`, `BRUNE`) for its receipt token (`SRUJI`, `YBRUNE`)       | sent: `funds`; receipt: the `shares` attribute                         | The asset goes into a shared pool and the wallet holds a different, transferable token instead (see Liquid and account bonds) |
 | `wasm-rujira-staking/account.bond`                            | one `staking-deposit`                                                                            | `funds`                                                                | The asset stays the wallet's, recorded against its address; no token comes back                                               |
-| `wasm-rujira-fin/trade` (a FIN market swap)                   | one `sell` of the asset sent for the asset received                                              | sent: `funds`; received: the `transfer` to the wallet in the Cosmos tx | A trade: one asset disposed of for another                                                                                    |
+| `wasm-rujira-fin/trade` (a FIN market swap)                   | one `sell` of the asset sent for the asset received, from the swap's first fill (see FIN fills)  | sent: `funds`; received: the `transfer` to the wallet in the Cosmos tx | A trade: one asset disposed of for another                                                                                    |
 | `wasm-rujira-merge/deposit`                                   | `bridge-trade-out` of `KUJI` and `bridge-trade-in` of the merge position `RujiraMerge.THOR.KUJI` | sent: `funds`; position: the `shares` attribute                        | Merging is one-way: the KUJI is gone at the deposit, and only RUJI can come out. The position carries the cost                |
 | `wasm-rujira-merge/withdraw`                                  | `bridge-trade-out` of `RujiraMerge.THOR.KUJI` and `bridge-trade-in` of `RUJI`                    | shares: `shares`; RUJI: `amount`                                       | The position is disposed of for RUJI                                                                                          |
 | Levana perps (`wasm-crank-fee` with `levana_protocol: perps`) | none                                                                                             | –                                                                      | Levana is discontinued. A position is entered by hand (see below)                                                             |
+
+### FIN fills
+
+A FIN swap that fills at several price levels gives a `wasm-rujira-fin/trade`
+event per level, and Midgard an action per event, each carrying the whole
+call's `funds` and `msg`. The `transfer` to the wallet is the whole swap's
+too. So the swap is mapped once: from the action whose attributes match the
+called contract's first trade event in the Cosmos tx. The other fills give no
+rows (an `ignored` issue), and an action that matches none of those events
+fails. Midgard does not list the fills in the Cosmos tx's order. Each fill is
+its own store record (`snapshots.md`).
 
 ### Liquid and account bonds
 
