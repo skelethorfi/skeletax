@@ -1,11 +1,13 @@
 import type { Action, Transaction } from "@xchainjs/xchain-midgard";
 import type { Activity, Leg } from "../../domain/Activity.ts";
-import { parseAmount } from "../../domain/Amount.ts";
+import type { Issue } from "../../domain/Issue.ts";
+import { formatAmount, parseAmount } from "../../domain/Amount.ts";
 import { toAsset } from "../../domain/Asset.ts";
 import { getActionDate, memoDestination, onlyCoin } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { inboundGas } from "./gas.ts";
+import type { Interpretation } from "../registry.ts";
 
 // https://dev.thorchain.org/concepts/memos.html (open loan, repay loan)
 const LOANOPEN_DESTADDR = 2;
@@ -41,9 +43,10 @@ export function interpretLoanOpen(bundle: RawBundle, protocol: Protocol): Activi
   );
 }
 
-// A loan repayment: the repayment sent in, with its gas; when the loan closes (one output), the collateral
-// paid back to the memo's destination. The memo names the collateral asset.
-export function interpretLoanRepay(bundle: RawBundle, protocol: Protocol): Activity {
+// A loan repayment: the repayment sent in, with its gas; when the loan closes, the collateral paid back to the
+// memo's destination in the asset the memo names. The collateral can come back in several outputs (a large
+// outbound is split); each is a leg. Any other output is not exported and raises a warning.
+export function interpretLoanRepay(bundle: RawBundle, protocol: Protocol): Interpretation {
   const action = bundle.data as Action;
 
   if (action.in.length !== 1) {
@@ -57,24 +60,45 @@ export function interpretLoanRepay(bundle: RawBundle, protocol: Protocol): Activ
     throw new Error("loan: no memo");
   }
 
+  const collateral = memo.split(":")[REPAYLOAN_ASSET] ?? "";
+  const dest = memoDestination(memo, REPAYLOAN_DESTADDR);
+
+  if (!dest) {
+    throw new Error(`loan: the memo names no destination (${memo})`);
+  }
+
+  const isCollateral = (out: Transaction) =>
+    out.address.toLowerCase() === dest.toLowerCase() &&
+    out.coins.length === 1 &&
+    out.coins[0].asset.toUpperCase() === collateral.toUpperCase();
+  const returned = action.out.filter(isCollateral);
+  const others = action.out.filter((out) => !isCollateral(out));
+  const issues: Issue[] = others.map((out) => ({
+    kind: "warning",
+    message: `loan repayment: output of ${out.coins.map((coin) => `${formatAmount(parseAmount(coin.amount, 8))} ${coin.asset}`).join(", ")} to ${out.address} is not the ${collateral} collateral paid to the memo's destination; not exported`,
+  }));
+
   const txid = input.txID ?? "";
   const repaid = loanCoin(input);
   const gas = inboundGas(txid, bundle, input.address, repaid.asset, protocol);
-  const closed = action.out.length === 1 ? getOutput(action, memo, REPAYLOAN_DESTADDR) : undefined;
-  const returned = closed ? loanCoin(closed) : undefined;
 
-  return activity(
-    bundle,
-    protocol,
-    "loan.repay",
-    memo,
-    [
-      leg("out", input.address, repaid.asset, repaid.amount, txid),
-      ...(gas ? [{ ...gas, txid }] : []),
-      ...(closed && returned ? [leg("in", closed.address, returned.asset, returned.amount, closed.txID ?? "")] : []),
+  return {
+    activities: [
+      activity(
+        bundle,
+        protocol,
+        "loan.repay",
+        memo,
+        [
+          leg("out", input.address, repaid.asset, repaid.amount, txid),
+          ...(gas ? [{ ...gas, txid }] : []),
+          ...returned.map((out) => leg("in", out.address, out.coins[0].asset, out.coins[0].amount, out.txID ?? "")),
+        ],
+        { collateral },
+      ),
     ],
-    { collateral: memo.split(":")[REPAYLOAN_ASSET] },
-  );
+    issues,
+  };
 }
 
 function getCollateral(
@@ -121,7 +145,12 @@ function getOutput(action: Action, memo: string | undefined, destIndex: number):
   }
 
   const dest = memoDestination(memo, destIndex);
-  const out = action.out.find((out) => out.address.toLowerCase() === dest?.toLowerCase());
+
+  if (!dest) {
+    throw new Error(`loan: the memo names no destination (${memo})`);
+  }
+
+  const out = action.out.find((out) => out.address.toLowerCase() === dest.toLowerCase());
 
   if (!out) {
     throw new Error("loan: no matching out tx");

@@ -1,0 +1,60 @@
+id: midgard/swap.3DE148948A91CAD4574E7EB0BE0CAA087088D853502F51834832BB87B507E9E6
+protocol: thorchain
+kind: loan.repay
+status: success
+time: 2025-01-23T06:25:20.765Z
+memo: loan-:ETH.ETH:0x1309c007567a71b393094c21e70bd2647356a352:0
+legs:
+  - direction: out
+    wallet: "0x1309c007567a71b393094c21e70bd2647356a352"
+    asset:
+      notation: ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48
+      kind: token
+    role: principal
+    basis: observed
+    txid: 3DE148948A91CAD4574E7EB0BE0CAA087088D853502F51834832BB87B507E9E6
+    amount: "7318.728415"
+    decimals: 8
+  - direction: out
+    wallet: "0x1309c007567a71b393094c21e70bd2647356a352"
+    asset:
+      notation: ETH.ETH
+      kind: native
+    role: gas
+    basis: observed
+    txid: 3DE148948A91CAD4574E7EB0BE0CAA087088D853502F51834832BB87B507E9E6
+    amount: "0.000310943492451552"
+    decimals: 18
+  - direction: in
+    wallet: "0x1309c007567a71b393094c21e70bd2647356a352"
+    asset:
+      notation: ETH.ETH
+      kind: native
+    role: principal
+    basis: observed
+    txid: B6A75325A28431697E27BD008FE81E287DCF6A50F8ED5A33AAC3AF47FA59FBA7
+    amount: "2813.89629344"
+    decimals: 8
+  - direction: in
+    wallet: "0x1309c007567a71b393094c21e70bd2647356a352"
+    asset:
+      notation: ETH.ETH
+      kind: native
+    role: principal
+    basis: observed
+    txid: 3AA59D30DCC27EC47661A300A3B8A4BEDE1AD77D3D704B0C76AACC528A786711
+    amount: "630.55604177"
+    decimals: 8
+prices:
+  - asset:
+      notation: ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48
+      kind: token
+    usd: "1"
+    source: midgard:history.depths
+  - asset:
+      notation: ETH.ETH
+      kind: native
+    usd: "3249.548767866294"
+    source: midgard:history.depths
+details:
+  collateral: ETH.ETH

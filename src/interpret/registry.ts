@@ -38,7 +38,7 @@ const REGISTRY: Record<string, Interpreter> = {
   [`midgard/${ActionType.Withdraw}`]: interpretWithdraw,
   [`midgard/${ActionType.Swap}`]: interpretSwap,
   [`midgard/${ActionType.Swap}/loanOpen`]: activity(interpretLoanOpen),
-  [`midgard/${ActionType.Swap}/loanRepayment`]: activity(interpretLoanRepay),
+  [`midgard/${ActionType.Swap}/loanRepayment`]: interpretLoanRepay,
   [`midgard/${ActionType.Refund}`]: interpretRefund,
   [`midgard/${ActionType.Switch}`]: activity(interpretSwitch),
   [`midgard/${ActionType.Thorname}`]: activity(interpretThorname),

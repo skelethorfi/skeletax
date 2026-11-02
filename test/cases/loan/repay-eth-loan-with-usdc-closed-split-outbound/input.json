@@ -1,0 +1,212 @@
+{
+  "description": "swap/loanRepayment success: [ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48] -> [ETH.ETH, ETH.ETH]",
+  "source": "midgard",
+  "wallet": "0x1309c007567a71b393094c21e70bd2647356a352",
+  "data": {
+    "date": "1737613520765847233",
+    "height": "19550647",
+    "in": [
+      {
+        "address": "0x1309c007567a71b393094c21e70bd2647356a352",
+        "coins": [
+          {
+            "amount": "731872841500",
+            "asset": "ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48"
+          }
+        ],
+        "txID": "3DE148948A91CAD4574E7EB0BE0CAA087088D853502F51834832BB87B507E9E6"
+      }
+    ],
+    "metadata": {
+      "swap": {
+        "affiliateAddress": "",
+        "affiliateFee": "0",
+        "inPriceUSD": "0.9992454809975884",
+        "isStreamingSwap": false,
+        "liquidityFee": "555643373",
+        "memo": "loan-:ETH.ETH:0x1309c007567a71b393094c21e70bd2647356a352:0",
+        "networkFees": [
+          {
+            "amount": "40830",
+            "asset": "ETH.ETH"
+          },
+          {
+            "amount": "40830",
+            "asset": "ETH.ETH"
+          }
+        ],
+        "outPriceUSD": "-0.17985679196528703",
+        "streamingSwapMeta": {
+          "count": "737",
+          "depositedCoin": {
+            "amount": "349612488706",
+            "asset": "THOR.ETH"
+          },
+          "inCoin": {
+            "amount": "349612488706",
+            "asset": "THOR.ETH"
+          },
+          "interval": "1",
+          "lastHeight": "19551384",
+          "outCoin": {
+            "amount": "344445315181",
+            "asset": "ETH.ETH"
+          },
+          "outEstimation": "728999060623",
+          "quantity": "737"
+        },
+        "swapSlip": "24",
+        "swapTarget": "0",
+        "txType": "loanRepayment"
+      }
+    },
+    "out": [
+      {
+        "address": "0x1309c007567a71b393094c21e70bd2647356a352",
+        "coins": [
+          {
+            "amount": "281389629344",
+            "asset": "ETH.ETH"
+          }
+        ],
+        "height": "19551390",
+        "txID": "B6A75325A28431697E27BD008FE81E287DCF6A50F8ED5A33AAC3AF47FA59FBA7"
+      },
+      {
+        "address": "0x1309c007567a71b393094c21e70bd2647356a352",
+        "coins": [
+          {
+            "amount": "63055604177",
+            "asset": "ETH.ETH"
+          }
+        ],
+        "height": "19551390",
+        "txID": "3AA59D30DCC27EC47661A300A3B8A4BEDE1AD77D3D704B0C76AACC528A786711"
+      }
+    ],
+    "pools": [
+      "ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",
+      "THOR.TOR"
+    ],
+    "status": "success",
+    "type": "swap"
+  },
+  "thornodeTxs": [
+    {
+      "tx": {
+        "id": "3DE148948A91CAD4574E7EB0BE0CAA087088D853502F51834832BB87B507E9E6",
+        "chain": "ETH",
+        "from_address": "0x1309c007567a71b393094c21e70bd2647356a352",
+        "to_address": "0x93Cc04Dfcaf03FB3421F88d8Fc1Dd5F41Af1805e",
+        "coins": [
+          {
+            "asset": "ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",
+            "amount": "731872841500",
+            "decimals": 6
+          }
+        ],
+        "gas": [
+          {
+            "asset": "ETH.ETH",
+            "amount": "31095"
+          }
+        ],
+        "memo": "$-:ETH.ETH:0x1309c007567a71b393094c21e70bd2647356a352::ss:0"
+      },
+      "planned_out_txs": [
+        {
+          "chain": "ETH",
+          "to_address": "0x1309c007567a71b393094c21e70bd2647356a352",
+          "coin": {
+            "asset": "ETH.ETH",
+            "amount": "281389629344"
+          },
+          "refund": false
+        },
+        {
+          "chain": "ETH",
+          "to_address": "0x1309c007567a71b393094c21e70bd2647356a352",
+          "coin": {
+            "asset": "ETH.ETH",
+            "amount": "63055604177"
+          },
+          "refund": false
+        }
+      ],
+      "out_txs": [
+        {
+          "id": "B6A75325A28431697E27BD008FE81E287DCF6A50F8ED5A33AAC3AF47FA59FBA7",
+          "chain": "ETH",
+          "from_address": "0x4dea374e897b4054bc45d537cb0c410dda6f6b04",
+          "to_address": "0x1309c007567a71b393094c21E70bd2647356A352",
+          "coins": [
+            {
+              "asset": "ETH.ETH",
+              "amount": "281389629344"
+            }
+          ],
+          "gas": [
+            {
+              "asset": "ETH.ETH",
+              "amount": "23839"
+            }
+          ],
+          "memo": "OUT:3DE148948A91CAD4574E7EB0BE0CAA087088D853502F51834832BB87B507E9E6"
+        },
+        {
+          "id": "3AA59D30DCC27EC47661A300A3B8A4BEDE1AD77D3D704B0C76AACC528A786711",
+          "chain": "ETH",
+          "from_address": "0x892eefec1ccf126383c8d9c0b92ec1f3acc015aa",
+          "to_address": "0x1309c007567a71b393094c21E70bd2647356A352",
+          "coins": [
+            {
+              "asset": "ETH.ETH",
+              "amount": "63055604177"
+            }
+          ],
+          "gas": [
+            {
+              "asset": "ETH.ETH",
+              "amount": "23839"
+            }
+          ],
+          "memo": "OUT:3DE148948A91CAD4574E7EB0BE0CAA087088D853502F51834832BB87B507E9E6"
+        }
+      ],
+      "stages": {
+        "inbound_observed": {
+          "pre_confirmation_count": 115,
+          "final_count": 116,
+          "completed": true
+        },
+        "inbound_confirmation_counted": {
+          "remaining_confirmation_seconds": 0,
+          "completed": true
+        },
+        "inbound_finalised": {
+          "completed": true
+        },
+        "swap_status": {
+          "pending": false
+        },
+        "outbound_signed": {
+          "completed": true
+        }
+      }
+    }
+  ],
+  "evmReceipts": [
+    {
+      "chain": "ETH",
+      "transactionHash": "0x3de148948a91cad4574e7eb0be0caa087088d853502f51834832bb87b507e9e6",
+      "blockNumber": "0x14ae485",
+      "status": "0x1",
+      "gasUsed": "0x12150",
+      "effectiveGasPrice": "0xfa3d1916"
+    }
+  ],
+  "usdPrices": {
+    "ETH.ETH": "3249.548767866294",
+    "ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48": "1"
+  }
+}

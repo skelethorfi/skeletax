@@ -89,7 +89,7 @@ nothing is added.
 | swap                         | `BridgeTradeIn` (the `2/2` row)        | the output paid to the memo's destination |
 | lp.withdraw, savers.withdraw | `RemoveLiquidity` of the L1 asset      | that asset's payout                       |
 | loan.open                    | `Loan` (the `2/2` row)                 | the loan paid out                         |
-| loan.repay                   | `CollateralWithdrawal` (the `2/2` row) | the collateral paid back                  |
+| loan.repay                   | `CollateralWithdrawal` (the `2/2` row) | the collateral paid back (each txid)      |
 
 - Only that row changes. The other rows of the action (on THORChain, Maya,
   or the L1 rows the wallet sent) keep their descriptions, so their

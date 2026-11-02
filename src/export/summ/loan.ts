@@ -1,9 +1,9 @@
-import type { Activity } from "../../domain/Activity.ts";
-import { formatAmount } from "../../domain/Amount.ts";
+import type { Activity, Leg } from "../../domain/Activity.ts";
+import { type Amount, formatAmount } from "../../domain/Amount.ts";
 import { type SummRow, SummRowType } from "./csv/index.ts";
 import { parseMidgardAsset } from "../../sources/thorchain/MidgardUtils.ts";
 import { formatBlockchain, type Protocol } from "../../domain/Protocol.ts";
-import { fee, findLeg, leg, legTrace, paidOutNote } from "./common.ts";
+import { fee, leg, legTrace, paidOutNote } from "./common.ts";
 
 // A loan open (docs/specs/loans.md): the collateral deposit carries the fee; the loan received has none
 export function loanOpenRows(activity: Activity, protocol: Protocol): SummRow[] {
@@ -43,15 +43,17 @@ export function loanOpenRows(activity: Activity, protocol: Protocol): SummRow[] 
   ];
 }
 
-// A loan repayment carries the fee; when the loan closes, the collateral comes back with no fee
+// A loan repayment carries the fee; when the loan closes, the collateral comes back with no fee. Collateral paid
+// back in several outputs is one row, their total, naming each payout txid.
 export function loanRepayRows(activity: Activity, protocol: Protocol): SummRow[] {
   const repayment = leg(activity, "principal", "out");
-  const collateralBack = findLeg(activity, "principal", "in");
+  const collateralBack = activity.legs.filter((item) => item.role === "principal" && item.direction === "in");
   const input = parseMidgardAsset(repayment.asset.notation, protocol);
   const collateral = parseMidgardAsset(activity.details.collateral, protocol).currency;
-  const closure = collateralBack ? "Closed loan" : "No closure";
+  const closed = collateralBack.length > 0;
   const txId = repayment.txid ?? "";
   const time = activity.time;
+  const description = `LoanRepayment deposit ${input.currency} to repay ${collateral} loan. ${closed ? "Closed loan" : "No closure"}; ${txId}`;
   const rows: SummRow[] = [
     {
       wallet: repayment.wallet,
@@ -64,26 +66,44 @@ export function loanRepayRows(activity: Activity, protocol: Protocol): SummRow[]
       to: protocol.counterparty,
       blockchain: formatBlockchain(input.blockchain),
       trace: legTrace(repayment),
-      description: `1/${collateralBack ? "2" : "1"} - LoanRepayment deposit ${input.currency} to repay ${collateral} loan. ${closure}; ${txId}`,
+      description: `1/${closed ? "2" : "1"} - ${description}`,
     },
   ];
 
-  if (collateralBack) {
-    const output = parseMidgardAsset(collateralBack.asset.notation, protocol);
+  if (closed) {
+    const [first] = collateralBack;
+    const output = parseMidgardAsset(first.asset.notation, protocol);
 
     rows.push({
-      wallet: collateralBack.wallet,
+      wallet: first.wallet,
       timestamp: time,
       type: SummRowType.CollateralWithdrawal,
       baseCurrency: output.currency,
-      baseAmount: formatAmount(collateralBack.amount),
+      baseAmount: formatAmount(total(collateralBack, activity)),
       from: protocol.counterparty,
-      to: collateralBack.wallet,
+      to: first.wallet,
       blockchain: formatBlockchain(output.blockchain),
-      trace: legTrace(collateralBack),
-      description: `2/2 - LoanRepayment deposit ${input.currency} to repay ${collateral} loan. Closed loan; ${txId}${paidOutNote(collateralBack)}`,
+      trace: legTrace(first),
+      description: `2/2 - ${description}${paidOutNote(collateralBack)}`,
     });
   }
 
   return rows;
+}
+
+// The collateral paid back, over all its outputs: one wallet, one asset
+function total(legs: Leg[], activity: Activity): Amount {
+  const [first] = legs;
+
+  for (const item of legs) {
+    if (
+      item.wallet.toLowerCase() !== first.wallet.toLowerCase() ||
+      item.asset.notation !== first.asset.notation ||
+      item.amount.decimals !== first.amount.decimals
+    ) {
+      throw new Error(`${activity.id}: collateral paid back to more than one wallet or in more than one asset`);
+    }
+  }
+
+  return { base: legs.reduce((sum, item) => sum + item.amount.base, 0n), decimals: first.amount.decimals };
 }
