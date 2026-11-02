@@ -13,7 +13,7 @@ import { nextDay, startOfDay } from "./dates.ts";
 import { isWriteLine, readLogLines } from "./journal.ts";
 import { McpClient } from "./mcp.ts";
 import { MISIDENTIFIED_IDS, matchesOwnLegs } from "./plan.ts";
-import { isLegAbsent, type ListedAction, parseActions, parseDetail, parsePageHeader } from "./parse.ts";
+import { isLegAbsent, type ListedAction, parseActions, parseDetail, parsePage, parsePageHeader } from "./parse.ts";
 import { readLeftLegs } from "./state.ts";
 import { type Config, extraDirsOf, loadConfig } from "./config.ts";
 import { periodsOf, readRun, type Row, type RunFile } from "./run.ts";
@@ -49,7 +49,7 @@ async function queryAll(client: Client, filter?: Record<string, unknown>): Promi
       ...(filter ? { filter } : {}),
     });
     pages.push(text);
-    const header = parsePageHeader(text);
+    const { header } = parsePage(text);
     process.stdout.write(`\r  page ${header.page}/${header.pages} (${header.total} total)   `);
     if (header.page >= header.pages) break;
   }

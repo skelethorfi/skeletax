@@ -47,7 +47,7 @@ the cost bases of later disposals, in later years and the current one.
 
     node packages/summ-sync/bin/summ-sync.ts login <state dir> [--write]
     node packages/summ-sync/bin/summ-sync.ts pull  <state dir> [<run dir>] [--all]
-    node packages/summ-sync/bin/summ-sync.ts plan  <state dir> <run dir> [--only <scope file>]
+    node packages/summ-sync/bin/summ-sync.ts plan  <state dir> <run dir> [--only <scope file>] [--accept-incomplete]
     node packages/summ-sync/bin/summ-sync.ts apply <state dir> <plan dir> [--dry-run] [--approve-deletes] [--approve-filed]
     node packages/summ-sync/bin/summ-sync.ts verify <state dir> <plan dir> [<after snapshot>]
     node packages/summ-sync/bin/summ-sync.ts figures <state dir>
@@ -58,6 +58,10 @@ the cost bases of later disposals, in later years and the current one.
 - `login` opens the browser to authorise this tool (scope `mcp:read`, or
   `mcp:read mcp:write` with `--write`) and keeps the token in
   `<state dir>/.auth.json` (mode 600).
+- `pull` stops, writing no snapshot, when Summ's answer no longer reads as
+  expected (its wording changed): a list page with fewer actions than it says
+  it returned, or a detail without its JSON id or change history in the usual
+  shape. summ-sync then needs an update.
 - `pull` writes `<state dir>/snapshots/<timestamp>.json`: the counts and
   one entry per listed action (id, tx hash, category, tags). The full JSON
   and change history of each action of a managed source goes to
@@ -77,7 +81,8 @@ the cost bases of later disposals, in later years and the current one.
 - `compare` reports what moved between two figures files, by name: gains by year and by disposal, zero-cost parcels,
   disposals gone or replaced, and the acquisitions drawn on. It calls nothing. Spec: After-check.
 - `plan` compares the run's period wallet files with the latest snapshot
-  and writes `<state dir>/plans/<timestamp>/`: `plan.json`, `plan.md` and
+  (refused when its unique actions are not the total Summ reported, unless
+  `--accept-incomplete`) and writes `<state dir>/plans/<timestamp>/`: `plan.json`, `plan.md` and
   `upload/` (the rows Summ lacks, per file). A second plan in the same second
   gets `<timestamp>-2/`. It calls nothing and changes
   nothing in the state dir. `plan.json` lists the legs it adopted (old

@@ -2389,6 +2389,35 @@ test("plan refuses a version 2 snapshot pulled for another run", () => {
   assert.throws(() => writePlan(state, run), /pulled for \/elsewhere/);
 });
 
+test("plan refuses a snapshot whose unique actions are not Summ's total, unless told to accept it", () => {
+  const state = mkdtempSync(join(tmpdir(), "summ-sync-"));
+  writeFileSync(join(state, "summ-sync.json"), JSON.stringify({ managedSources: ["csv-source"] }));
+  const run = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
+  mkdirSync(join(run, "csv"));
+  const header =
+    "Timestamp (UTC),Type,Base Currency,Base Amount,Quote Currency (Optional),Quote Amount (Optional),Fee Currency (Optional),Fee Amount (Optional),From (Optional),To (Optional),Blockchain (Optional),ID (Optional),Description (Optional)";
+  writeFileSync(join(run, "csv", "2023-07-01_2024-06-30_THOR_abc_Wallet.csv"), `${header}\n`);
+  const file = join(state, "snapshots", "2026-01-01T00-00-00.json");
+  writeSnapshot(file, {
+    version: 2,
+    takenAt: "",
+    total: 2,
+    parsed: 1,
+    unique: 1,
+    run: resolve(run),
+    range: null,
+    managedSources: ["csv-source"],
+    managedChains: DEFAULTS.managedChains,
+    actions: [{ id: "a1", txHash: "h1", category: "send", tags: [] }],
+  });
+  writeFileSync(file.replace(".json", ".details.jsonl"), "{}\n");
+  assert.throws(
+    () => writePlan(state, run),
+    /1 unique actions of the 2 Summ reported: pull again, or plan with --accept-incomplete/,
+  );
+  assert.ok(existsSync(writePlan(state, run, undefined, { acceptIncomplete: true })));
+});
+
 test("plan refuses wider changes from a snapshot of part of the history", () => {
   const state = mkdtempSync(join(tmpdir(), "summ-sync-"));
   writeFileSync(join(state, "summ-sync.json"), JSON.stringify({ managedSources: ["csv-source"] }));

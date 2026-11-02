@@ -140,7 +140,18 @@ entry in a current year that changes only an import leg's price, with nothing to
 `plan.md` says its reports can miss or misstate a tx with legs outside the range.
 
 Plan refuses a snapshot pulled for another run or none, or under other
-`managedSources` or `managedChains`.
+`managedSources` or `managedChains`. It also refuses one whose `unique` count is not
+the `total` Summ reported, which pull never writes, unless given
+`--accept-incomplete`.
+
+**Reading Summ's answers.** Summ's tools answer in Markdown, not JSON, so a change
+of wording could make pull read less than Summ sent. Pull stops, writing no
+snapshot, when a list page's `## n.` blocks are not as many as the page says it
+returned or one has no `Action ID`, and when an action's detail has no `_id` in its
+JSON, a history heading other than `## Change History`, or a first change history
+line without the `·` separator: a renamed heading would read as an action nobody edited, and hide the
+user's edits from plan. Apply reads details the same way, and stops the same. The error says summ-sync
+needs an update.
 
 **Details file.** Each detail goes on a line of `<time>.details.jsonl` as it is read
 (`a`: the action id, `at`, `action`, `history`; the first line records the run, range
