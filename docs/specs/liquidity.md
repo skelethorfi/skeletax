@@ -36,9 +36,9 @@ the first asset's amount times the number of assets (twice the first asset
 for a symmetric add, a copy of the one asset for an asymmetric add),
 computed exactly and written like every other amount: `0.0000001`, never
 `1e-7` or `0.30000000000000004`. Summ prices it and ignores it. It has no
-reference price, so Summ's own value can be compared with the token's; where a token row has none (`prices.md`, or
-with `referencePrices = "swaps"`), the user copies the helper's fiat value
-onto it by hand (`../summ.md`).
+reference price, so Summ's own value can be compared with the token's; where
+a token row has none (`prices.md`, or with `referencePrices = "swaps"`), the
+user copies the helper's fiat value onto it by hand (`../summ.md`).
 
 The liquidity-auction position's helper is the deposited asset's side, twice
 (`maya.md`).
