@@ -151,6 +151,19 @@ the first action, so a run sees new activity and changes to old actions in
 one pass. A record shared by several wallets is fetched once per
 run.
 
+Midgard's actions list is paged with its cursor: 50 actions a page, each
+page's `meta.nextPageToken` naming where the next starts, until the token is
+empty or a page is empty. Actions added while the list is fetched don't shift
+items between pages, and there is no page limit (offset paging stopped at
+5,050 actions, and crashed on the empty page Midgard answers after a wallet's
+last 50). The token is a 64-bit integer, past what a JS number holds exactly,
+so it is sent as Midgard wrote it. Each page is retried on its own after a
+transient error; once its retries are spent the wallet's list fails, without
+starting again from the first page. An answer with no `actions` array (a
+gateway's error page sent with status 200) is an error, not the end of the
+list. Midgard's `count` is only a check (a mismatch is logged): it
+is missing from cursor pages and is `-1` for some addresses.
+
 Midgard matches the `address` of `/v2/actions` exactly. EVM senders are
 lowercase (THORNode observes them that way), and Midgard lowercases the other
 EVM addresses of an event on a chain it treats as case-insensitive (ETH on

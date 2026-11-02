@@ -123,7 +123,9 @@ async function findSimilar(input: GoldenCaseInput, maxPages: number, privateData
   const matches: Action[] = [];
   // Search backwards from the original tx's block, so the API format is from the same era.
   // (Querying by height is fast; by timestamp it times out on the Liquify gateway.)
-  let nextPageToken: number | undefined;
+  // Midgard's token is a 64-bit integer, past what a JS number holds exactly: it is passed on as the string Midgard
+  // returned, though the client types it as a number
+  let nextPageToken: string | undefined;
   const height = Number(target.height);
 
   for (let page = 0; page < maxPages && matches.length < 5; page++) {
@@ -136,7 +138,7 @@ async function findSimilar(input: GoldenCaseInput, maxPages: number, privateData
       undefined,
       50,
       undefined,
-      nextPageToken,
+      nextPageToken as unknown as number,
       undefined,
       nextPageToken ? undefined : height,
     );
@@ -149,7 +151,7 @@ async function findSimilar(input: GoldenCaseInput, maxPages: number, privateData
       }
     }
 
-    nextPageToken = Number(response.data.meta.nextPageToken) || undefined;
+    nextPageToken = response.data.meta.nextPageToken || undefined;
 
     if (!nextPageToken) {
       break;

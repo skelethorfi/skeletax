@@ -11,7 +11,7 @@ import {
   type RunePrice,
 } from "../store/Sources.ts";
 import { type Action, Configuration, DefaultApi } from "@xchainjs/xchain-midgard";
-import assert from "assert";
+import { withRetry } from "../Retry.ts";
 import { API_URLS } from "../../config/apiUrls.ts";
 import { http } from "../http.ts";
 import { checksumAddress, isEvmAddress } from "../../utils/Address.ts";
@@ -20,10 +20,8 @@ import { checksumAddress, isEvmAddress } from "../../utils/Address.ts";
 // midgard api: https://midgard.thorswap.net/v2/doc
 // midgard swagger json: https://midgard.thorchain.info/v2/swagger.json (a copy: docs/reference/midgard-api-2.32.9.json)
 
-// NOTE:
-// can load balance between 2 like web3tax
-// MIDGARD_URL_A: "https://midgard.thorchain.info/v2/actions?limit=50&address={WALLETS}&offset={OFFSET}"
-// MIDGARD_URL_B: "https://midgard.thorswap.net/v2/actions?limit=50&address={WALLETS}&offset={OFFSET}"
+// Actions per page of a wallet's list (Midgard's maximum)
+const ACTIONS_PAGE = 50;
 
 // Seconds in one of Midgard's 5min history buckets
 const RUNE_PRICE_INTERVAL = 300;
@@ -230,41 +228,71 @@ export class MidgardService {
     );
   }
 
+  // Pages with Midgard's cursor: each page's `meta.nextPageToken` names where the next one starts, so actions added
+  // while the list is fetched don't shift items between pages (offset paging did, and was capped at 101 pages).
+  // The list ends at an empty token or an empty page. The token is a 64-bit integer, past what a JS number holds
+  // exactly, so it is sent as the string Midgard returned (the xchainjs client types it as a number). Each page is
+  // retried on its own, so a transient error doesn't restart the list; once its retries are spent, the error is
+  // not transient, so the store doesn't restart the list either. A page with no `actions` array (e.g. a gateway's
+  // error page answered with 200) is an error, not the end of the list. `count` is only a check: Midgard leaves it
+  // out of cursor pages and answers -1 for some addresses.
   private async fetchActions(address: string): Promise<Action[]> {
     let actions: Action[] = [];
-    let count: number = 0;
+    let count: number | undefined;
+    let token = "";
 
-    for (let page = 0; page <= 100; page++) {
-      const response = await this.api.getActions(
-        address,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        50,
-        page * 50,
-      );
-      count = parseInt(response.data.count || "0");
+    for (let page = 0; ; page++) {
+      const params = new URLSearchParams({ address, limit: String(ACTIONS_PAGE) });
 
-      console.log(`[Midgard] Total actions: ${count}`);
-      console.log("page:", page);
-      console.log("actions:", response.data.actions.length);
+      if (token) {
+        params.set("nextPageToken", token);
+      }
 
-      if (count === 0) {
+      const url = `${this.basePath}/v2/actions?${params}`;
+      let data: any;
+
+      try {
+        data = (await withRetry(() => http.get(url), `${this.source} actions page ${page}`)).data;
+      } catch (error: any) {
+        // A plain error (no status, code or cause), which withRetry does not retry again
+        const reason = error?.response?.status ?? error?.code ?? error?.message;
+        throw new Error(`[Midgard] actions of ${address}, page ${page}: ${reason}`);
+      }
+
+      if (!Array.isArray(data?.actions)) {
+        throw new Error(`[Midgard] actions of ${address}, page ${page}: no actions in the answer`);
+      }
+
+      const pageActions: Action[] = data.actions;
+
+      if (page === 0 && data?.count !== undefined) {
+        count = parseInt(data.count);
+      }
+
+      actions = actions.concat(pageActions);
+
+      if (pageActions.length > 0) {
+        console.log(
+          `[Midgard] page ${page}: ${pageActions.length} actions, back to ${new Date(parseInt(pageActions[pageActions.length - 1].date) / 1e6).toISOString()}`,
+        );
+      }
+
+      const next = data.meta?.nextPageToken ?? "";
+
+      if (pageActions.length === 0 || !next) {
         break;
       }
 
-      actions = actions.concat(response.data.actions);
-
-      console.log(new Date(parseInt(response.data.actions[0].date) / 1000000));
-
-      if (response.data.actions.length < 50) {
-        break;
+      if (next === token) {
+        throw new Error(`[Midgard] actions of ${address}: page ${page} gave the same nextPageToken ${next} again`);
       }
+
+      token = next;
     }
 
-    assert.equal(actions.length, count);
+    if (count !== undefined && count >= 0 && count !== actions.length) {
+      console.log(`[Midgard] actions of ${address}: Midgard counted ${count}, the pages gave ${actions.length}`);
+    }
 
     return actions;
   }
