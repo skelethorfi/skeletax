@@ -1,4 +1,8 @@
 import type { Action } from "@xchainjs/xchain-midgard";
+import { memoRefundAddress } from "../sources/thorchain/MidgardUtils.ts";
+
+// A swap memo's destination field (DESTADDR/REFUNDADDR), as in the swap mapper
+const SWAP_DESTADDR = 2;
 
 // The parts of a Midgard action that decide how it is mapped. Two actions with the same
 // shape should exercise the same mapper code path, so a public tx with the same shape as
@@ -16,10 +20,14 @@ export interface ActionShape {
   memoAction?: string;
   // The memo names an aggregator's final token: mapped from the outbound's receipt (activity.md)
   finalToken?: boolean;
+  // The memo gives a refund address after its destination (DESTADDR/REFUNDADDR): the sender's own address, or
+  // another one. A return to another address is mapped to that wallet (activity.md, The memo's destination).
+  refundAddress?: "sender" | "other";
 }
 
 export function getActionShape(action: Action): ActionShape {
   const metadata = action.metadata as any;
+  const refund = getRefundAddress(action);
 
   return {
     type: action.type,
@@ -30,7 +38,20 @@ export function getActionShape(action: Action): ActionShape {
     ...(metadata?.contract ? { funds: parseFundsDenoms(metadata.contract.funds) } : {}),
     ...(metadata?.swap?.memo !== undefined ? { memoAction: getMemoAction(metadata.swap.memo) } : {}),
     ...(metadata?.swap?.memo?.split(":")[7] ? { finalToken: true } : {}),
+    ...(refund ? { refundAddress: refund } : {}),
   };
+}
+
+function getRefundAddress(action: Action): "sender" | "other" | undefined {
+  const memo = (action.metadata as any)?.swap?.memo;
+  const refund = typeof memo === "string" ? memoRefundAddress(memo, SWAP_DESTADDR) : undefined;
+
+  if (!refund) {
+    return undefined;
+  }
+
+  const sender = action.in[0]?.address;
+  return sender && sender.toLowerCase() === refund.toLowerCase() ? "sender" : "other";
 }
 
 // Swap memos start with '=', 's' or 'swap' (case-insensitive) for a user swap
@@ -56,16 +77,30 @@ export function describeShape(shape: ActionShape): string {
   const assets = (txs: string[][]) => txs.map((coins) => coins.join("+")).join(", ");
   const funds = shape.funds?.length ? ` funds [${shape.funds.join(", ")}]` : "";
   const final = shape.finalToken ? " to an aggregator's final token" : "";
-  return `${shape.type}${shape.subtype ? `/${shape.subtype}` : ""} ${shape.status}: [${assets(shape.inAssets)}] -> [${assets(shape.outAssets)}]${funds}${final}`;
+  const refund = shape.refundAddress
+    ? ` with a refund address (${shape.refundAddress === "sender" ? "the sender" : "another address"})`
+    : "";
+  return `${shape.type}${shape.subtype ? `/${shape.subtype}` : ""} ${shape.status}: [${assets(shape.inAssets)}] -> [${assets(shape.outAssets)}]${funds}${final}${refund}`;
 }
 
-// Every address and txid in the action, used to check a candidate shares nothing private
+// Every address and txid in the action, used to check a candidate shares nothing private. A memo can name
+// addresses and THORNames that are in no input or output (a refund address, an affiliate): each of its fields,
+// split on ':' and '/', is collected too, so one listed as private (a wallet or a private-denylist.txt entry)
+// is caught. The other fields (assets, amounts) never equal a private value.
 export function getActionIds(action: Action): string[] {
   const ids: string[] = [];
 
   for (const tx of [...action.in, ...action.out]) {
     if (tx.address) ids.push(tx.address);
     if (tx.txID) ids.push(tx.txID);
+  }
+
+  for (const entry of Object.values((action.metadata as any) ?? {})) {
+    const memo = (entry as any)?.memo;
+
+    if (typeof memo === "string") {
+      ids.push(...memo.split(/[:/]/).filter((part) => part));
+    }
   }
 
   return ids;

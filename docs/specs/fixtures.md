@@ -84,7 +84,10 @@ to the CSV files, with no network:
 1. Prefer a public transaction from someone else with the same shape as the
    transaction being supported. The shape is the action type, its subtype
    (swap `txType` or contract `contractType`), status, input and output assets,
-   contract funds denoms, and whether the memo names an aggregator's final token.
+   contract funds denoms, whether the memo names an aggregator's final token,
+   and whether the memo gives a refund address after its destination
+   (`DESTADDR/REFUNDADDR`) and if so whether it is the sender's address or
+   another one (a return to another address maps to that wallet).
 2. Only if no such transaction exists, anonymise one with `npm run fixture --
 anonymise`. It replaces every address, txid, signature and other base64
    blob, and every name in a memo (THORNames, affiliates, aggregator codes),
@@ -150,3 +153,6 @@ Notes:
 - Midgard contract actions carry their amounts in `metadata.contract.funds`, not in `coins`.
 - `similar` pages back by block `height` from the original transaction, because
   `timestamp` queries time out on the Liquify gateway.
+- `similar` skips a candidate that shares any private value: an input or output
+  address or txid, or any field of its memo split on `:` and `/` (so a refund
+  address, THORName or affiliate named only in the memo is checked too).
