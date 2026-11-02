@@ -6,7 +6,8 @@ import type { Issue } from "../../domain/Issue.ts";
 import type { CosmosTx } from "../../sources/thorchain/CosmosTxService.ts";
 import { getActionDate } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
-import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
+import { getBundleKey, getBundleSourceName, type RawBundle } from "../../sources/RawBundle.ts";
+import { FILL_ATTRIBUTES, midgardActionBaseKey } from "../../sources/store/Sources.ts";
 
 // Rujira contract actions (wasm calls on THORChain). See docs/specs/rujira.md.
 
@@ -92,10 +93,10 @@ export function parseCoins(coins: string): Coin[] {
     });
 }
 
-// Cosmos denom → Midgard asset: rune → THOR.RUNE, x/ruji → X/RUJI, thor.kuji → THOR.KUJI, eth-usdc-0x… → ETH-USDC-0X…
-// (Rujira runs on THORChain only)
+// Cosmos denom → Midgard asset: a bare name is THORChain's own (rune → THOR.RUNE, tcy → THOR.TCY), x/ruji → X/RUJI,
+// thor.kuji → THOR.KUJI, eth-usdc-0x… → ETH-USDC-0X… (Rujira runs on THORChain only)
 function denomToAsset(denom: string): string {
-  return denom === "rune" ? "THOR.RUNE" : denom.toUpperCase();
+  return /^[a-z0-9]+$/.test(denom) ? `THOR.${denom.toUpperCase()}` : denom.toUpperCase();
 }
 
 type Result = { activities: Activity[]; issues: Issue[] };
@@ -240,6 +241,14 @@ class Call {
       return ignored("FIN trade made by the called contract itself, e.g. a staking contract selling its revenue");
     }
 
+    // A swap that fills at several price levels gives a trade event per level, each with the whole call's funds:
+    // the first maps the swap (what the wallet sent and received), the others give nothing
+    const fill = this.fillIndex();
+
+    if (fill > 0) {
+      return ignored(`FIN trade: fill ${fill + 1} of a swap, mapped with its first fill`);
+    }
+
     const sent = parseCoins(this.contract.funds ?? "");
 
     if (sent.length !== 1) {
@@ -287,7 +296,7 @@ class Call {
     return {
       activities: [
         {
-          id: getBundleKey(this.bundle),
+          id: this.activityId(),
           protocol: this.protocol.id,
           kind,
           status: this.action.status as Activity["status"],
@@ -304,6 +313,13 @@ class Call {
     };
   }
 
+  // A FIN swap is named by its record key without the fill hash (midgardActionBaseKey); other calls by their key
+  private activityId(): string {
+    return this.contract.contractType === "wasm-rujira-fin/trade"
+      ? `${getBundleSourceName(this.bundle)}/${midgardActionBaseKey(this.action)}`
+      : getBundleKey(this.bundle);
+  }
+
   // The gas of the wasm call, from the Cosmos tx; none without it or when none was paid. Not THORChain's
   // 0.02 RUNE native fee (rujira.md).
   private gas(): Leg | undefined {
@@ -316,6 +332,38 @@ class Call {
     return this.requireCosmosTx()
       .events.find((event) => event.type === "execute")
       ?.attributes.find((attribute) => attribute.key === "_contract_address")?.value;
+  }
+
+  // Which of the called contract's events of this type in the Cosmos tx this action is, matched by the attributes
+  // that tell fills apart (FILL_ATTRIBUTES, as the record key is)
+  private fillIndex(): number {
+    const called = this.calledContract();
+    const events = this.requireCosmosTx()
+      .events.filter((event) => event.type === this.contract.contractType)
+      .map((event) => Object.fromEntries(event.attributes.map(({ key, value }) => [key, value])))
+      .filter((attributes) => attributes._contract_address === called);
+
+    if (events.length <= 1) {
+      return 0;
+    }
+
+    // Two messages to the same pair in one tx would each look like fills of the other; without `msg_index` they
+    // can't be told apart
+    const messages = new Set<string | undefined>(events.map((attributes) => attributes.msg_index));
+
+    if (messages.size > 1 || messages.has(undefined)) {
+      throw new Error(`rujira: FIN trades from several messages in one tx, or with no msg_index, are not supported`);
+    }
+
+    const index = events.findIndex((attributes) =>
+      FILL_ATTRIBUTES.every((name) => attributes[name] === this.contract.attributes[name]),
+    );
+
+    if (index === -1) {
+      throw new Error(`rujira: ${this.contract.contractType} matches none of the ${events.length} in its Cosmos tx`);
+    }
+
+    return index;
   }
 
   private requireCosmosTx(): CosmosTx {

@@ -117,9 +117,10 @@ describe("unsupported action files", () => {
     ({ source: "midgard", protocol, wallet: "", data, thornodeTxs: [], cosmosTxs: [] }) as RawBundle;
 
   test("the contract actions of one tx each get their own file", () => {
-    assert.equal(
+    // a FIN trade's key ends with a hash of its attributes (here none)
+    assert.match(
       unsupportedActionFile(bundle(contract("wasm-rujira-fin/trade"))),
-      `contract/contract.${txId}.wasm-rujira-fin_trade.json`,
+      new RegExp(`^contract/contract\\.${txId}\\.wasm-rujira-fin_trade\\.[0-9a-f]{12}\\.json$`),
     );
     assert.equal(
       unsupportedActionFile(bundle(contract("wasm-rujira-merge/deposit"))),
