@@ -35,6 +35,9 @@ layout is `csvFiles` in `src/export/summ/files.ts`.
   - `protocols`, when set, lists `"thorchain"` and `"maya"`, each at most once.
 - File names keep the period's dates (`2025-07-01_2026-06-30_…`); the
   timezone does not appear in them.
+- The run writes the timezone it used to `run.json` in its folder,
+  `{ "version": 1, "timezone": "<IANA name>" }` (`UTC` when the config sets
+  none), for summ-sync to check against its own (`summ-sync.md`).
 
 ## Why
 
@@ -104,3 +107,4 @@ one only after the old one is deleted (`summ-sync.md`).
   wallet was fetched, and some not at all: an unquoted TOML date skipped the
   Viewblock source, an unknown `frequency` was read as yearly, and
   `"2023-02-30"` made a period that ended before it started.
+- November 2026: runs write `run.json`; a run folder from before has none.

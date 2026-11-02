@@ -16,7 +16,7 @@ import { MISIDENTIFIED_IDS, matchesOwnLegs } from "./plan.ts";
 import { isLegAbsent, type ListedAction, parseActions, parseDetail, parsePage, parsePageHeader } from "./parse.ts";
 import { readLeftLegs } from "./state.ts";
 import { type Config, extraDirsOf, loadConfig } from "./config.ts";
-import { periodsOf, readRun, type Row, type RunFile } from "./run.ts";
+import { checkRunTimezone, periodsOf, readRun, type Row, type RunFile } from "./run.ts";
 import {
   detailsFile,
   legsOf,
@@ -155,6 +155,9 @@ export async function pull(
 ): Promise<string> {
   const config = loadConfig(stateDir);
   const run = runDir ? readRun(runDir, extraDirsOf(stateDir, config)) : null;
+  // The range is the run's periods in summ-sync's timezone
+  const timezoneNote = runDir ? checkRunTimezone(runDir, config.timezone) : null;
+  if (timezoneNote) console.warn(`WARN: ${timezoneNote}`);
   const txids = run ? categorisedTxids(run.rows, config) : null;
   const range = run && !all ? rangeOf(run.files, config.timezone) : null;
   const want = {

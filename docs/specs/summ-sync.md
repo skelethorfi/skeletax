@@ -262,7 +262,12 @@ patched: after an apply, pull again.
   account name the CSVs were uploaded under).
 - `timezone`: the Summ account's timezone (IANA name, default `UTC`): the
   days of the run's periods and of `filedBefore`, as the exporter's
-  `timezone` (`periods.md`).
+  `timezone` (`periods.md`). The run's `run.json` names the timezone it was
+  cut in: `pull` and `plan` refuse a run whose timezone is not this one, as a
+  leg near a period's edge would be judged in or out of scope unlike the file
+  that holds its row (an unmatched leg just inside a year could be planned for
+  deletion, or one just outside left alone). A run with no `run.json` (an
+  older exporter) goes on with a warning from `pull` and a note in the plan.
 
 ## Matching
 
