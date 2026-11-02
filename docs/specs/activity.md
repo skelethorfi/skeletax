@@ -197,8 +197,11 @@ address>`, is paid to the sender's own address (`swap.ts`).
 
 The unfilled part of a partly filled swap can go to that refund address instead
 of the sender. An output in the input asset to either address is the return,
-and its `returned` leg is in the wallet it was paid to. A refund action's
-`returned` leg is still in the sender's wallet (`refund.ts`).
+and its `returned` leg is in the wallet it was paid to. The CSV nets the return
+off the trade-out on the sender's wallet either way; no row moves the unfilled
+part to a refund address, so such a swap carries a warning to record that
+transfer by hand. A refund action's `returned` leg is still in the sender's
+wallet (`refund.ts`).
 
 - **Tests:** `test/MemoDestination.test.ts` (including a partly filled swap
   returned to a refund address); the golden case

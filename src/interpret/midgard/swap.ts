@@ -120,6 +120,14 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
     ],
     issues: [
       ...issues,
+      ...(returned > 0n && returnWallet(input, returnOutputs[0]) !== input.address
+        ? [
+            {
+              kind: "warning" as const,
+              message: `the unfilled ${formatAmount(amount({ asset: inputCoin.asset, amount: returned.toString() }))} ${inputCoin.asset} went to the memo's refund address ${returnOutputs[0].address}, not the sender: no row moves it there, so record that transfer by hand`,
+            },
+          ]
+        : []),
       ...(bundle.tokenPayout && !payout
         ? [
             {

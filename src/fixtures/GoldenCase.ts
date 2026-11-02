@@ -15,6 +15,7 @@ import { getProtocol, type ProtocolId } from "../domain/Protocol.ts";
 import type { CosmosTx } from "../sources/thorchain/CosmosTxService.ts";
 import type { BundleSource, RawBundle } from "../sources/RawBundle.ts";
 import type { Activity } from "../domain/Activity.ts";
+import type { Issue } from "../domain/Issue.ts";
 import { formatAmount } from "../domain/Amount.ts";
 
 // A golden test case is a folder containing:
@@ -198,7 +199,7 @@ export function runCase(input: GoldenCaseInput): object[] {
 }
 
 // The activities a case gives, and the rows as expected.yaml holds them
-export function runCaseLayers(input: GoldenCaseInput): { activities: Activity[]; rows: object[] } {
+export function runCaseLayers(input: GoldenCaseInput): { activities: Activity[]; rows: object[]; issues: Issue[] } {
   const { activities, rows, issues } = runBundle(toBundle(input), getProtocol(input.protocol), input.treatment);
   const failure = issues.find((issue) => issue.kind === "failed");
 
@@ -206,5 +207,5 @@ export function runCaseLayers(input: GoldenCaseInput): { activities: Activity[];
     throw new Error(failure.message);
   }
 
-  return { activities, rows: rows.map(toPlainRow) };
+  return { activities, rows: rows.map(toPlainRow), issues };
 }

@@ -48,4 +48,16 @@ describe("a partly filled swap whose unfilled part goes to the memo's refund add
     assert.ok(expected.some((leg) => leg.role === "returned"));
     assert.deepEqual(legs(toRefund), expected);
   });
+
+  test("gives the same rows as a return to the sender, with a warning to record the transfer", () => {
+    const warnings = (input: GoldenCaseInput) =>
+      runCaseLayers(input).issues.filter(
+        (issue) => issue.kind === "warning" && issue.message.includes("refund address"),
+      );
+
+    assert.deepEqual(runCaseLayers(toRefund).rows, runCaseLayers(CASE).rows);
+    assert.equal(warnings(CASE).length, 0);
+    assert.equal(warnings(toRefund).length, 1);
+    assert.match(warnings(toRefund)[0].message, new RegExp(`${REFUND}, not the sender`));
+  });
 });
