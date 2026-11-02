@@ -16,6 +16,8 @@ until it is withdrawn.
 - Its amount is the `liquidityUnits` Midgard reports for the action.
 - The request that triggers a withdrawal, usually dust, is not exported; its
   gas is the fee on the `ReturnLpToken` row (`fees.md`).
+- A withdrawal output with more than one coin fails the action (`activity.md`,
+  One coin per tx).
 - Descriptions say whether the add or withdrawal is symmetric (two assets),
   asymmetric (one) or savers.
 

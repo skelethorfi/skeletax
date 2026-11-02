@@ -91,7 +91,9 @@ faults in May 2025). Like any send to itself (Rows, below), it gives one
 `fee` row for its gas, as only the fee was paid, with a warning that says so,
 and is not counted in that end-of-run line.
 
-A send with no coins (only a memo) moves nothing and gives no row.
+A send with no coins (only a memo) moves nothing and gives no row. A send
+with several coins (a `MsgSend` can carry several denoms) fails the action,
+as its row would carry only the first (`activity.md`, One coin per tx).
 
 A failed send (Midgard status `failed`; Viewblock `code` other than 0, e.g.
 5 for an insufficient balance) moved no coin and nothing came back. Whether

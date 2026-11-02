@@ -186,6 +186,22 @@ row of 1 RUNE with a 0.02 RUNE fee: today's row. The interpreter is
   activities), so an interpreter bug and an exporter bug fail different
   checks.
 
+## One coin per tx
+
+A Midgard tx lists its `coins`, and a Cosmos `MsgSend` can carry several
+denoms. A send, a liquidity or savers withdrawal and a loan map one coin per
+tx: the coin sent, each output paid, and a loan's collateral, payout,
+repayment and returned collateral. One of those txs with more than one coin
+fails the action (`expected 1 coin but there were <n>`), rather than export
+the first coin and drop the others without notice. Whether Midgard lists such
+a tx on mainnet is not confirmed.
+
+A failed send moved no coin, so its coins are not read and it still gives its
+fee row. A withdrawal's request coin is not a leg (`liquidity.md`), so its
+coins are not checked.
+
+- **Tests:** `test/MultiCoin.test.ts`.
+
 ## The memo's destination
 
 A swap's or loan's legs paid "to the memo's destination" are the outputs to

@@ -2,7 +2,7 @@ import type { Action, Transaction } from "@xchainjs/xchain-midgard";
 import type { Activity, Leg } from "../../domain/Activity.ts";
 import { parseAmount } from "../../domain/Amount.ts";
 import { toAsset } from "../../domain/Asset.ts";
-import { getActionDate, memoDestination } from "../../sources/thorchain/MidgardUtils.ts";
+import { getActionDate, memoDestination, onlyCoin } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { inboundGas } from "./gas.ts";
@@ -25,6 +25,7 @@ export function interpretLoanOpen(bundle: RawBundle, protocol: Protocol): Activi
   const sent = getCollateral(action, bundle);
   const output = getOutput(action, sent.memo, LOANOPEN_DESTADDR);
   const gas = inboundGas(sent.txid, bundle, sent.wallet, sent.asset, protocol);
+  const borrowed = loanCoin(output);
 
   return activity(
     bundle,
@@ -34,7 +35,7 @@ export function interpretLoanOpen(bundle: RawBundle, protocol: Protocol): Activi
     [
       { ...leg("out", sent.wallet, sent.asset, sent.amount, sent.txid) },
       ...(gas ? [{ ...gas, txid: sent.txid }] : []),
-      leg("in", output.address, output.coins[0].asset, output.coins[0].amount, output.txID ?? ""),
+      leg("in", output.address, borrowed.asset, borrowed.amount, output.txID ?? ""),
     ],
     {},
   );
@@ -57,8 +58,10 @@ export function interpretLoanRepay(bundle: RawBundle, protocol: Protocol): Activ
   }
 
   const txid = input.txID ?? "";
-  const gas = inboundGas(txid, bundle, input.address, input.coins[0].asset, protocol);
+  const repaid = loanCoin(input);
+  const gas = inboundGas(txid, bundle, input.address, repaid.asset, protocol);
   const closed = action.out.length === 1 ? getOutput(action, memo, REPAYLOAN_DESTADDR) : undefined;
+  const returned = closed ? loanCoin(closed) : undefined;
 
   return activity(
     bundle,
@@ -66,9 +69,9 @@ export function interpretLoanRepay(bundle: RawBundle, protocol: Protocol): Activ
     "loan.repay",
     memo,
     [
-      leg("out", input.address, input.coins[0].asset, input.coins[0].amount, txid),
+      leg("out", input.address, repaid.asset, repaid.amount, txid),
       ...(gas ? [{ ...gas, txid }] : []),
-      ...(closed ? [leg("in", closed.address, closed.coins[0].asset, closed.coins[0].amount, closed.txID ?? "")] : []),
+      ...(closed && returned ? [leg("in", closed.address, returned.asset, returned.amount, closed.txID ?? "")] : []),
     ],
     { collateral: memo.split(":")[REPAYLOAN_ASSET] },
   );
@@ -78,25 +81,38 @@ function getCollateral(
   action: Action,
   bundle: RawBundle,
 ): { wallet: string; asset: string; amount: string; txid: string; memo?: string } {
-  if (action.in[0].coins[0].asset !== "THOR.TOR") {
-    const input = action.in[0];
+  const input = action.in[0];
+  const inputCoin = loanCoin(input);
+
+  if (inputCoin.asset !== "THOR.TOR") {
     return {
       wallet: input.address,
-      asset: input.coins[0].asset,
-      amount: input.coins[0].amount,
+      asset: inputCoin.asset,
+      amount: inputCoin.amount,
       txid: input.txID ?? "",
       memo: action.metadata.swap?.memo,
     };
   }
 
   const tx = bundle.thornodeTxs[0]?.tx;
-  const coin = tx?.coins[0];
+  const coin = onlyCoin(tx, "loan");
 
-  if (!coin) {
+  if (!tx || !coin) {
     throw new Error("loan: missing input coin");
   }
 
   return { wallet: tx.from_address ?? "", asset: coin.asset, amount: coin.amount, txid: tx.id ?? "", memo: tx.memo };
+}
+
+// The one coin of a loan's input or output: none, or several, fails the action (onlyCoin)
+function loanCoin(tx: { coins: { asset: string; amount: string }[] }): { asset: string; amount: string } {
+  const coin = onlyCoin(tx, "loan");
+
+  if (!coin) {
+    throw new Error("loan: a tx with no coin");
+  }
+
+  return coin;
 }
 
 function getOutput(action: Action, memo: string | undefined, destIndex: number): Transaction {
