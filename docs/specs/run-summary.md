@@ -76,8 +76,12 @@ cannot read (an amount that is no decimal) skips the check with a warning.
 What the rows say, for each wallet and currency, over every row of the run
 (`all.csv`, inside and outside its periods):
 
-- A row whose To is its wallet brought the base amount in; one whose From is
-  its wallet sent it out. A sell (From and To both the wallet, a FIN swap)
+- A `fee`, `expense`, `lost`, `stolen` or `burn` row took the base amount out
+  of its wallet, and an `income`, `staking`, `interest`, `mining`, `airdrop`
+  or `rebate` row brought it in, whatever its From and To (the fee row of a
+  send to itself has both the wallet).
+- Any other row whose To is its wallet brought the base amount in; one whose
+  From is its wallet sent it out. A sell (From and To both the wallet, a FIN swap)
   sent the base out and brought the quote in.
 - The fee is paid by the row's wallet.
 - Spam rows (price helpers) move nothing. A `failed-in` or `failed-out` row
@@ -104,8 +108,10 @@ the wallet.
 The bank balance is `/cosmos/bank/v1beta1/balances/<address>` now, each denom
 named as the rows name its asset (`assets.md`): `rune` is `RUNE`, `btc/btc`
 `ThorSynth.BTC.BTC`, `btc-btc` `BTC` (or `ThorSecured.BTC.BTC`), `x/ruji`
-`RUJI`, `x/staking-x/ruji` `SRUJI`; a denom that is no asset Midgard names
-(an IBC denom) keeps its denom. Amounts have 8 decimals, CACAO 10 and MAYA 4.
+`RUJI`, `x/staking-x/ruji` `SRUJI`. A denom that is no asset Midgard names
+keeps its denom: an IBC denom (`ibc/<hash>`), and a receipt token
+(`x/…-rcpt`) other than the liquid staking ones above, so two receipt tokens
+are never added together. Amounts have 8 decimals, CACAO 10 and MAYA 4.
 It is stored like any record (`snapshots.md`, sources `thornode-balance` and
 `mayanode-balance`, keyed by the address): every run that fetches asks again,
 and stores a new copy only when the balance changed, so a changed balance is

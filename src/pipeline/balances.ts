@@ -37,9 +37,29 @@ export function fromBase(base: string, decimals: number): bigint {
   return BigInt(base) * 10n ** BigInt(SCALE - decimals);
 }
 
+// Row types that always take the base amount out of the row's wallet, or always bring it in, whatever From and To
+// say: a fee row of a send to itself has From and To both the wallet, and still costs the wallet the fee
+const OUTGOING: ReadonlySet<SummRowType> = new Set([
+  SummRowType.Fee,
+  SummRowType.Expense,
+  SummRowType.Lost,
+  SummRowType.Stolen,
+  SummRowType.Burn,
+]);
+const INCOMING: ReadonlySet<SummRowType> = new Set([
+  SummRowType.Income,
+  SummRowType.Staking,
+  SummRowType.Interest,
+  SummRowType.Mining,
+  SummRowType.Airdrop,
+  SummRowType.Rebate,
+]);
+
 // Each wallet's net holdings by currency over every row given: what came in, less what went out and the fees.
-// - A row whose To is its wallet brought the base amount in; one whose From is its wallet sent it out. A sell
-//   (From and To both the wallet) sent the base out and brought the quote in; a buy the other way round.
+// - A fee, expense or loss row took the base amount out of its wallet; an income or staking reward row brought it
+//   in.
+// - Any other row whose To is its wallet brought the base amount in; one whose From is its wallet sent it out. A
+//   sell (From and To both the wallet) sent the base out and brought the quote in; a buy the other way round.
 // - The fee is always paid by the row's wallet.
 // - Spam rows (price helpers) move nothing. A failed-in or failed-out row moves only its fee, as in Summ.
 export function computeHoldings(rows: SummRow[]): Holdings {
@@ -60,7 +80,11 @@ export function computeHoldings(rows: SummRow[]): Holdings {
     };
     const isWallet = (address?: string) => !!address && addressKey(address) === wallet;
 
-    if (row.type === SummRowType.Sell) {
+    if (OUTGOING.has(row.type)) {
+      add(row.baseCurrency, row.baseAmount, -1n);
+    } else if (INCOMING.has(row.type)) {
+      add(row.baseCurrency, row.baseAmount, 1n);
+    } else if (row.type === SummRowType.Sell) {
       add(row.baseCurrency, row.baseAmount, -1n);
       add(row.quoteCurrency, row.quoteAmount, 1n);
     } else if (row.type === SummRowType.Buy) {

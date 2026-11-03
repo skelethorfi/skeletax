@@ -66,6 +66,12 @@ describe("balance check: holdings from rows", () => {
     assert.deepEqual(held(holdings, "bc1qkk788zfqyh7pgjke63xpg5zrlf27q359ke3x5p"), { BTC: "-0.00005395" });
   });
 
+  test("a fee row of a send to itself (From and To both the wallet) still takes the fee out", () => {
+    const holdings = computeHoldings(caseRows("send/delegate-arkeo"));
+
+    assert.deepEqual(held(holdings, "thor1-user-wallet-11111"), { RUNE: "-0.02" });
+  });
+
   test("a sell moves the base out and the quote in; an EVM wallet is one wallet in any case", () => {
     const holdings = computeHoldings([
       row({
@@ -168,7 +174,15 @@ describe("balance check: bank denoms", () => {
     });
     assert.deepEqual(name("x/ruji"), { currency: "RUJI", decimals: 8 });
     assert.deepEqual(name("x/staking-x/ruji"), { currency: "SRUJI", decimals: 8 });
-    assert.equal(name("ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2").decimals, 8);
+    assert.deepEqual(name("ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2"), {
+      currency: "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2",
+      decimals: 8,
+    });
+    // A receipt token RECEIPT_TOKENS does not know keeps its full denom, so two of them are never added together
+    assert.deepEqual(name("x/nami-index-nav-thor1abc-rcpt"), {
+      currency: "x/nami-index-nav-thor1abc-rcpt",
+      decimals: 8,
+    });
     assert.deepEqual(name("cacao", MAYA), { currency: "CACAO", decimals: 10 });
     assert.deepEqual(name("maya", MAYA), { currency: "MAYA", decimals: 4 });
   });

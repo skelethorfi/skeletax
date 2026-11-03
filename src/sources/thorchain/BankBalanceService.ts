@@ -44,8 +44,14 @@ export class BankBalanceService {
 
 // A bank denom as the CSV names its currency (docs/specs/assets.md), and the decimals of its amounts: rune → RUNE,
 // btc/btc → ThorSynth.BTC.BTC, btc-btc → BTC (or ThorSecured.BTC.BTC), x/ruji → RUJI, x/staking-x/ruji → SRUJI. A
-// denom that is no asset Midgard names (e.g. an IBC denom) keeps the denom as its name.
+// denom that is no asset Midgard names keeps the denom as its name: an IBC denom (ibc/<hash>, which Midgard's parser
+// would read as a synth), a receipt token with no entry in RECEIPT_TOKENS (x/...-rcpt, which would be named by its
+// first symbol alone, so two of them would be added together), or one that does not parse.
 export function bankCurrency(denom: string, protocol: Protocol): { currency: string; decimals: number } {
+  if (denom.toLowerCase().startsWith("ibc/") || (!RECEIPT_TOKENS[denom] && /^x\/.*-rcpt$/i.test(denom))) {
+    return { currency: denom, decimals: protocol.decimals(denom) };
+  }
+
   const notation = RECEIPT_TOKENS[denom] ?? (/[/\-~.]/.test(denom) ? denom : `${protocol.nativeChain}.${denom}`);
 
   try {
