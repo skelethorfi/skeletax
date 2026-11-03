@@ -37,12 +37,18 @@ export class Viewblock {
     this.store = store;
   }
 
-  // Every tx of the address, through the store. A list once stored is not fetched again (only by --refetch-all):
-  // only its txs before 2022-04 are used, and those do not change. When the fetch fails, the stored list is used.
+  // Every tx of the address, through the store. A complete list once stored is not fetched again (only by
+  // --refetch-all): only its txs before 2022-04 are used, and those do not change. A short one is fetched again on
+  // the next run, and warned about on every run that uses it. When the fetch fails, the stored list is used.
   async getTxs(address: string): Promise<ViewblockTx[]> {
     const url = `${BASE_URL}/addresses/${address}/txs?network=mainnet`;
-    return this.store.list("viewblock", address, async () => ({ data: await this.fetchTxs(url, address), url }), {
+    return this.store.list("viewblock", address, async () => ({ ...(await this.fetchTxs(url)), url }), {
       ...VIEWBLOCK_LIST,
+      onIncomplete: (incomplete) =>
+        this.listWarnings.push(
+          `Viewblock's list of the txs of ${address} is short (${incomplete}); ` +
+            "a send before 2022-04-01 that Midgard does not list may be missing (docs/specs/sends.md)",
+        ),
       onFetchError: (error, stored) =>
         this.listWarnings.push(
           `Viewblock: could not list the txs of ${address} (${reason(error)}); ` +
@@ -58,7 +64,7 @@ export class Viewblock {
   // this source was read or that could not reach it, or when Viewblock cannot be reached. date: of the action the
   // tx belongs to
   async getInbound(hash: string, date?: Date): Promise<ViewblockInbound | undefined> {
-    if (this.store.addedSinceReplay("viewblock-tx") || this.store.notInReplay("viewblock-tx", hash)) {
+    if (this.store.addedSinceReplay("viewblock-tx") || this.store.skippedInReplay("viewblock-tx", hash)) {
       return undefined;
     }
 
@@ -77,6 +83,7 @@ export class Viewblock {
         throw error;
       }
 
+      this.store.recordSkipped("viewblock-tx", hash);
       this.gasSkipped.push(`${hash} (${reason(error)})`);
       return undefined;
     }
@@ -112,8 +119,8 @@ export class Viewblock {
   }
 
   // Pages until one comes back empty or adds nothing new, or the total is reached: the page count the API reports
-  // has been seen to stop short of its total. A listing still short of the total is kept, with a warning.
-  private async fetchTxs(url: string, address: string): Promise<ViewblockTx[]> {
+  // has been seen to stop short of its total. A listing still short of the total is kept, marked incomplete.
+  private async fetchTxs(url: string): Promise<{ data: ViewblockTx[]; incomplete?: string }> {
     const first = await this.page(url, 1);
     const txs = new Map(first.docs.map((tx) => [tx.hash, tx]));
 
@@ -127,14 +134,10 @@ export class Viewblock {
       }
     }
 
-    if (txs.size !== first.total) {
-      this.listWarnings.push(
-        `Viewblock listed ${txs.size} txs of ${address} but reports ${first.total}; ` +
-          "a send before 2022-04-01 that Midgard does not list may be missing (docs/specs/sends.md)",
-      );
-    }
-
-    return [...txs.values()];
+    return {
+      data: [...txs.values()],
+      ...(txs.size !== first.total ? { incomplete: `listed ${txs.size} of the ${first.total} txs it reports` } : {}),
+    };
   }
 
   private async page(url: string, page: number): Promise<Page> {

@@ -68,7 +68,10 @@ describe("Viewblock", () => {
       (await viewblock.getTxs("thor1-wallet")).map((t) => t.hash),
       ["A"],
     );
-    assert.match(viewblock.warnings().join("\n"), /Viewblock listed 1 txs of thor1-wallet but reports 2/);
+    assert.match(
+      viewblock.warnings().join("\n"),
+      /list of the txs of thor1-wallet is short \(listed 1 of the 2 txs it reports\)/,
+    );
   });
 
   test("pages past the page count it reports, until the total or a page with nothing new", async () => {
@@ -85,7 +88,7 @@ describe("Viewblock", () => {
       ["A", "B", "C"],
     );
     assert.equal(get.mock.calls.length, 3);
-    assert.match(viewblock.warnings().join("\n"), /listed 3 txs of thor1-wallet but reports 4/);
+    assert.match(viewblock.warnings().join("\n"), /thor1-wallet is short \(listed 3 of the 4 txs it reports\)/);
   });
 
   test("fetches a stored list again only with --refetch-all", async () => {
@@ -136,6 +139,50 @@ describe("Viewblock", () => {
       ["A"],
     );
     assert.match(viewblock.warnings().join("\n"), /using the list stored by an earlier run/);
+  });
+
+  test("a short stored list is fetched again by the next run, and warned about on every run that uses it", async () => {
+    const dir = tmp();
+    mock.method(http, "get", async () => ({ data: { docs: [tx("A")], pages: 1, total: 2 } }) as any);
+    await new Viewblock(new RecordStore(dir)).getTxs("thor1-wallet");
+    mock.restoreAll();
+
+    // The next default run fetches it again; it fails, so the stored short list is used, with both warnings
+    const failing = mock.method(http, "get", async () => {
+      throw rateLimited();
+    });
+    const manifest = new SnapshotManifest();
+    const second = new Viewblock(new RecordStore(dir, { manifest }));
+    assert.deepEqual(
+      (await second.getTxs("thor1-wallet")).map((t) => t.hash),
+      ["A"],
+    );
+    assert.equal(failing.mock.calls.length, 1);
+    assert.match(second.warnings().join("\n"), /using the list stored by an earlier run/);
+    assert.match(second.warnings().join("\n"), /thor1-wallet is short \(listed 1 of the 2 txs it reports\)/);
+    manifest.write(path.join(dir, "run"));
+    mock.restoreAll();
+
+    // Offline and replayed runs use it without a fetch, and still warn
+    const offline = new Viewblock(new RecordStore(dir, { offline: true }));
+    await offline.getTxs("thor1-wallet");
+    assert.match(offline.warnings().join("\n"), /thor1-wallet is short/);
+    const replay = new Viewblock(new RecordStore(dir, { replay: SnapshotManifest.load(path.join(dir, "run")) }));
+    await replay.getTxs("thor1-wallet");
+    assert.match(replay.warnings().join("\n"), /thor1-wallet is short/);
+
+    // A complete listing replaces it, and is not fetched again
+    const get = pages([tx("A"), tx("B")]);
+    const complete = new Viewblock(new RecordStore(dir));
+    assert.deepEqual(
+      (await complete.getTxs("thor1-wallet")).map((t) => t.hash),
+      ["A", "B"],
+    );
+    assert.deepEqual(complete.warnings(), []);
+    const after = new Viewblock(new RecordStore(dir));
+    await after.getTxs("thor1-wallet");
+    assert.equal(get.mock.calls.length, 1);
+    assert.deepEqual(after.warnings(), []);
   });
 
   test("offline, a list not stored is still an error", async () => {
@@ -197,6 +244,17 @@ describe("Viewblock.getInbound", () => {
     const replay = new Viewblock(new RecordStore(dir, { replay: SnapshotManifest.load(path.join(dir, "run")) }));
     assert.equal((await replay.getInbound("H1"))?.found, true);
     assert.equal(await replay.getInbound("H2"), undefined);
+  });
+
+  test("replaying a run whose manifest lacks an inbound it did not skip is an error", async () => {
+    mock.method(http, "get", async () => ({ status: 200, data: { observation: { gas: [] } } }) as any);
+    const dir = tmp();
+    const manifest = new SnapshotManifest();
+    await new Viewblock(new RecordStore(dir, { manifest })).getInbound("H1");
+    manifest.write(path.join(dir, "run"));
+
+    const replay = new Viewblock(new RecordStore(dir, { replay: SnapshotManifest.load(path.join(dir, "run")) }));
+    await assert.rejects(replay.getInbound("H2"), /viewblock-tx H2 in the replayed run/);
   });
 
   test("offline, an inbound not stored is still an error", async () => {

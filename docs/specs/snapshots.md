@@ -123,12 +123,12 @@ corrections. A filed year is not affected, because it replays its own manifest.
 
 ## Run modes
 
-| Run              | Fetches                                                                                                                                                                  | Uses                                                                                                                                                                           |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| default          | every wallet list again (new activity, changed or missing records; a stored Viewblock list is kept, `sends.md`), every record still pending, and anything not stored yet | the chosen copy of each record, with this run's fetches included                                                                                                               |
-| `--refetch-all`  | also every finalised record again, THORNode and Cosmos txs included, and the Viewblock lists                                                                             | the same                                                                                                                                                                       |
-| `--offline`      | nothing; anything not stored is an error                                                                                                                                 | the chosen copy                                                                                                                                                                |
-| `--replay <run>` | nothing                                                                                                                                                                  | exactly the copies in that run's `snapshots.json`, checked against their hashes; a source that run read nothing from (one added since, e.g. `maya-distribution`) gives nothing |
+| Run              | Fetches                                                                                                                                                                           | Uses                                                                                                                                                                           |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| default          | every wallet list again (new activity, changed or missing records; a complete stored Viewblock list is kept, `sends.md`), every record still pending, and anything not stored yet | the chosen copy of each record, with this run's fetches included                                                                                                               |
+| `--refetch-all`  | also every finalised record again, THORNode and Cosmos txs included, and the Viewblock lists                                                                                      | the same                                                                                                                                                                       |
+| `--offline`      | nothing; anything not stored is an error                                                                                                                                          | the chosen copy                                                                                                                                                                |
+| `--replay <run>` | nothing                                                                                                                                                                           | exactly the copies in that run's `snapshots.json`, checked against their hashes; a source that run read nothing from (one added since, e.g. `maya-distribution`) gives nothing |
 
 A finalised record (a THORNode tx, a Cosmos tx) can only come back revised or
 pruned, and the store keeps the earlier copy either way, so a default run
@@ -220,7 +220,12 @@ manifest from an earlier layout is refused, as its paths no longer exist):
   stored, `missing` if it was kept from an earlier fetch, and `fetched` if
   this run fetched it (`new`, `changed`, `unchanged`).
 - `lists`: for each wallet and source, the record keys used, in order, and
-  which of them were missing from the latest fetch.
+  which of them were missing from the latest fetch, and `incomplete` (why)
+  when the latest list came back short (Viewblock, `sends.md`).
+- `skipped` (only when there are any): records a best-effort source
+  (Viewblock's inbound gas, `fees.md`) could not give the run. `--replay`
+  gives nothing for these, as the run had; any other record missing from the
+  manifest is an error.
 
 The run prints a summary: records fetched (new, changed, unchanged), and
 records finalised, revised, kept over a pruned copy, or missing. It lists the
