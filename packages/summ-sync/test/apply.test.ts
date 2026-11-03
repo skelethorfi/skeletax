@@ -945,3 +945,30 @@ test("an ignore entry of a filed year waits for --approve-filed, and one done al
   assert.equal(found.result.found, 1);
   assert.equal(summ.calls.filter((c) => c.name === "edit_transaction").length, 0);
 });
+
+test("an ignore entry of two legs of one action makes one edit, and a run again finds it done", async () => {
+  const summ = new FakeSumm();
+  summ.add("d", [
+    { _id: "dup", trade: "withdrawal", quantity: "1" },
+    { _id: "made", trade: "deposit", quantity: "1" },
+  ]);
+  const ignore = edit({
+    id: "legs dup, made",
+    actionId: "d",
+    changes: [
+      { leg: "base", legId: "dup", field: "trade", summ: "withdrawal", desired: "ignoreOut" },
+      { leg: "base", legId: "made", field: "trade", summ: "deposit", desired: "ignoreIn" },
+    ],
+  });
+  const first = await run(summ, planFile({ ignore: [ignore] }));
+  assert.equal(first.result.edited, 1);
+  const calls = summ.calls.filter((c) => c.name === "edit_transaction");
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].args.edits, [
+    { transactionId: "dup", updates: { trade: "ignoreOut" } },
+    { transactionId: "made", updates: { trade: "ignoreIn" } },
+  ]);
+  const again = await run(summ, planFile({ ignore: [ignore] }));
+  assert.equal(again.result.found, 1);
+  assert.equal(summ.calls.filter((c) => c.name === "edit_transaction").length, 1);
+});

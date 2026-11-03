@@ -1656,7 +1656,8 @@ export function makePlan(input: PlanInput): PlanResult {
   }
   if (ignore.length) {
     plan.ignore = ignore;
-    if (input.scope) plan.notes.push(`scope: ${ignore.length} legs in ignoreImportLegs are ignored whatever the scope`);
+    if (input.scope)
+      plan.notes.push(`scope: the legs in ignoreImportLegs (${ignore.length} entries) are ignored whatever the scope`);
   }
 
   if (input.scope) narrow(plan, input.scope, rows, legsOf, eventOf);
