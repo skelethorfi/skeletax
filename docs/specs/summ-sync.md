@@ -816,6 +816,19 @@ any delete: a split from what stays, a fresh read compared with the plan, two re
 pre-image. Any other manual entry still holds its event in the plan and stops apply. Summ has no undo for a delete; a
 pre-image is what it can be entered again from.
 
+**Ignoring an import's leg.** The sync never deletes a leg of Summ's own imports, and edits one only to match a run
+row. A leg the user decides should not count, such as one an import holds twice, is named in `summ-sync.json`:
+
+    "ignoreImportLegs": [{ "legId": "<leg>", "currency": "BTC", "quantity": 0.1, "reason": "<why>" }]
+
+Plan refuses a named leg of a managed source or a manual entry, one whose currency or amount differ, one in both this
+list and `deleteManualEntries`, and one another entry of the plan changes. Pull reads a named leg's action. A leg not in
+the snapshot, or already ignored, gives a note, so its line can be removed. Each other named leg is an entry in the
+plan's `ignore` section, whatever `--only` says (a note says so): its type set to `ignoreIn` (incoming) or `ignoreOut`
+(outgoing or fee). It is filed by the leg's time. Apply runs it as any edit (fresh read, other legs unchanged, the
+journal, read back) after the edits, and it waits for no upload. `verify` checks it like an edit. Ignoring a leg moves
+no value of it: Summ stops counting it, so a disposal it was is gone, and a transfer it was no longer moves a balance.
+
 **Manual entries.** Before a delete entry's split, and before the reads that agree on its
 delete, apply lists the actions holding a manual entry (`importType` filter, every page) and reads
 each. A manual entry naming one of the entry's txids (the row's, or with no row those its legs name)

@@ -222,6 +222,8 @@ export interface Plan {
   edit: EditEntry[];
   upload: UploadEntry[];
   categorise: EditEntry[];
+  /** Legs of Summ's imports the config names in ignoreImportLegs: their type set to ignored. Absent from older plans. */
+  ignore?: EditEntry[];
   report: ReportEntry[];
   held: HeldEntry[];
   overridden: OverriddenEntry[];
@@ -1548,6 +1550,60 @@ export function makePlan(input: PlanInput): PlanResult {
     if (txids.length) e.txids = txids;
   }
 
+  // ---- Import legs the user named to ignore: whatever the scope, as for deleteManualEntries. A wrong or changed entry
+  // stops the plan: the user named something else
+  const planned = new Set([
+    ...plan.delete.flatMap((d) => d.legIds),
+    ...[...plan.edit, ...plan.categorise].flatMap((e) => [
+      ...e.changes.map((c) => c.legId),
+      ...(e.ignore ?? []),
+      ...(e.match ? [e.match.legId] : []),
+    ]),
+  ]);
+  const ignore: EditEntry[] = [];
+  for (const m of config.ignoreImportLegs) {
+    const leg = input.legs.find((l) => l.legId === m.legId);
+    if (!leg) {
+      plan.notes.push(
+        `ignoreImportLegs: leg ${m.legId} is not in the snapshot: remove its line if it is gone, else pull again`,
+      );
+      continue;
+    }
+    if (managedSources.has(leg.source) || leg.importType === "manual") {
+      throw new Error(
+        `ignoreImportLegs: leg ${m.legId} is not an import's leg (source ${leg.source}, import type ${leg.importType})`,
+      );
+    }
+    if (!sameCurrency(leg.currency, m.currency) || !sameAmount(leg.quantity, m.quantity)) {
+      throw new Error(
+        `ignoreImportLegs: leg ${m.legId} holds ${leg.quantity} ${leg.currency}, the config says ${m.quantity} ${m.currency}`,
+      );
+    }
+    if (planned.has(m.legId)) throw new Error(`ignoreImportLegs: leg ${m.legId} is also in this plan's other entries`);
+    if (IGNORED.has(leg.trade)) {
+      plan.notes.push(`ignoreImportLegs: leg ${m.legId} is ignored already: remove its line`);
+      continue;
+    }
+    ignore.push({
+      id: `ignore ${leg.legId}`,
+      filed: isFiled(leg.timestamp),
+      actionId: leg.actionId,
+      changes: [
+        {
+          leg: "base",
+          legId: leg.legId,
+          field: "trade",
+          summ: leg.trade,
+          desired: leg.side === "incoming" ? "ignoreIn" : "ignoreOut",
+        },
+      ],
+    });
+  }
+  if (ignore.length) {
+    plan.ignore = ignore;
+    if (input.scope) plan.notes.push(`scope: ${ignore.length} legs in ignoreImportLegs are ignored whatever the scope`);
+  }
+
   if (input.scope) narrow(plan, input.scope, rows, legsOf, eventOf);
 
   // After the scope: what this plan does is what it leaves behind
@@ -1563,6 +1619,10 @@ export function makePlan(input: PlanInput): PlanResult {
       reason: m.reason,
     })),
     ...config.hold.map((h) => ({ what: `hold ${h.id ?? h.txid}`, reason: h.reason })),
+    ...config.ignoreImportLegs.map((m) => ({
+      what: `ignore import leg ${m.quantity} ${m.currency} (leg ${m.legId})`,
+      reason: m.reason,
+    })),
   ];
   if (!input.scope)
     for (const a of config.accept)
@@ -1587,6 +1647,7 @@ export function makePlan(input: PlanInput): PlanResult {
     edits: plan.edit.length,
     uploads: plan.upload.reduce((n, u) => n + u.ids.length, 0),
     categorise: plan.categorise.length,
+    ...(plan.ignore ? { ignore: plan.ignore.length } : {}),
     reports: plan.report.length,
     held: plan.held.length,
     overridden: plan.overridden.length,

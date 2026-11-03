@@ -3017,3 +3017,84 @@ test("plan.md leads with what the deletes leave behind", () => {
   assert.ok(text.indexOf("## Decisions") < text.indexOf("## Delete"));
   assert.ok(!renderPlan(plan({}).plan, "snap", "run").includes("## Decisions"));
 });
+
+test("ignoreImportLegs: a named import leg is set to ignored, by its side, filed by its time, and listed as decided", () => {
+  const out = ownLeg({ legId: "dup-out", quantity: 0.5, trade: "out", actionId: "a1" });
+  const fee = ownLeg({ legId: "dup-fee", quantity: 0.0001, side: "fees", trade: "fee", actionId: "a2" });
+  const made = ownLeg({
+    legId: "dup-in",
+    quantity: 0.5,
+    side: "incoming",
+    trade: "deposit",
+    importType: "soft-transfer",
+    source: "manual",
+    actionId: "a3",
+  });
+  const old = ownLeg({
+    legId: "old",
+    quantity: 0.2,
+    trade: "out",
+    timestamp: "2020-01-01T00:00:00.000Z",
+    actionId: "a4",
+  });
+  const ignoreImportLegs = [
+    { legId: "dup-out", currency: "BTC", quantity: 0.5, reason: "an import's duplicate" },
+    { legId: "dup-fee", currency: "BTC", quantity: 0.0001, reason: "fee counted twice" },
+    { legId: "dup-in", currency: "BTC", quantity: 0.5, reason: "made up for the duplicate" },
+    { legId: "old", currency: "BTC", quantity: 0.2, reason: "filed" },
+  ];
+  const p = plan({
+    rows: [],
+    legs: [out, fee, made, old],
+    config: { ...CONFIG, filedBefore: "2021-01-01", ignoreImportLegs },
+  }).plan;
+  assert.deepEqual(
+    p.ignore?.map((e) => [e.changes[0].legId, e.changes[0].summ, e.changes[0].desired, e.filed, e.actionId]),
+    [
+      ["dup-out", "out", "ignoreOut", false, "a1"],
+      ["dup-fee", "fee", "ignoreOut", false, "a2"],
+      ["dup-in", "deposit", "ignoreIn", false, "a3"],
+      ["old", "out", "ignoreOut", true, "a4"],
+    ],
+  );
+  assert.equal(p.counts.ignore, 4);
+  assert.ok(p.decided?.some((d) => d.what.includes("leg dup-out") && d.reason === "an import's duplicate"));
+});
+
+test("ignoreImportLegs: a wrong or changed entry stops the plan; one gone or already ignored is noted", () => {
+  const leg = ownLeg({ legId: "dup", quantity: 1, trade: "out" });
+  const entry = { legId: "dup", currency: "BTC", quantity: 1, reason: "why" };
+  const run = (legs: Leg[], over = {}) =>
+    plan({ rows: [], legs, config: { ...CONFIG, ignoreImportLegs: [{ ...entry, ...over }] } }).plan;
+  assert.throws(() => run([leg], { quantity: 2 }), /config says 2/);
+  assert.throws(() => run([leg], { currency: "ETH" }), /config says 1 ETH/);
+  assert.throws(() => run([{ ...leg, source: "csv-source" }]), /not an import's leg/);
+  assert.throws(() => run([{ ...leg, importType: "manual" }]), /not an import's leg/);
+  assert.match(run([]).notes.join(), /leg dup is not in the snapshot/);
+  const ignored = run([{ ...leg, trade: "ignoreOut" }]);
+  assert.equal(ignored.ignore, undefined);
+  assert.match(ignored.notes.join(), /leg dup is ignored already/);
+});
+
+test("ignoreImportLegs: a leg another entry of the plan changes stops the plan", () => {
+  const r = btcRow({ type: "bridge-trade-out" });
+  const legs = [ownLeg({ legId: "own", quantity: 0.0101 })];
+  const ignoreImportLegs = [{ legId: "own", currency: "BTC", quantity: 0.0101, reason: "why" }];
+  assert.ok(plan({ rows: [r], legs }).plan.categorise.length > 0);
+  assert.throws(
+    () => plan({ rows: [r], legs, config: { ...CONFIG, ignoreImportLegs } }),
+    /also in this plan's other entries/,
+  );
+});
+
+test("ignoreImportLegs: a scoped plan keeps a named leg whatever the scope says, and says so", () => {
+  const leg = ownLeg({ legId: "dup", quantity: 1, trade: "out" });
+  const p = plan({
+    rows: [],
+    legs: [leg],
+    config: { ...CONFIG, ignoreImportLegs: [{ legId: "dup", currency: "BTC", quantity: 1, reason: "why" }] },
+    scope: ["nothing-like-it"],
+  }).plan;
+  assert.equal(p.ignore?.length, 1);
+  assert.match(p.notes.join(), /ignored whatever the scope/);
+});

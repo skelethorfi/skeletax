@@ -163,6 +163,15 @@ export function renderPlan(plan: Plan, snapshot: string, run: string, legs: Map<
       "| --- | --- | --- | --- | --- |",
       ...changeLines(es),
     ]),
+    ...section("Ignore (Summ's import legs named in ignoreImportLegs)", plan.ignore ?? [], (es) => [
+      "| Leg | Field | Summ | Desired |",
+      "| --- | --- | --- | --- |",
+      ...es.flatMap((e) =>
+        e.changes.map(
+          (c) => `| ${show(c.legId)} | ${c.field} | ${show(String(c.summ))} | ${show(String(c.desired))} |`,
+        ),
+      ),
+    ]),
     ...section(
       "Held (nothing planned: held in summ-sync.json, or the user's manual pairing; a price edit awaiting a test)",
       plan.held,

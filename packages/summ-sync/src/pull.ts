@@ -216,6 +216,7 @@ export async function pull(
     for (const legId of [
       ...readLeftLegs(stateDir).map((l) => l.legId),
       ...config.deleteManualEntries.map((m) => m.legId),
+      ...config.ignoreImportLegs.map((m) => m.legId),
     ]) {
       const text = await client.callTool("inspect_transaction", { transactionId: legId }).catch((e: Error) => {
         if (isLegAbsent(e.message, legId)) return null;
