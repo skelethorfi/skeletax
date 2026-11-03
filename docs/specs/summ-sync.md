@@ -185,7 +185,7 @@ address missing from its config): its rows would be missing from the
 desired state, and plan would delete them from Summ. `row-ids.csv` traces
 an `ID` back to its action for the user; plan does not need it.
 `unmapped.json` lists the records the run could not map (unsupported or
-failed, `run-summary.md`), each with its time and txids: plan holds back
+failed, `run-summary.md`), each with its times and txids: plan holds back
 the deletes their rows would otherwise get (Held). A run made before it
 has none; plan then notes that its deletes of legs with no row could not
 be checked.
@@ -607,9 +607,11 @@ with the entries left out:
   `unmapped`, from `unmapped.json`): the run lacks their row because it
   failed on the record, not because the row is gone (a Midgard data
   change can make an action that mapped before fail now). A leg is taken
-  as the record's when its ID starts with the record's time (a row ID
-  starts with its action's time, `periods.md`) or it names one of the
-  record's txids. A match too many keeps legs that should go, until a
+  as the record's when its ID starts with one of the record's times (a
+  row ID starts with its action's time, `periods.md`, or with an attached
+  inbound's: a liquidity auction deposit's send) or it names one of the
+  record's txids. A file without `times` (an earlier exporter) gives the
+  record's `time` alone. A match too many keeps legs that should go, until a
   run maps the record; one too few would delete them with no undo. The
   legs stay until a run maps the record.
 

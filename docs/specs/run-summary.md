@@ -19,8 +19,11 @@ after the terminal is gone. The run prints the same lines as before.
 `unmapped.json` is the same unsupported and failed actions, for summ-sync to
 read: `{ "version": 1, "records": [...] }`, each record with its `kind`
 (`unsupported` or `failed`), store record key (`record`), `wallet`, `time`
-(the action's, as a row ID starts) and `txids` (every 64-hex string in the
-action, in lower case), and its message (`reason`). It is written on every
+(the action's, as a row ID starts), `times` (every time a row ID made of
+it can start with: the action's, then each attached inbound's, e.g. a Maya
+liquidity auction's deposits, dated by their THORChain send), `txids`
+(every 64-hex string in the action and its attached inbounds, in lower
+case), and its message (`reason`). It is written on every
 run, empty when nothing failed, so summ-sync can tell such a run from one
 made before the file (`summ-sync.md`, Held).
 

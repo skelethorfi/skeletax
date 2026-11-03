@@ -194,6 +194,8 @@ export interface Unmapped {
   wallet: string;
   /** The record's time, as a row ID made from it starts. */
   time: string;
+  /** Every time a row ID made from it can start with: its own, and each attached inbound's. */
+  times: string[];
   /** Lower case. */
   txids: string[];
   reason: string;
@@ -207,5 +209,9 @@ export function readUnmapped(runDir: string): Unmapped[] | null {
   if (!existsSync(path)) return null;
   const parsed = JSON.parse(readFileSync(path, "utf8")) as { version?: number; records?: Unmapped[] };
   if (parsed.version !== 1 || !Array.isArray(parsed.records)) throw new Error(`${path}: not version 1`);
-  return parsed.records.map((r) => ({ ...r, txids: r.txids.map((t) => t.toLowerCase()) }));
+  return parsed.records.map((r) => ({
+    ...r,
+    times: r.times ?? [r.time],
+    txids: r.txids.map((t) => t.toLowerCase()),
+  }));
 }

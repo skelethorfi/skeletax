@@ -129,7 +129,11 @@ test("readUnmapped reads the run's unmapped.json, or null when the run has none"
     reason: "boom",
   };
   writeFileSync(join(run, "unmapped.json"), JSON.stringify({ version: 1, records: [record] }));
-  assert.deepEqual(readUnmapped(run), [{ ...record, txids: [TXID.toLowerCase()] }]);
+  // An exporter before times: the record's own time
+  assert.deepEqual(readUnmapped(run), [{ ...record, times: [record.time], txids: [TXID.toLowerCase()] }]);
+  const times = [record.time, "2024-02-28T09:00:00.000Z"];
+  writeFileSync(join(run, "unmapped.json"), JSON.stringify({ version: 1, records: [{ ...record, times }] }));
+  assert.deepEqual(readUnmapped(run), [{ ...record, times, txids: [TXID.toLowerCase()] }]);
   writeFileSync(join(run, "unmapped.json"), JSON.stringify({ records: [] }));
   assert.throws(() => readUnmapped(run), /not version 1/);
 });

@@ -187,6 +187,7 @@ describe("unmapped records", () => {
         record: `midgard/swap.${txId}`,
         wallet: "thor1-user-wallet-11111",
         time: "2023-11-14T22:13:20.000Z",
+        times: ["2023-11-14T22:13:20.000Z"],
         txids: [txId.toLowerCase()],
         reason: "boom",
       },
@@ -195,10 +196,21 @@ describe("unmapped records", () => {
         record: `midgard/donate.${txId}`,
         wallet: "thor1-user-wallet-11111",
         time: "2023-11-14T22:13:20.000Z",
+        times: ["2023-11-14T22:13:20.000Z"],
         txids: [txId.toLowerCase()],
         reason: "unsupported action: donate",
       },
     ]);
     assert.deepEqual(JSON.parse(renderUnmapped([])), { version: 1, records: [] });
+  });
+
+  test("an attached inbound's time and txid are the record's too (a liquidity auction's deposits)", () => {
+    const sendTx = "B".repeat(64);
+    const send = { ...action("send"), date: "1690000000000000000", in: [{ txID: sendTx, address: "x", coins: [] }] };
+    const r = result("addLiquidity", [{ kind: "failed", message: "boom" }]);
+    r.bundle = { ...r.bundle, inbounds: [send as never] };
+    const [record] = unmappedRecords([r]);
+    assert.deepEqual(record.times, ["2023-11-14T22:13:20.000Z", "2023-07-22T04:26:40.000Z"]);
+    assert.deepEqual(record.txids, [txId.toLowerCase(), sendTx.toLowerCase()]);
   });
 });

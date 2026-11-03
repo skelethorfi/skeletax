@@ -1476,10 +1476,10 @@ export function makePlan(input: PlanInput): PlanResult {
     return !h;
   });
   // Legs with no row in the run, of a record the run could not map (unsupported or failed, in unmapped.json): their
-  // row is missing because the run failed on it, not because it is gone. Matched by the record's time, which a row ID
-  // starts with, or by a txid: a match too many keeps legs, one too few would delete them
+  // row is missing because the run failed on it, not because it is gone. Matched by one of the record's times, which a
+  // row ID starts with, or by a txid: a match too many keeps legs, one too few would delete them
   const unmappedRecords = input.unmapped ?? [];
-  const unmappedAt = new Map(unmappedRecords.map((u) => [u.time, u]));
+  const unmappedAt = new Map(unmappedRecords.flatMap((u) => u.times.map((t) => [t, u] as const)));
   const unmappedTx = new Map(unmappedRecords.flatMap((u) => u.txids.map((t) => [t, u] as const)));
   plan.delete = plan.delete.filter((d) => {
     if (d.manual || d.id !== null) return true;

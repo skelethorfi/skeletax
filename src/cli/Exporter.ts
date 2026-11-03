@@ -401,7 +401,7 @@ export class Exporter {
   }
 }
 
-// What the run could not map, next to csv/ (not uploaded): each unsupported or failed bundle's record, wallet, time and
+// What the run could not map, next to csv/ (not uploaded): each unsupported or failed bundle's record, wallet, times and
 // txids. summ-sync holds back the deletes of the rows these gave in an earlier run (docs/specs/summ-sync.md, Held).
 export const UNMAPPED_FILE = "unmapped.json";
 
@@ -410,6 +410,9 @@ export interface UnmappedRecord {
   record: string;
   wallet: string;
   time: string;
+  // Every time a row ID made of it can start with: the action's, then each attached inbound's (a Maya liquidity
+  // auction's deposits are dated by their THORChain send)
+  times: string[];
   txids: string[];
   reason: string;
 }
@@ -422,11 +425,14 @@ export function unmappedRecords(results: BundleResult[]): UnmappedRecord[] {
       return [];
     }
 
+    // The inbounds too: a liquidity auction's deposit rows carry their send's txid, not the action's
     const txids = [
       ...new Set(
-        [...JSON.stringify(bundle.data).matchAll(/(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])/g)].map((m) =>
-          m[0].toLowerCase(),
-        ),
+        [
+          ...JSON.stringify([bundle.data, bundle.inbounds ?? []]).matchAll(
+            /(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])/g,
+          ),
+        ].map((m) => m[0].toLowerCase()),
       ),
     ];
     return [
@@ -435,6 +441,7 @@ export function unmappedRecords(results: BundleResult[]): UnmappedRecord[] {
         record: getBundleKey(bundle),
         wallet: bundle.wallet,
         time: time.toISOString(),
+        times: [...new Set([time, ...(bundle.inbounds ?? []).map(getActionDate)].map((t) => t.toISOString()))],
         txids,
         reason: issue.message,
       },

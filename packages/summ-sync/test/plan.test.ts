@@ -2477,6 +2477,78 @@ test("a partial snapshot refuses deletes and filed-year edits, and notes its lim
   assert.throws(() => writePlan(token.state, token.run), /1 currency corrections.*Pull with --all/);
 });
 
+test("plan reads the run's unmapped.json: it holds the deletes of a record's legs, and --only narrows them", () => {
+  const header =
+    "Timestamp (UTC),Type,Base Currency,Base Amount,Quote Currency (Optional),Quote Amount (Optional),Fee Currency (Optional),Fee Amount (Optional),From (Optional),To (Optional),Blockchain (Optional),ID (Optional),Description (Optional)";
+  const id = "2023-08-01T00:00:00.000Z.out.aaaaaaaaaaaa";
+  // A liquidity auction deposit's row: dated by its inbound send, not by the action
+  const gone = "2023-08-02T00:00:00.000Z.out.bbbbbbbbbbbb";
+  const leg = (legId: string, legRowId: string) => ({
+    _id: legId,
+    id: legRowId,
+    trade: "withdrawal",
+    currency: "RUNE",
+    quantity: 1,
+    timestamp: legRowId.slice(0, 24),
+    from: "a",
+    to: "b",
+    description: "x",
+    source: "csv-source",
+    importType: "manual-csv",
+  });
+  const setup = (unmapped: boolean, scope?: string) => {
+    const state = mkdtempSync(join(tmpdir(), "summ-sync-"));
+    writeFileSync(join(state, "summ-sync.json"), JSON.stringify({ managedSources: ["csv-source"] }));
+    const run = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
+    mkdirSync(join(run, "csv"));
+    writeFileSync(
+      join(run, "csv", "2023-07-01_2024-06-30_THOR_abc_Wallet.csv"),
+      `${header}\n2023-08-01T00:00:00.000Z,send,RUNE,1,,,,,a,b,THORChain,${id},x\n`,
+    );
+    if (unmapped) {
+      const record = {
+        kind: "failed",
+        record: "maya-midgard/addLiquidity.x",
+        wallet: "thor1wallet",
+        time: "2023-08-05T00:00:00.000Z",
+        times: ["2023-08-05T00:00:00.000Z", "2023-08-02T00:00:00.000Z"],
+        txids: [],
+        reason: "boom",
+      };
+      writeFileSync(join(run, "unmapped.json"), JSON.stringify({ version: 1, records: [record] }));
+    }
+    const file = join(state, "snapshots", "2026-01-01T00-00-00.json");
+    writeSnapshot(file, {
+      version: 2,
+      takenAt: "",
+      total: 1,
+      run: resolve(run),
+      managedSources: ["csv-source"],
+      managedChains: DEFAULTS.managedChains,
+      actions: [{ id: "a1", txHash: id, category: "send", tags: [], detail: true }],
+    });
+    const detail = { a: "a1", at: "", action: { _id: "a1", outgoing: [leg("l1", id), leg("l2", gone)] }, history: [] };
+    writeFileSync(file.replace(".json", ".details.jsonl"), `{}\n${JSON.stringify(detail)}\n`);
+    let only: string | undefined;
+    if (scope !== undefined) {
+      only = join(state, "scope.txt");
+      writeFileSync(only, `${scope}\n`);
+    }
+    const saved = JSON.parse(readFileSync(join(writePlan(state, run, only), "plan.json"), "utf8"));
+    return [
+      saved.delete.map((d: { summId: string }) => d.summId),
+      saved.held.map((h: { kind: string; summId: string }) => [h.kind, h.summId]),
+    ];
+  };
+  // No unmapped.json: the leg is deleted
+  assert.deepEqual(setup(false), [[gone], []]);
+  // The record's inbound time matches the leg: held
+  assert.deepEqual(setup(true), [[], [["unmapped", gone]]]);
+  assert.deepEqual(setup(true, gone), [[], [["unmapped", gone]]]);
+  // A scope that leaves the leg out leaves out its hold too
+  assert.deepEqual(setup(true, id), [[], []]);
+});
+
 test("a partial snapshot allows an import leg's price alone in a current year; any other categorise needs a whole pull", () => {
   const txid = "1".repeat(64);
   const header =
@@ -3409,6 +3481,7 @@ test("legs with no row, of a record the run could not map, are held, not deleted
     record: "midgard/swap.x",
     wallet: "wallet-a",
     time: "2024-02-01T00:00:00.000Z",
+    times: ["2024-02-01T00:00:00.000Z"],
     txids: [],
     reason: "boom",
   };
@@ -3417,6 +3490,7 @@ test("legs with no row, of a record the run could not map, are held, not deleted
     record: "midgard/contract.y",
     wallet: "wallet-a",
     time: "2024-01-01T00:00:00.000Z",
+    times: ["2024-01-01T00:00:00.000Z"],
     txids: [TX2],
     reason: "unsupported action: contract",
   };
