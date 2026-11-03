@@ -3,6 +3,7 @@ import fs from "fs-extra";
 import * as path from "path";
 import { SnapshotManifest } from "./SnapshotManifest.ts";
 import { withRetry } from "../Retry.ts";
+import { InputError } from "../../utils/InputError.ts";
 
 // Source data is stored one record (an action, a tx) per file, and a record that comes back different is
 // stored again as a new copy, never overwritten. A run picks one copy of each record by rules (the good
@@ -516,7 +517,7 @@ export class RecordStore {
     const copy: Copy<T> = fs.readJSONSync(path.join(this.root, entry.file));
 
     if (copy.sha256 !== entry.sha256) {
-      throw new Error(
+      throw new InputError(
         `Replay: ${entry.file} does not match the manifest (sha256 ${copy.sha256}, expected ${entry.sha256})`,
       );
     }

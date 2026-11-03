@@ -25,14 +25,6 @@ export class UsageError extends Error {
   }
 }
 
-// An error whose message says what to do; printed as one line, without the stack
-export class CliError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = "CliError";
-  }
-}
-
 export interface ExportArgs {
   help: boolean;
   configFile: string;
@@ -110,12 +102,7 @@ export function parseExportArgs(argv: string[]): ExportArgs {
 // kind is recognised by its class (or Node's errno fields), never by where it was thrown, so a TypeError while the
 // config is read is still a bug.
 export function knownErrorMessage(error: unknown): string | undefined {
-  if (
-    error instanceof UsageError ||
-    error instanceof CliError ||
-    error instanceof InputError ||
-    error instanceof StoreMissError
-  ) {
+  if (error instanceof UsageError || error instanceof InputError || error instanceof StoreMissError) {
     return error.message;
   }
 

@@ -5,7 +5,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { AxiosError } from "axios";
-import { CliError, knownErrorMessage, parseExportArgs, printError, USAGE, UsageError } from "../src/cli/args.ts";
+import { knownErrorMessage, parseExportArgs, printError, USAGE, UsageError } from "../src/cli/args.ts";
 import { StoreMissError } from "../src/sources/store/RecordStore.ts";
 import { FetchError } from "../src/sources/Retry.ts";
 import { InputError } from "../src/utils/InputError.ts";
@@ -80,7 +80,6 @@ describe("parseExportArgs", () => {
 describe("knownErrorMessage", () => {
   test("errors the user can act on have a message", () => {
     assert.equal(knownErrorMessage(new UsageError("bad")), "bad");
-    assert.equal(knownErrorMessage(new CliError("Config: x")), "Config: x");
     assert.equal(
       knownErrorMessage(new StoreMissError("midgard list thor1")),
       "Offline: nothing stored for midgard list thor1",
@@ -178,7 +177,7 @@ describe("printError", () => {
   });
 
   test("a known error is one line, without the stack", () => {
-    const { code, text } = print(new CliError("Config w.toml: Syntax error\nunexpected character"));
+    const { code, text } = print(new InputError("Config w.toml: Syntax error\nunexpected character"));
     assert.equal(code, 1);
     assert.equal(text, "Error: Config w.toml: Syntax error unexpected character");
   });
@@ -222,6 +221,17 @@ describe("full-export command", () => {
       const result = run(["--offline", "w.toml"], dir);
       assert.equal(result.status, 1);
       assert.match(result.stderr, /^Error: Config: referencePrices must be .* \(got "some"\)\n$/);
+
+      // Checked when the config is read, before anything is fetched or exported
+      fs.writeFileSync(path.join(dir, "dates.toml"), 'fromDate = "2025-02-30x"\nwallets = []\n');
+      const dates = run(["--offline", "dates.toml"], dir);
+      assert.equal(dates.status, 1);
+      assert.equal(dates.stderr, 'Error: Config: fromDate must be a date written YYYY-MM-DD (got "2025-02-30x")\n');
+
+      fs.writeFileSync(path.join(dir, "nowallets.toml"), 'fromDate = "2025-01-01"\n');
+      const noWallets = run(["--offline", "nowallets.toml"], dir);
+      assert.equal(noWallets.status, 1);
+      assert.equal(noWallets.stderr, "Error: Config: wallets must be a list of wallets (got undefined)\n");
 
       const missing = run(["--offline", "nope.toml"], dir);
       assert.equal(missing.status, 1);
