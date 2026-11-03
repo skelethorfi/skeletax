@@ -1,6 +1,8 @@
 import { parseArgs } from "node:util";
 import axios from "axios";
 import { StoreMissError } from "../sources/store/RecordStore.ts";
+import { FetchError } from "../sources/Retry.ts";
+import { InputError } from "../utils/InputError.ts";
 
 // The export command's arguments and how its errors are printed. A typo in a flag (e.g. --ofline) is an error,
 // not ignored: an ignored --offline would fetch from the network.
@@ -57,7 +59,8 @@ export function parseExportArgs(argv: string[]): ExportArgs {
   } catch (error: any) {
     const message = String(error?.message ?? error);
 
-    if (message.includes("'--replay")) {
+    // --replay with no value, or followed by another option; an unknown option such as --replays takes the path below
+    if (error?.code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE" && /^Option '--replay[ ']/.test(message)) {
       throw new UsageError("--replay needs a run folder");
     }
 
@@ -102,11 +105,23 @@ export function parseExportArgs(argv: string[]): ExportArgs {
   };
 }
 
-// The one line to print for an error the user can act on (a bad command line or config, something not stored,
-// a network or file error); undefined for anything else, a bug, which is printed with its stack
+// The one line to print for an error the user can act on (a bad command line, config or replayed run, something
+// not stored, a network or file error); undefined for anything else, a bug, which is printed with its stack. Each
+// kind is recognised by its class (or Node's errno fields), never by where it was thrown, so a TypeError while the
+// config is read is still a bug.
 export function knownErrorMessage(error: unknown): string | undefined {
-  if (error instanceof UsageError || error instanceof CliError || error instanceof StoreMissError) {
+  if (
+    error instanceof UsageError ||
+    error instanceof CliError ||
+    error instanceof InputError ||
+    error instanceof StoreMissError
+  ) {
     return error.message;
+  }
+
+  // A fetch that failed after its retries, wrapped with what was being fetched (e.g. a Midgard actions page)
+  if (error instanceof FetchError) {
+    return `Network error: ${error.message}`;
   }
 
   if (axios.isAxiosError(error)) {
@@ -131,17 +146,6 @@ export function knownErrorMessage(error: unknown): string | undefined {
   }
 
   return undefined;
-}
-
-// An error while reading the config or the replayed run's snapshots, before anything is fetched: the user's input,
-// so one line. A config that does not parse gets the file name, which the parser's message lacks.
-export function setupError(error: unknown, configFile: string): unknown {
-  if (!(error instanceof Error)) {
-    return error;
-  }
-
-  const unparsed = error instanceof SyntaxError || error.name === "SyntaxParseError";
-  return new CliError(unparsed ? `Config ${configFile}: ${error.message}` : error.message, { cause: error });
 }
 
 // Prints an error for the terminal: a usage mistake with the usage, a known error as one line, anything else (a

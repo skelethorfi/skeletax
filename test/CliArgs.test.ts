@@ -5,16 +5,12 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { AxiosError } from "axios";
-import {
-  CliError,
-  knownErrorMessage,
-  parseExportArgs,
-  printError,
-  setupError,
-  USAGE,
-  UsageError,
-} from "../src/cli/args.ts";
+import { CliError, knownErrorMessage, parseExportArgs, printError, USAGE, UsageError } from "../src/cli/args.ts";
 import { StoreMissError } from "../src/sources/store/RecordStore.ts";
+import { FetchError } from "../src/sources/Retry.ts";
+import { InputError } from "../src/utils/InputError.ts";
+import { TaxConfig } from "../src/config/TaxConfig.ts";
+import { SnapshotManifest } from "../src/sources/store/SnapshotManifest.ts";
 
 describe("parseExportArgs", () => {
   test("reads the config file and the flags", () => {
@@ -64,6 +60,11 @@ describe("parseExportArgs", () => {
     }
   });
 
+  test("an unknown option that starts with --replay is unknown, not a missing run folder", () => {
+    assert.throws(() => parseExportArgs(["--replays", "run", "w.toml"]), { message: "Unknown option '--replays'" });
+    assert.throws(() => parseExportArgs(["--replayx", "w.toml"]), { message: "Unknown option '--replayx'" });
+  });
+
   test("exactly one .toml or .json config file", () => {
     assert.throws(() => parseExportArgs([]), { message: "must specify config file" });
     assert.throws(() => parseExportArgs(["--offline"]), { message: "must specify config file" });
@@ -101,6 +102,8 @@ describe("knownErrorMessage", () => {
     assert.equal(knownErrorMessage(dns), "Network error: ENOTFOUND (https://x/v2/a)");
     const fetchFailed = new TypeError("fetch failed", { cause: Object.assign(new Error("x"), { code: "ECONNRESET" }) });
     assert.equal(knownErrorMessage(fetchFailed), "Network error: fetch failed (ECONNRESET)");
+    const page = new FetchError("[Midgard] actions of thor1w, page 0: ENOTFOUND");
+    assert.equal(knownErrorMessage(page), "Network error: [Midgard] actions of thor1w, page 0: ENOTFOUND");
   });
 
   test("anything else is a bug", () => {
@@ -109,13 +112,55 @@ describe("knownErrorMessage", () => {
   });
 });
 
-describe("setupError", () => {
-  test("an error reading the config is one line; a parse error names the file", () => {
-    const config = setupError(new Error('Config: referencePrices must be "all" or "swaps"'), "w.toml");
-    assert.ok(config instanceof CliError);
-    assert.equal((config as Error).message, 'Config: referencePrices must be "all" or "swaps"');
-    const parse = setupError(new SyntaxError("Unexpected token } in JSON"), "w.json") as Error;
-    assert.equal(parse.message, "Config w.json: Unexpected token } in JSON");
+describe("errors from the user's input", () => {
+  const today = new Date("2026-10-30T00:00:00Z");
+  const inTemp = (name: string, content: string, check: (file: string) => void) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "skeletax-input-"));
+
+    try {
+      fs.writeFileSync(path.join(dir, name), content);
+      check(path.join(dir, name));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  test("a config that does not parse is an InputError naming the file", () => {
+    inTemp("w.json", "{ wallets: }", (file) => {
+      assert.throws(
+        () => TaxConfig.load(file, today),
+        (error: any) => {
+          assert.ok(error instanceof InputError);
+          assert.ok(error.message.startsWith(`Config ${file}: `));
+          assert.equal(knownErrorMessage(error), error.message);
+          return true;
+        },
+      );
+    });
+    inTemp("w.toml", "wallets = [", (file) => {
+      assert.throws(
+        () => TaxConfig.load(file, today),
+        (error: any) => error instanceof InputError,
+      );
+    });
+  });
+
+  test("a config value that is not valid is an InputError", () => {
+    assert.throws(
+      () => TaxConfig.applyDefaults({ referencePrices: "some" as any }, today),
+      (error: any) => error instanceof InputError && /^Config: referencePrices/.test(error.message),
+    );
+    assert.throws(
+      () => TaxConfig.applyDefaults({ timezone: "Nowhere/City" }, today),
+      (error: any) => error instanceof InputError && /^Config: Unknown timezone/.test(error.message),
+    );
+  });
+
+  test("a replayed run with no readable manifest is an InputError", () => {
+    assert.throws(() => SnapshotManifest.load(path.join(os.tmpdir(), "no-such-run-folder")), InputError);
+    inTemp("snapshots.json", "{", (file) => {
+      assert.throws(() => SnapshotManifest.load(file), InputError);
+    });
   });
 });
 
@@ -142,6 +187,12 @@ describe("printError", () => {
     const { code, text } = print(new Error("boom"));
     assert.equal(code, 1);
     assert.match(text, /^Error: boom\n\s+at /);
+  });
+
+  // Nothing wraps the errors thrown while the config and store are set up, so a bug there keeps its stack too
+  test("a TypeError is a bug, with its stack", () => {
+    const { text } = print(new TypeError("Cannot read properties of undefined (reading 'map')"));
+    assert.match(text, /^TypeError: Cannot read properties of undefined \(reading 'map'\)\n\s+at /);
   });
 });
 

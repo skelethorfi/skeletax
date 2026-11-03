@@ -6,6 +6,8 @@ import path from "path";
 import { http } from "../src/sources/http.ts";
 import { RecordStore } from "../src/sources/store/RecordStore.ts";
 import { MidgardService } from "../src/sources/thorchain/MidgardService.ts";
+import { FetchError } from "../src/sources/Retry.ts";
+import { knownErrorMessage } from "../src/cli/args.ts";
 
 const midgard = () =>
   new MidgardService(
@@ -155,7 +157,19 @@ describe("Midgard actions list (cursor paging)", () => {
     mock.timers.enable({ apis: ["setTimeout"] });
     const get = fakeMidgard(actions(120), { fail: (url) => url.includes("nextPageToken") });
 
-    await assert.rejects(settle(midgard().getActions("thor1w")), /actions of thor1w, page 1: 503/);
+    await assert.rejects(settle(midgard().getActions("thor1w")), /actions of thor1w, page 1: HTTP 503/);
     assert.deepEqual(tokens(get), [null, ...Array(4).fill("283844929000000123")]);
+  });
+
+  // The command prints it as one line, a network error, not as a bug with its stack
+  test("a failed page is a FetchError, named by its code", async () => {
+    mock.method(http, "get", async () => {
+      throw Object.assign(new Error("getaddrinfo ENOTFOUND midgard"), { code: "ENOTFOUND" });
+    });
+    mock.timers.enable({ apis: ["setTimeout"] });
+    const error = await settle(midgard().getActions("thor1w")).catch((error) => error);
+
+    assert.ok(error instanceof FetchError);
+    assert.equal(knownErrorMessage(error), "Network error: [Midgard] actions of thor1w, page 0: ENOTFOUND");
   });
 });

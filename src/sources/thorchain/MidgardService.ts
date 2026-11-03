@@ -11,7 +11,7 @@ import {
   type RunePrice,
 } from "../store/Sources.ts";
 import { type Action, Configuration, DefaultApi } from "@xchainjs/xchain-midgard";
-import { withRetry } from "../Retry.ts";
+import { FetchError, withRetry } from "../Retry.ts";
 import { API_URLS } from "../../config/apiUrls.ts";
 import { http } from "../http.ts";
 import { checksumAddress, isEvmAddress } from "../../utils/Address.ts";
@@ -254,13 +254,13 @@ export class MidgardService {
       try {
         data = (await withRetry(() => http.get(url), `${this.source} actions page ${page}`)).data;
       } catch (error: any) {
-        // A plain error (no status, code or cause), which withRetry does not retry again
-        const reason = error?.response?.status ?? error?.code ?? error?.message;
-        throw new Error(`[Midgard] actions of ${address}, page ${page}: ${reason}`);
+        const status = error?.response?.status;
+        const reason = status ? `HTTP ${status}` : (error?.code ?? error?.cause?.code ?? error?.message);
+        throw new FetchError(`[Midgard] actions of ${address}, page ${page}: ${reason}`);
       }
 
       if (!Array.isArray(data?.actions)) {
-        throw new Error(`[Midgard] actions of ${address}, page ${page}: no actions in the answer`);
+        throw new FetchError(`[Midgard] actions of ${address}, page ${page}: no actions in the answer`);
       }
 
       const pageActions: Action[] = data.actions;

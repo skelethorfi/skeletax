@@ -3,7 +3,7 @@ import { format } from "date-fns-tz";
 import { Exporter, NOT_FETCHED_FILE } from "./cli/Exporter.ts";
 import { oldCacheHint } from "./cli/store.ts";
 import { SUMMARY_FILE } from "./cli/RunSummary.ts";
-import { parseExportArgs, printError, setupError, USAGE } from "./cli/args.ts";
+import { parseExportArgs, printError, USAGE } from "./cli/args.ts";
 
 async function main(argv: string[]): Promise<number> {
   const { help, configFile, offline, fetch, replay } = parseExportArgs(argv);
@@ -21,13 +21,7 @@ async function main(argv: string[]): Promise<number> {
   const timestamp = format(now, "yyyy-MM-dd_HH-mm-ss");
 
   // Read config
-  let exporter: Exporter;
-
-  try {
-    exporter = new Exporter(configFile, { offline, fetch, replay, today: now });
-  } catch (error) {
-    throw setupError(error, configFile);
-  }
+  const exporter = new Exporter(configFile, { offline, fetch, replay, today: now });
 
   const outputPath = path.join(exporter.config.outputPath, timestamp);
   const storePath = exporter.config.storePath;

@@ -39,3 +39,13 @@ export async function withRetry<T>(
     }
   }
 }
+
+// A fetch that failed after withRetry's retries (or with an error it does not retry), told in its message. It has no
+// status, code or cause, so an outer withRetry does not retry it again; the command prints it as one line, a
+// network error (src/cli/args.ts).
+export class FetchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FetchError";
+  }
+}
