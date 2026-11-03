@@ -3164,7 +3164,15 @@ test("ignoreImportLegs: one side of a transfer alone is refused; both sides, or 
     legs: [out, made],
     config: { ...CONFIG, ignoreImportLegs: [entry("out"), entry("in")] },
   }).plan;
-  assert.equal(both.ignore?.length, 2);
+  assert.deepEqual(
+    both.ignore?.map((e) => e.changes.map((c) => [c.legId, c.desired])),
+    [
+      [
+        ["out", "ignoreOut"],
+        ["in", "ignoreIn"],
+      ],
+    ],
+  );
   const add = ownLeg({ legId: "add", quantity: 2, trade: "addLiquidity", actionId: "lp" });
   const extra = ownLeg({ legId: "extra", quantity: 1, trade: "addLiquidity", actionId: "lp" });
   const fee = ownLeg({ legId: "fee", quantity: 1, side: "fees", trade: "fee", actionId: "lp" });
@@ -3222,5 +3230,35 @@ test("ignoreImportLegs: plan.md lists the legs to ignore", () => {
   assert.match(
     renderPlan(p, "snap", "run"),
     /## Ignore \(Summ's import legs named in ignoreImportLegs\) \(1\)[\s\S]*\| dup \| trade \| out \| ignoreOut \|/,
+  );
+});
+
+test("ignoreImportLegs: a duplicate and its made-up deposit plan beside the row that categorises the real leg", () => {
+  const r = btcRow({ type: "bridge-trade-out", baseAmount: "0.21", feeAmount: "0.00007212" });
+  const real = ownLeg({ legId: "real", quantity: 0.21, actionId: "r" });
+  const fee = ownLeg({ legId: "fee", quantity: 0.00007212, side: "fees", trade: "fee", actionId: "r" });
+  const dup = ownLeg({ legId: "dup", quantity: 0.21007212, actionId: "d" });
+  const made = ownLeg({
+    legId: "made",
+    quantity: 0.21007212,
+    side: "incoming",
+    trade: "deposit",
+    importType: "soft-transfer",
+    source: "manual",
+    actionId: "d",
+  });
+  const legs = [real, fee, dup, made];
+  const without = plan({ rows: [r], legs }).plan;
+  assert.deepEqual(without.categorise[0].ignore, ["made"]);
+  const ignoreImportLegs = [
+    { legId: "dup", currency: "BTC", quantity: 0.21007212, reason: "duplicate" },
+    { legId: "made", currency: "BTC", quantity: 0.21007212, reason: "made up for it" },
+  ];
+  const p = plan({ rows: [r], legs, config: { ...CONFIG, ignoreImportLegs } }).plan;
+  assert.equal(p.categorise[0].ignore, undefined);
+  assert.equal(p.categorise[0].changes[0].legId, "real");
+  assert.deepEqual(
+    p.ignore?.map((e) => [e.actionId, e.changes.map((c) => c.legId)]),
+    [["d", ["dup", "made"]]],
   );
 });

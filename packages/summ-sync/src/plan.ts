@@ -960,7 +960,11 @@ export function makePlan(input: PlanInput): PlanResult {
   const ownLegs = input.legs.filter(
     (l) => !managedSources.has(l.source) && l.importType !== "manual" && l.importType !== SOFT_TRANSFER,
   );
-  const softLegs = input.legs.filter((l) => l.importType === SOFT_TRANSFER && !IGNORED.has(l.trade));
+  // A made-up leg the user named to ignore is ignored by that entry, not as the other side of a categorised row
+  const namedToIgnore = new Set(config.ignoreImportLegs.map((m) => m.legId));
+  const softLegs = input.legs.filter(
+    (l) => l.importType === SOFT_TRANSFER && !IGNORED.has(l.trade) && !namedToIgnore.has(l.legId),
+  );
   const feeLegsOf = (leg: Leg) =>
     (legsByAction.get(leg.actionId) ?? []).filter((l) => l.side === "fees" && l.id === leg.id);
   /** The fee Summ keeps on the leg itself when the action has no fee leg for it (Binance Chain imports whose fee leg
@@ -1623,21 +1627,31 @@ export function makePlan(input: PlanInput): PlanResult {
       plan.notes.push(`ignoreImportLegs: leg ${m.legId} is ignored already: remove its line`);
       continue;
     }
+    // The legs of one action go in one edit, so both sides of a transfer are ignored together or not at all
+    const change: Change = {
+      leg: "base",
+      legId: leg.legId,
+      field: "trade",
+      summ: leg.trade,
+      desired: leg.side === "incoming" ? "ignoreIn" : "ignoreOut",
+    };
+    const txids = TXID.test(txid) ? [txid.replace(/^0x/, "").toLowerCase()] : [];
+    const same = ignore.find((e) => e.actionId === leg.actionId);
+    if (same) {
+      same.id = `${same.id}, ${leg.legId}`;
+      same.changes.push(change);
+      same.filed ||= isFiled(leg.timestamp);
+      const all = [...new Set([...(same.txids ?? []), ...txids])];
+      if (all.length) same.txids = all;
+      continue;
+    }
     ignore.push({
-      id: `leg ${leg.legId}`,
+      id: `legs ${leg.legId}`,
       filed: isFiled(leg.timestamp),
       actionId: leg.actionId,
       // Apply checks again that no manual entry names it
-      ...(TXID.test(txid) ? { txids: [txid.replace(/^0x/, "").toLowerCase()] } : {}),
-      changes: [
-        {
-          leg: "base",
-          legId: leg.legId,
-          field: "trade",
-          summ: leg.trade,
-          desired: leg.side === "incoming" ? "ignoreIn" : "ignoreOut",
-        },
-      ],
+      ...(txids.length ? { txids } : {}),
+      changes: [change],
     });
   }
   if (ignore.length) {

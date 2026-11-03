@@ -737,9 +737,7 @@ since it may have been made before the error):
    action go in one `edit_transaction`. A price change sends `price` with
    `priceValueCurrency: "USD"`. An entry with a `match` then makes its second edit
    (Classifying below), read and written as an edit of its own.
-   Then the legs of the plan's `ignore` section, each as an edit of its type (entry `ignore-<i>`), waiting for no
-   upload.
-   \1, waiting a few seconds for Summ to
+   Then each made-up leg of the row is read by its id, waiting a few seconds for Summ to
    split it off, and ignored by its action id, only when that action holds nothing else.
    Already ignored: done. Gone: done if this plan logged its ignore, otherwise stop. No
    longer a made-up leg: stop. Still sharing: left as it is, reported in the run's output, and logged
@@ -750,6 +748,8 @@ since it may have been made before the error):
    seen, as the range's limits say. Older `skip` lines name no leg and are not reported. An undo handle cannot be relied on to back
    out of this: once Summ re-pairs the categorised leg with another (e.g. an uploaded
    bridge-trade-in), the edit's handle is stale.
+   After the edits and categorisation, the entries of the plan's `ignore` section (`ignore-<i>`), each the legs of one
+   action named in `ignoreImportLegs`, as one edit of their types; they wait for no upload.
 5. Only when every entry is done: add the plan's adoptions and captures to the tables
    (idempotent), log `apply-stop` with `reason: complete`, and print the upload files,
    unless a row in them waits on a delete (Uploads below).
@@ -824,11 +824,10 @@ row. A leg the user decides should not count, such as one an import holds twice,
     "ignoreImportLegs": [{ "legId": "<leg>", "currency": "BTC", "quantity": 0.1, "reason": "<why>" }]
 
 Plan refuses a named leg of a managed source or a manual entry, one whose currency or amount differ, one in both this list and `deleteManualEntries`, one another entry of the plan changes (or a delete ignores beside it), one a run row stands on (held or not: ignoring it would drop the row's disposal or receipt), one with a manual entry in its action or naming its tx (the user's pairing), and one whose action holds another side, not a fee and not ignored, that is not named too (it would count alone). Pull reads a named leg's action. A leg not in
-the snapshot, or already ignored, gives a note, so its line can be removed. Each other named leg is an entry in the
-plan's `ignore` section, whatever `--only` says (a note says so): its type set to `ignoreIn` (incoming) or `ignoreOut`
+the snapshot, or already ignored, gives a note, so its line can be removed. The other named legs of one action are one entry in the plan's `ignore` section, so both sides of a transfer are ignored in one edit, whatever `--only` says (a note says so): its type set to `ignoreIn` (incoming) or `ignoreOut`
 (outgoing or fee). It is filed by the leg's time. Apply runs it as any edit (fresh read, other legs unchanged, the
 journal, read back) after the edits, and it waits for no upload. `verify` checks it like an edit. Ignoring a leg moves
-no value of it: Summ stops counting it, so a disposal it was is gone; a transfer is ignored on both sides or not at all. Once ignored, a duplicate is no longer one of the legs that fit a row, so the one left is the row's.
+no value of it: Summ stops counting it, so a disposal it was is gone; a transfer is ignored on both sides or not at all. Once ignored, a duplicate is no longer one of the legs that fit a row, so when two fit the row's amount, the one left is the row's. A made-up leg named here is left out of a categorised row's made-up legs.
 
 **Manual entries.** Before a delete entry's split, and before the reads that agree on its
 delete, apply lists the actions holding a manual entry (`importType` filter, every page) and reads
