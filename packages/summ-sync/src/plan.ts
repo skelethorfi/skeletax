@@ -1020,11 +1020,14 @@ export function makePlan(input: PlanInput): PlanResult {
     // Summ may hold the tx twice (a later import of the wallet, with the gas inside the amount): the leg with the
     // row's shape is the row's, the other reported
     const best = found.length > 1 ? bestShape(row, found) : undefined;
+    // An import's duplicate the user ignored leaves one leg that fits
+    const live = found.filter((l) => !IGNORED.has(l.trade));
     if (found.length === 1) claim(row, found[0]);
     else if (best) {
       claim(row, best);
       duplicates.push({ row, best, others: found.filter((l) => l !== best && !IGNORED.has(l.trade)) });
-    } else if (found.length === 0 && withTxid.length === 1) byTxid.push([row, withTxid[0]]);
+    } else if (found.length > 1 && live.length === 1) claim(row, live[0]);
+    else if (found.length === 0 && withTxid.length === 1) byTxid.push([row, withTxid[0]]);
     // A gas the user split off the leg by hand and ignored: the legs together hold the row's amount, and the one
     // not ignored is the row's
     else if (found.length === 0 && isHandSplit(withTxid, amount, gross))
@@ -1553,7 +1556,11 @@ export function makePlan(input: PlanInput): PlanResult {
   // ---- Import legs the user named to ignore: whatever the scope, as for deleteManualEntries. A wrong or changed entry
   // stops the plan: the user named something else
   const planned = new Set([
-    ...plan.delete.flatMap((d) => d.legIds),
+    ...plan.delete.flatMap((d) => [
+      ...d.legIds,
+      // The made-up legs beside a delete, which apply ignores with it
+      ...(d.others ?? []).filter((o) => o.importType === "soft-transfer").map((o) => o.legId),
+    ]),
     ...[...plan.edit, ...plan.categorise].flatMap((e) => [
       ...e.changes.map((c) => c.legId),
       ...(e.ignore ?? []),
@@ -1561,6 +1568,8 @@ export function makePlan(input: PlanInput): PlanResult {
     ]),
   ]);
   const ignore: EditEntry[] = [];
+  const toIgnore = new Set(config.ignoreImportLegs.map((m) => m.legId));
+  const manualLegs = input.legs.filter((l) => l.importType === "manual");
   for (const m of config.ignoreImportLegs) {
     const leg = input.legs.find((l) => l.legId === m.legId);
     if (!leg) {
@@ -1580,14 +1589,46 @@ export function makePlan(input: PlanInput): PlanResult {
       );
     }
     if (planned.has(m.legId)) throw new Error(`ignoreImportLegs: leg ${m.legId} is also in this plan's other entries`);
+    // A run row stands on it (held or not): ignoring it would drop the row's own disposal or receipt
+    if (legClaims.has(m.legId)) {
+      throw new Error(`ignoreImportLegs: leg ${m.legId} is the leg of run row ${legClaims.get(m.legId)?.join(", ")}`);
+    }
+    const txid = normaliseTxid(leg.id);
+    const mates = (legsByAction.get(leg.actionId) ?? []).filter((l) => l.legId !== leg.legId);
+    // The user's own pairing: as anywhere else, a manual entry beside it or naming its tx is theirs to resolve
+    const manual = [
+      ...mates.filter((l) => l.importType === "manual"),
+      ...(TXID.test(txid) ? manualLegs.filter((l) => txidsNamedBy(l).includes(txid)) : []),
+    ];
+    if (manual.length) {
+      throw new Error(
+        `ignoreImportLegs: leg ${m.legId} has a manual entry beside it or naming its tx (${manual.map((l) => `${l.quantity} ${l.currency}`).join(", ")}): resolve that in Summ, or name it in deleteManualEntries`,
+      );
+    }
+    // Ignoring one side of a transfer leaves the other counted alone, as a lone send or receive
+    const partner = mates.filter(
+      (l) =>
+        l.side !== "fees" &&
+        leg.side !== "fees" &&
+        l.side !== leg.side &&
+        !IGNORED.has(l.trade) &&
+        !toIgnore.has(l.legId),
+    );
+    if (partner.length) {
+      throw new Error(
+        `ignoreImportLegs: leg ${m.legId} has another side in its action (${partner.map((l) => `${l.trade} ${l.quantity} ${l.currency}, leg ${l.legId}`).join("; ")}), which would count alone: name it too`,
+      );
+    }
     if (IGNORED.has(leg.trade)) {
       plan.notes.push(`ignoreImportLegs: leg ${m.legId} is ignored already: remove its line`);
       continue;
     }
     ignore.push({
-      id: `ignore ${leg.legId}`,
+      id: `leg ${leg.legId}`,
       filed: isFiled(leg.timestamp),
       actionId: leg.actionId,
+      // Apply checks again that no manual entry names it
+      ...(TXID.test(txid) ? { txids: [txid.replace(/^0x/, "").toLowerCase()] } : {}),
       changes: [
         {
           leg: "base",
