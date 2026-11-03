@@ -84,6 +84,8 @@ the cost bases of later disposals, in later years and the current one.
   `apply` adds them to `adopted.csv` and `overrides.json`, where overrides
   win over the run while `retainUserEdit` is `undecided` (listed on every
   plan) or `yes`; set it to `no` to have the plan set the run's value back.
+  A leg of Summ's own import that should not count (an import's duplicate) is named in `ignoreImportLegs` (leg,
+  currency, quantity, reason) to have the plan set it to ignored.
   A manual entry holds its event until you resolve it in Summ, or name it in `deleteManualEntries` in
   `summ-sync.json` (leg, currency, quantity, reason) to have the plan delete it, which Summ cannot undo.
   With `--only <scope file>`, the plan covers only the rows the file's

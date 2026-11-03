@@ -23,6 +23,8 @@ export interface Config {
   deleteManualEntries: DeleteManualEntry[];
   /** Decisions of a plan the user has read and goes ahead with, by key. */
   accept: Accept[];
+  /** Legs of Summ's own imports the user has decided to ignore (e.g. an import's duplicates): planned as an edit. */
+  ignoreImportLegs: IgnoreImportLeg[];
   /** The first day of the tax year (MM-DD): figures needs it, with no default to mislabel every year. */
   taxYearStart: string | null;
 }
@@ -38,6 +40,14 @@ export interface Accept {
 
 /** A held row by its ID, or every row naming a txid. */
 export type Hold = ({ id: string; txid?: undefined } | { txid: string; id?: undefined }) & { reason: string };
+
+/** An import's leg by its id, with what it must still hold, so a leg that changed or a wrong id stops the plan. */
+export interface IgnoreImportLeg {
+  legId: string;
+  currency: string;
+  quantity: number;
+  reason: string;
+}
 
 /** A manual entry by its leg, with what it must still hold, so an entry that changed or a wrong id stops the plan. */
 export interface DeleteManualEntry {
@@ -57,6 +67,7 @@ export const DEFAULTS: Config = {
   hold: [],
   deleteManualEntries: [],
   accept: [],
+  ignoreImportLegs: [],
   taxYearStart: null,
 };
 
@@ -107,13 +118,37 @@ export function parseConfig(text: string): Config {
   ) {
     throw new Error('summ-sync.json: accept must be a list of {"key": "<decision key>", "reason": "<why>"}');
   }
-  const unfinished = [...config.hold, ...config.deleteManualEntries, ...config.accept].filter(
-    (e) => e.reason.trim() === WHY,
-  );
+  if (
+    !Array.isArray(config.ignoreImportLegs) ||
+    !config.ignoreImportLegs.every(
+      (m) =>
+        typeof m?.legId === "string" &&
+        m.legId !== "" &&
+        typeof m.currency === "string" &&
+        m.currency !== "" &&
+        typeof m.quantity === "number" &&
+        typeof m.reason === "string" &&
+        m.reason.trim() !== "",
+    )
+  ) {
+    throw new Error(
+      'summ-sync.json: ignoreImportLegs must be a list of {"legId": "<leg>", "currency": "<symbol>", "quantity": <number>, "reason": "<why>"}',
+    );
+  }
+  const unfinished = [
+    ...config.hold,
+    ...config.deleteManualEntries,
+    ...config.accept,
+    ...config.ignoreImportLegs,
+  ].filter((e) => e.reason.trim() === WHY);
   if (unfinished.length)
     throw new Error(`summ-sync.json: ${unfinished.length} entries still say ${WHY}: write the reason`);
   const named = config.deleteManualEntries.map((m) => m.legId);
   if (new Set(named).size !== named.length) throw new Error("summ-sync.json: deleteManualEntries names a leg twice");
+  const ignored = config.ignoreImportLegs.map((m) => m.legId);
+  if (new Set(ignored).size !== ignored.length) throw new Error("summ-sync.json: ignoreImportLegs names a leg twice");
+  if (ignored.some((id) => named.includes(id)))
+    throw new Error("summ-sync.json: a leg is in both deleteManualEntries and ignoreImportLegs");
   if (config.filedBefore !== null && !/^\d{4}-\d{2}-\d{2}$/.test(config.filedBefore)) {
     throw new Error("summ-sync.json: filedBefore must be a date (YYYY-MM-DD) or null");
   }

@@ -24,6 +24,7 @@ test("a config overrides the defaults it names", () => {
     keepExtra: [],
     hold: [],
     deleteManualEntries: [],
+    ignoreImportLegs: [],
     accept: [],
     taxYearStart: null,
   });
@@ -66,4 +67,18 @@ test("deleteManualEntries needs a leg, currency, quantity and reason", () => {
 test("deleteManualEntries may not name a leg twice", () => {
   const entry = { legId: "l", currency: "BTC", quantity: 1, reason: "why" };
   assert.throws(() => parseConfig(JSON.stringify({ deleteManualEntries: [entry, entry] })), /names a leg twice/);
+});
+
+test("ignoreImportLegs needs a leg, currency, quantity and reason, once, and not in deleteManualEntries too", () => {
+  const entry = { legId: "l", currency: "BTC", quantity: 1, reason: "duplicate" };
+  assert.deepEqual(parseConfig(JSON.stringify({ ignoreImportLegs: [entry] })).ignoreImportLegs, [entry]);
+  for (const bad of [{ ...entry, legId: "" }, { ...entry, quantity: "1" }, { ...entry, reason: " " }, { legId: "l" }]) {
+    assert.throws(() => parseConfig(JSON.stringify({ ignoreImportLegs: [bad] })), /ignoreImportLegs must be/);
+  }
+  assert.throws(() => parseConfig(JSON.stringify({ ignoreImportLegs: [entry, entry] })), /names a leg twice/);
+  assert.throws(
+    () => parseConfig(JSON.stringify({ ignoreImportLegs: [entry], deleteManualEntries: [entry] })),
+    /both deleteManualEntries and ignoreImportLegs/,
+  );
+  assert.throws(() => parseConfig(JSON.stringify({ ignoreImportLegs: [{ ...entry, reason: "<why>" }] })), /<why>/);
 });

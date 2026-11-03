@@ -848,3 +848,11 @@ test("a delete's made-up leg left in place that Summ then re-types is reported",
     ["m"],
   );
 });
+
+test("an ignore entry that ran lands like an edit, and explains its leg's type", () => {
+  const p = plan({ ignore: [edit("d", "trade", "out", "ignoreOut", { id: "ignore d" })] });
+  const lines = [start, log({ entry: "ignore-0", legId: "d", field: "trade" }), done];
+  const v = run([leg("d", { trade: "out" })], [leg("d", { trade: "ignoreOut" })], p, lines);
+  assert.equal(stateOf(v, "ignore-0"), "landed");
+  assert.deepEqual(v.changed, []);
+});

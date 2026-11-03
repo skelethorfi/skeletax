@@ -394,6 +394,23 @@ test("a manual entry the config names has its action read, though nothing else n
     assert.ok(readSnapshot(file).legs.some((l) => l.legId === "made"));
   }));
 
+test("an import leg the config names to ignore has its action read, though nothing else needs it", () =>
+  quiet(async () => {
+    const stateDir = stateDirOf();
+    writeFileSync(
+      join(stateDir, "summ-sync.json"),
+      JSON.stringify({
+        managedSources: ["csv-source"],
+        ignoreImportLegs: [{ legId: "dup", currency: "AAA", quantity: 1, reason: "why" }],
+      }),
+    );
+    const { client, state } = fakeSumm(["a", "b"], { a: [], b: [{ _id: "dup", quantity: 1 }] });
+    state.sourceIds = ["a"];
+    state.holders = { dup: "b" };
+    const file = await pull(stateDir, undefined, { client, now: T0 });
+    assert.ok(readSnapshot(file).legs.some((l) => l.legId === "dup"));
+  }));
+
 test("a made-up leg an apply left in place has its action read, so plan can see it; a leg gone is not an error", () =>
   quiet(async () => {
     const stateDir = stateDirOf();

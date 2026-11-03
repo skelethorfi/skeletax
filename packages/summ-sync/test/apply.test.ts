@@ -909,3 +909,66 @@ test("an edit logs one price intent however many other fields it changes, read b
     ["trade", "quantity", "price"],
   );
 });
+
+test("an ignore entry sets the leg's type in its current action, and waits for no upload", async () => {
+  const summ = new FakeSumm();
+  summ.add("current-action", [{ _id: "leg-1", trade: "out", quantity: "1" }]);
+  const ignore = edit({
+    id: "ignore leg-1",
+    changes: [{ leg: "base", legId: "leg-1", field: "trade", summ: "out", desired: "ignoreOut" }],
+  });
+  const { result, log } = await run(
+    summ,
+    planFile({ ignore: [ignore], upload: [{ file: "f.csv", filed: false, ids: ["x"] }] }),
+  );
+  assert.equal(result.edited, 1);
+  const call = summ.calls.find((c) => c.name === "edit_transaction");
+  assert.deepEqual(call?.args, {
+    actionId: "current-action",
+    edits: [{ transactionId: "leg-1", updates: { trade: "ignoreOut" } }],
+  });
+  const line = log.find((l) => l.legId === "leg-1" && !l.intent);
+  assert.deepEqual([line?.kind, line?.entry, line?.field, line?.value], ["ignore", "ignore-0", "trade", "ignoreOut"]);
+});
+
+test("an ignore entry of a filed year waits for --approve-filed, and one done already is found", async () => {
+  const summ = new FakeSumm();
+  summ.add("current-action", [{ _id: "leg-1", trade: "ignoreOut", quantity: "1" }]);
+  const ignore = edit({
+    id: "ignore leg-1",
+    filed: true,
+    changes: [{ leg: "base", legId: "leg-1", field: "trade", summ: "out", desired: "ignoreOut" }],
+  });
+  const skipped = await run(summ, planFile({ ignore: [ignore] }));
+  assert.equal(skipped.result.edited + skipped.result.found, 0);
+  const found = await run(summ, planFile({ ignore: [ignore] }), { approveFiled: true });
+  assert.equal(found.result.found, 1);
+  assert.equal(summ.calls.filter((c) => c.name === "edit_transaction").length, 0);
+});
+
+test("an ignore entry of two legs of one action makes one edit, and a run again finds it done", async () => {
+  const summ = new FakeSumm();
+  summ.add("d", [
+    { _id: "dup", trade: "withdrawal", quantity: "1" },
+    { _id: "made", trade: "deposit", quantity: "1" },
+  ]);
+  const ignore = edit({
+    id: "legs dup, made",
+    actionId: "d",
+    changes: [
+      { leg: "base", legId: "dup", field: "trade", summ: "withdrawal", desired: "ignoreOut" },
+      { leg: "base", legId: "made", field: "trade", summ: "deposit", desired: "ignoreIn" },
+    ],
+  });
+  const first = await run(summ, planFile({ ignore: [ignore] }));
+  assert.equal(first.result.edited, 1);
+  const calls = summ.calls.filter((c) => c.name === "edit_transaction");
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].args.edits, [
+    { transactionId: "dup", updates: { trade: "ignoreOut" } },
+    { transactionId: "made", updates: { trade: "ignoreIn" } },
+  ]);
+  const again = await run(summ, planFile({ ignore: [ignore] }));
+  assert.equal(again.result.found, 1);
+  assert.equal(summ.calls.filter((c) => c.name === "edit_transaction").length, 1);
+});

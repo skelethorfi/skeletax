@@ -245,8 +245,8 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
     const chosen = flags.approveDeletes && d.filed === flags.approveFiled;
     entries.push({ key, state: stateOf(problems, key, chosen, false), problems, rates: [] });
   }
-  for (const kind of ["edit", "categorise"] as const) {
-    for (const [i, e] of plan[kind].entries()) {
+  for (const kind of ["edit", "categorise", "ignore"] as const) {
+    for (const [i, e] of (plan[kind] ?? []).entries()) {
       const key = `${kind}-${i}`;
       const rates: string[] = [];
       const problems = e.changes.flatMap((c) => changeProblem(c, rates) ?? []);
@@ -292,8 +292,8 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
     explained.add(`${legId}|${field}`);
     touched.add(legId);
   };
-  for (const kind of ["edit", "categorise"] as const) {
-    for (const [i, e] of plan[kind].entries()) {
+  for (const kind of ["edit", "categorise", "ignore"] as const) {
+    for (const [i, e] of (plan[kind] ?? []).entries()) {
       const key = `${kind}-${i}`;
       if (!ranLines(key).length) continue;
       for (const c of e.changes) explain(c.legId, c.field);

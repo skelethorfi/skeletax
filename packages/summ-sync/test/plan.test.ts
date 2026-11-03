@@ -3017,3 +3017,248 @@ test("plan.md leads with what the deletes leave behind", () => {
   assert.ok(text.indexOf("## Decisions") < text.indexOf("## Delete"));
   assert.ok(!renderPlan(plan({}).plan, "snap", "run").includes("## Decisions"));
 });
+
+test("ignoreImportLegs: a named import leg is set to ignored, by its side, filed by its time, and listed as decided", () => {
+  const out = ownLeg({ legId: "dup-out", quantity: 0.5, trade: "out", actionId: "a1" });
+  const fee = ownLeg({ legId: "dup-fee", quantity: 0.0001, side: "fees", trade: "fee", actionId: "a2" });
+  const made = ownLeg({
+    legId: "dup-in",
+    quantity: 0.5,
+    side: "incoming",
+    trade: "deposit",
+    importType: "soft-transfer",
+    source: "manual",
+    actionId: "a3",
+  });
+  const old = ownLeg({
+    legId: "old",
+    quantity: 0.2,
+    trade: "out",
+    timestamp: "2020-01-01T00:00:00.000Z",
+    actionId: "a4",
+  });
+  const ignoreImportLegs = [
+    { legId: "dup-out", currency: "BTC", quantity: 0.5, reason: "an import's duplicate" },
+    { legId: "dup-fee", currency: "BTC", quantity: 0.0001, reason: "fee counted twice" },
+    { legId: "dup-in", currency: "BTC", quantity: 0.5, reason: "made up for the duplicate" },
+    { legId: "old", currency: "BTC", quantity: 0.2, reason: "filed" },
+  ];
+  const p = plan({
+    rows: [],
+    legs: [out, fee, made, old],
+    config: { ...CONFIG, filedBefore: "2021-01-01", ignoreImportLegs },
+  }).plan;
+  assert.deepEqual(
+    p.ignore?.map((e) => [e.changes[0].legId, e.changes[0].summ, e.changes[0].desired, e.filed, e.actionId]),
+    [
+      ["dup-out", "out", "ignoreOut", false, "a1"],
+      ["dup-fee", "fee", "ignoreOut", false, "a2"],
+      ["dup-in", "deposit", "ignoreIn", false, "a3"],
+      ["old", "out", "ignoreOut", true, "a4"],
+    ],
+  );
+  assert.equal(p.counts.ignore, 4);
+  assert.ok(p.decided?.some((d) => d.what.includes("leg dup-out") && d.reason === "an import's duplicate"));
+});
+
+test("ignoreImportLegs: a wrong or changed entry stops the plan; one gone or already ignored is noted", () => {
+  const leg = ownLeg({ legId: "dup", quantity: 1, trade: "out" });
+  const entry = { legId: "dup", currency: "BTC", quantity: 1, reason: "why" };
+  const run = (legs: Leg[], over = {}) =>
+    plan({ rows: [], legs, config: { ...CONFIG, ignoreImportLegs: [{ ...entry, ...over }] } }).plan;
+  assert.throws(() => run([leg], { quantity: 2 }), /config says 2/);
+  assert.throws(() => run([leg], { currency: "ETH" }), /config says 1 ETH/);
+  assert.throws(() => run([{ ...leg, source: "csv-source" }]), /not an import's leg/);
+  assert.throws(() => run([{ ...leg, importType: "manual" }]), /not an import's leg/);
+  assert.match(run([]).notes.join(), /leg dup is not in the snapshot/);
+  const ignored = run([{ ...leg, trade: "ignoreOut" }]);
+  assert.equal(ignored.ignore, undefined);
+  assert.match(ignored.notes.join(), /leg dup is ignored already/);
+});
+
+test("ignoreImportLegs: a leg another entry of the plan changes stops the plan", () => {
+  const r = btcRow({ type: "bridge-trade-out" });
+  const legs = [ownLeg({ legId: "own", quantity: 0.0101 })];
+  const ignoreImportLegs = [{ legId: "own", currency: "BTC", quantity: 0.0101, reason: "why" }];
+  assert.ok(plan({ rows: [r], legs }).plan.categorise.length > 0);
+  assert.throws(
+    () => plan({ rows: [r], legs, config: { ...CONFIG, ignoreImportLegs } }),
+    /also in this plan's other entries/,
+  );
+});
+
+test("ignoreImportLegs: a scoped plan keeps a named leg whatever the scope says, and says so", () => {
+  const leg = ownLeg({ legId: "dup", quantity: 1, trade: "out" });
+  const p = plan({
+    rows: [],
+    legs: [leg],
+    config: { ...CONFIG, ignoreImportLegs: [{ legId: "dup", currency: "BTC", quantity: 1, reason: "why" }] },
+    scope: ["nothing-like-it"],
+  }).plan;
+  assert.equal(p.ignore?.length, 1);
+  assert.match(p.notes.join(), /ignored whatever the scope/);
+});
+
+test("ignoreImportLegs: a leg a run row stands on, held or not, is refused", () => {
+  const r = btcRow({ type: "bridge-trade-out" });
+  const own = ownLeg({ legId: "own", quantity: 0.0101, trade: "bridgeTradeOut" });
+  const ignoreImportLegs = [{ legId: "own", currency: "BTC", quantity: 0.0101, reason: "why" }];
+  assert.equal(plan({ rows: [r], legs: [own] }).plan.categorise.length, 0);
+  assert.throws(() => plan({ rows: [r], legs: [own], config: { ...CONFIG, ignoreImportLegs } }), /leg of run row/);
+  const held = { ...CONFIG, ignoreImportLegs, hold: [{ id: r.id, reason: "later" }] };
+  assert.throws(() => plan({ rows: [r], legs: [{ ...own, trade: "withdrawal" }], config: held }), /leg of run row/);
+});
+
+test("ignoreImportLegs: a manual entry beside the leg or naming its tx is the user's pairing, and refused", () => {
+  const dup = ownLeg({ legId: "dup", quantity: 1, trade: "out", actionId: "a1" });
+  const ignoreImportLegs = [{ legId: "dup", currency: "BTC", quantity: 1, reason: "why" }];
+  const beside = ownLeg({
+    legId: "man",
+    quantity: 1,
+    side: "incoming",
+    trade: "deposit",
+    importType: "manual",
+    source: "manual",
+    id: "hand",
+    actionId: "a1",
+  });
+  assert.throws(
+    () => plan({ rows: [], legs: [dup, beside], config: { ...CONFIG, ignoreImportLegs } }),
+    /manual entry beside it/,
+  );
+  const naming = ownLeg({
+    legId: "man",
+    quantity: 2,
+    importType: "manual",
+    source: "manual",
+    id: "hand",
+    description: `see ${TX1}`,
+    actionId: "a9",
+  });
+  assert.throws(
+    () => plan({ rows: [], legs: [dup, naming], config: { ...CONFIG, ignoreImportLegs } }),
+    /naming its tx/,
+  );
+  const ok = plan({ rows: [], legs: [dup], config: { ...CONFIG, ignoreImportLegs } }).plan;
+  assert.deepEqual(ok.ignore?.[0].txids, [TX1]);
+});
+
+test("ignoreImportLegs: one side of a transfer alone is refused; both sides, or beside a fee or the same side, plan", () => {
+  const out = ownLeg({ legId: "out", quantity: 1, trade: "withdrawal", actionId: "t" });
+  const made = ownLeg({
+    legId: "in",
+    quantity: 1,
+    side: "incoming",
+    trade: "deposit",
+    importType: "soft-transfer",
+    source: "manual",
+    actionId: "t",
+  });
+  const entry = (legId: string) => ({ legId, currency: "BTC", quantity: 1, reason: "why" });
+  assert.throws(
+    () => plan({ rows: [], legs: [out, made], config: { ...CONFIG, ignoreImportLegs: [entry("out")] } }),
+    /another side in its action/,
+  );
+  const both = plan({
+    rows: [],
+    legs: [out, made],
+    config: { ...CONFIG, ignoreImportLegs: [entry("out"), entry("in")] },
+  }).plan;
+  assert.deepEqual(
+    both.ignore?.map((e) => e.changes.map((c) => [c.legId, c.desired])),
+    [
+      [
+        ["out", "ignoreOut"],
+        ["in", "ignoreIn"],
+      ],
+    ],
+  );
+  const add = ownLeg({ legId: "add", quantity: 2, trade: "addLiquidity", actionId: "lp" });
+  const extra = ownLeg({ legId: "extra", quantity: 1, trade: "addLiquidity", actionId: "lp" });
+  const fee = ownLeg({ legId: "fee", quantity: 1, side: "fees", trade: "fee", actionId: "lp" });
+  const lp = plan({
+    rows: [],
+    legs: [add, extra, fee],
+    config: { ...CONFIG, ignoreImportLegs: [entry("extra")] },
+  }).plan;
+  assert.equal(lp.ignore?.length, 1);
+});
+
+test("ignoreImportLegs: a made-up leg a delete ignores beside it is refused", () => {
+  const madeUp = ownLeg({
+    legId: "made",
+    quantity: 5,
+    side: "incoming",
+    trade: "deposit",
+    importType: "soft-transfer",
+    source: "manual",
+    actionId: "old",
+  });
+  const oldRow = ownLeg({
+    legId: "gone",
+    quantity: 5,
+    trade: "withdrawal",
+    source: "csv-source",
+    importType: "manual-csv",
+    id: "old.csv:1",
+    actionId: "old",
+  });
+  const ignoreImportLegs = [{ legId: "made", currency: "BTC", quantity: 5, reason: "why" }];
+  assert.throws(
+    () => plan({ rows: [], legs: [oldRow, madeUp], config: { ...CONFIG, ignoreImportLegs } }),
+    /also in this plan's other entries/,
+  );
+});
+
+test("ignoreImportLegs: once a duplicate is ignored, the one leg left is the row's", () => {
+  const r = btcRow({ type: "receive", feeCurrency: "", feeAmount: "", baseAmount: "1" });
+  const a = ownLeg({ legId: "a", quantity: 1, side: "incoming", trade: "deposit", actionId: "a" });
+  const b = ownLeg({ legId: "b", quantity: 1, side: "incoming", trade: "deposit", actionId: "b" });
+  const before = plan({ rows: [r], legs: [a, b] }).plan;
+  assert.ok(before.report.some((x) => x.kind === "several-legs"));
+  const after = plan({ rows: [r], legs: [a, { ...b, trade: "ignoreIn" }] }).plan;
+  assert.ok(!after.report.some((x) => x.kind === "several-legs"));
+});
+
+test("ignoreImportLegs: plan.md lists the legs to ignore", () => {
+  const leg = ownLeg({ legId: "dup", quantity: 1, trade: "out" });
+  const p = plan({
+    rows: [],
+    legs: [leg],
+    config: { ...CONFIG, ignoreImportLegs: [{ legId: "dup", currency: "BTC", quantity: 1, reason: "why" }] },
+  }).plan;
+  assert.match(
+    renderPlan(p, "snap", "run"),
+    /## Ignore \(Summ's import legs named in ignoreImportLegs\) \(1\)[\s\S]*\| dup \| trade \| out \| ignoreOut \|/,
+  );
+});
+
+test("ignoreImportLegs: a duplicate and its made-up deposit plan beside the row that categorises the real leg", () => {
+  const r = btcRow({ type: "bridge-trade-out", baseAmount: "0.21", feeAmount: "0.00007212" });
+  const real = ownLeg({ legId: "real", quantity: 0.21, actionId: "r" });
+  const fee = ownLeg({ legId: "fee", quantity: 0.00007212, side: "fees", trade: "fee", actionId: "r" });
+  const dup = ownLeg({ legId: "dup", quantity: 0.21007212, actionId: "d" });
+  const made = ownLeg({
+    legId: "made",
+    quantity: 0.21007212,
+    side: "incoming",
+    trade: "deposit",
+    importType: "soft-transfer",
+    source: "manual",
+    actionId: "d",
+  });
+  const legs = [real, fee, dup, made];
+  const without = plan({ rows: [r], legs }).plan;
+  assert.deepEqual(without.categorise[0].ignore, ["made"]);
+  const ignoreImportLegs = [
+    { legId: "dup", currency: "BTC", quantity: 0.21007212, reason: "duplicate" },
+    { legId: "made", currency: "BTC", quantity: 0.21007212, reason: "made up for it" },
+  ];
+  const p = plan({ rows: [r], legs, config: { ...CONFIG, ignoreImportLegs } }).plan;
+  assert.equal(p.categorise[0].ignore, undefined);
+  assert.equal(p.categorise[0].changes[0].legId, "real");
+  assert.deepEqual(
+    p.ignore?.map((e) => [e.actionId, e.changes.map((c) => c.legId)]),
+    [["d", ["dup", "made"]]],
+  );
+});

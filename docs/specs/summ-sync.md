@@ -748,6 +748,8 @@ since it may have been made before the error):
    seen, as the range's limits say. Older `skip` lines name no leg and are not reported. An undo handle cannot be relied on to back
    out of this: once Summ re-pairs the categorised leg with another (e.g. an uploaded
    bridge-trade-in), the edit's handle is stale.
+   After the edits and categorisation, the entries of the plan's `ignore` section (`ignore-<i>`), each the legs of one
+   action named in `ignoreImportLegs`, as one edit of their types; they wait for no upload.
 5. Only when every entry is done: add the plan's adoptions and captures to the tables
    (idempotent), log `apply-stop` with `reason: complete`, and print the upload files,
    unless a row in them waits on a delete (Uploads below).
@@ -815,6 +817,17 @@ entries named together, since a run covers one: name one kind, apply, pull and p
 any delete: a split from what stays, a fresh read compared with the plan, two reads that agree, the journal and the
 pre-image. Any other manual entry still holds its event in the plan and stops apply. Summ has no undo for a delete; a
 pre-image is what it can be entered again from.
+
+**Ignoring an import's leg.** The sync never deletes a leg of Summ's own imports, and edits one only to match a run
+row. A leg the user decides should not count, such as one an import holds twice, is named in `summ-sync.json`:
+
+    "ignoreImportLegs": [{ "legId": "<leg>", "currency": "BTC", "quantity": 0.1, "reason": "<why>" }]
+
+Plan refuses a named leg of a managed source or a manual entry, one whose currency or amount differ, one in both this list and `deleteManualEntries`, one another entry of the plan changes (or a delete ignores beside it), one a run row stands on (held or not: ignoring it would drop the row's disposal or receipt), one with a manual entry in its action or naming its tx (the user's pairing), and one whose action holds another side, not a fee and not ignored, that is not named too (it would count alone). Pull reads a named leg's action. A leg not in
+the snapshot, or already ignored, gives a note, so its line can be removed. The other named legs of one action are one entry in the plan's `ignore` section, so both sides of a transfer are ignored in one edit, whatever `--only` says (a note says so): its type set to `ignoreIn` (incoming) or `ignoreOut`
+(outgoing or fee). It is filed if any of its legs is. Apply runs it as any edit (fresh read, other legs unchanged, the
+journal, read back) after the edits, and it waits for no upload. `verify` checks it like an edit. Ignoring a leg moves
+no value of it: Summ stops counting it, so a disposal it was is gone; a transfer is ignored on both sides or not at all. Once ignored, a duplicate is no longer one of the legs that fit a row, so when two fit the row's amount, the one left is the row's. A made-up leg named here is left out of a categorised row's made-up legs.
 
 **Manual entries.** Before a delete entry's split, and before the reads that agree on its
 delete, apply lists the actions holding a manual entry (`importType` filter, every page) and reads
@@ -919,7 +932,7 @@ leg joining an action between the last read and its delete is seen only in the r
    `plans/<plan>/pre/<entry>.<step>.json`, through a temporary file and fsynced. It
    always holds this read. It never replaces a file: if the name is taken (a stop
    between this step and the next) the new read goes to `<entry>.<step>.2.json`.
-   `<entry>` is the plan's section and index (`delete-3`, `edit-12`, `categorise-4`),
+   `<entry>` is the plan's section and index (`delete-3`, `edit-12`, `categorise-4`, `ignore-0`; the last is a leg named in `ignoreImportLegs`, not the `ignore-<n>` step of a made-up leg),
    `<step>` one of `split-<n>`, `delete`, `edit`, `match`, `ignore-<n>`.
 3. Append an `intent: true` line to `apply-log.jsonl`, fsynced: one per changed
    field for an edit, one for a bulk call.
