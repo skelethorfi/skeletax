@@ -58,6 +58,12 @@ export interface RecordRules<T = any> {
   membersOf?: (data: T) => string[];
 }
 
+export interface RecordOptions {
+  // A best-effort source: a failed fetch of a record already stored is passed to this instead of failing the run,
+  // which carries on with the stored copy. With none stored, the error is thrown. It may rethrow.
+  onFetchError?: (error: unknown) => void;
+}
+
 export interface ListOptions<T> {
   keyOf: (item: T) => string;
   rules?: RecordRules<T>;
@@ -227,6 +233,7 @@ export class RecordStore {
     fetch: () => Promise<Fetched<T>>,
     rules: RecordRules<T> = {},
     date?: Date,
+    options: RecordOptions = {},
   ): Promise<T> {
     if (this.replay) {
       return this.replayRecord(source, key);
@@ -236,15 +243,28 @@ export class RecordStore {
 
     if (this.shouldFetchRecord(source, key, rules, date)) {
       this.assertCanFetch(`${source} ${key}`);
-      const fetched = await withRetry(fetch, `${source} ${key}`);
-      fetchedNow = this.store(
-        source,
-        key,
-        fetched.data,
-        rules,
-        { fetchedAt: new Date().toISOString(), url: fetched.url },
-        date,
-      );
+      let fetched: Fetched<T> | undefined;
+
+      try {
+        fetched = await withRetry(fetch, `${source} ${key}`);
+      } catch (error) {
+        if (!options.onFetchError || this.copies<T>(source, key).length === 0) {
+          throw error;
+        }
+
+        options.onFetchError(error);
+      }
+
+      if (fetched) {
+        fetchedNow = this.store(
+          source,
+          key,
+          fetched.data,
+          rules,
+          { fetchedAt: new Date().toISOString(), url: fetched.url },
+          date,
+        );
+      }
     }
 
     return this.use(source, key, rules, fetchedNow);

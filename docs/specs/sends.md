@@ -37,6 +37,7 @@ nothing Viewblock does ends a run; each case is a warning in the run summary
 | A wallet's stored list is short                               | fetches it again on the next default run, keeping the stored list if that fails or comes back as short; every run that uses a short list (offline and `--replay` too) repeats the warning |
 | A 429                                                         | is not retried; Viewblock is asked nothing more in the run (lists and inbound gas, `fees.md`), and the summary says until when it is locked out                                           |
 | A list cannot be fetched (429, or an error after the retries) | uses the list stored by an earlier run; with none, the wallet's Viewblock sends are missing, and the summary says so                                                                      |
+| An inbound's gas cannot be fetched (`fees.md`)                | uses the copy stored by an earlier run; with none, that inbound's fee is blank, and the summary says so                                                                                   |
 | `--offline` with no list stored                               | an error, as for every source                                                                                                                                                             |
 
 The listing is paged until a page comes back empty or adds no new tx, or the

@@ -183,8 +183,11 @@ miss, the usual case for a tx THORNode has pruned, is asked again only by
 `--refetch-all`.
 
 Viewblock is best-effort (`sends.md`): when it cannot be reached (a 429, or
-an error after the retries) the fee stays blank, and the run summary lists
-those inbounds. `--replay` of such a run gives the same blank fee.
+an error after the retries), the copy an earlier run stored is used, as for
+its lists (e.g. a `--refetch-all` that Viewblock answers with 429). Only
+when nothing is stored does the fee stay blank. The run summary lists the
+inbounds of both kinds. `--replay` of such a run gives the same fee: the
+stored copy it used, or blank.
 
 Both are records in the store, like THORNode's statuses (`snapshots.md`):
 `evm-receipt/<chain>.<hash>` (trimmed to the fee fields) and

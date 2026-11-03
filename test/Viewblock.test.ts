@@ -246,6 +246,34 @@ describe("Viewblock.getInbound", () => {
     assert.equal(await replay.getInbound("H2"), undefined);
   });
 
+  test("a failed refetch uses the gas stored by an earlier run, and is not skipped", async () => {
+    mock.method(
+      http,
+      "get",
+      async () => ({ status: 200, data: { observation: { gas: [{ asset: "BTC.BTC", amount: "5000" }] } } }) as any,
+    );
+    const dir = tmp();
+    await new Viewblock(new RecordStore(dir)).getInbound("H");
+    mock.restoreAll();
+    mock.method(http, "get", async () => {
+      throw Object.assign(new Error("429"), { response: { status: 429, data: { value: 1000 } } });
+    });
+    const manifest = new SnapshotManifest();
+    const viewblock = new Viewblock(new RecordStore(dir, { fetch: "all", manifest }));
+
+    assert.deepEqual((await viewblock.getInbound("H"))?.gas, [{ asset: "BTC.BTC", amount: "5000" }]);
+    // Nothing is stored for H2, so its fee is left out
+    assert.equal(await viewblock.getInbound("H2"), undefined);
+    const warnings = viewblock.warnings().join("\n");
+    assert.match(warnings, /could not fetch again the gas of 1 inbound\(s\); using the copy stored .*: H \(/);
+    assert.match(warnings, /could not fetch the gas of 1 inbound\(s\).*: H2 \(/);
+    manifest.write(path.join(dir, "run"));
+
+    const replay = new Viewblock(new RecordStore(dir, { replay: SnapshotManifest.load(path.join(dir, "run")) }));
+    assert.deepEqual((await replay.getInbound("H"))?.gas, [{ asset: "BTC.BTC", amount: "5000" }]);
+    assert.equal(await replay.getInbound("H2"), undefined);
+  });
+
   test("replaying a run whose manifest lacks an inbound it did not skip is an error", async () => {
     mock.method(http, "get", async () => ({ status: 200, data: { observation: { gas: [] } } }) as any);
     const dir = tmp();

@@ -33,6 +33,7 @@ export class Viewblock {
   private rateLimited?: { until?: Date };
   private listWarnings: string[] = [];
   private gasSkipped: string[] = [];
+  private gasStale: string[] = [];
   constructor(store: RecordStore) {
     this.store = store;
   }
@@ -61,8 +62,8 @@ export class Viewblock {
   }
 
   // The gas THORNode observed for one inbound, through the store; undefined when replaying a run made before
-  // this source was read or that could not reach it, or when Viewblock cannot be reached. date: of the action the
-  // tx belongs to
+  // this source was read or that could not reach it, or when Viewblock cannot be reached and nothing is stored
+  // (a stored copy is used when a refetch fails, as for lists). date: of the action the tx belongs to
   async getInbound(hash: string, date?: Date): Promise<ViewblockInbound | undefined> {
     if (this.store.addedSinceReplay("viewblock-tx") || this.store.skippedInReplay("viewblock-tx", hash)) {
       return undefined;
@@ -77,6 +78,7 @@ export class Viewblock {
         async () => ({ data: await this.fetchInbound(url, hash), url }),
         VIEWBLOCK_TX_RULES,
         date,
+        { onFetchError: (error) => this.gasStale.push(`${hash} (${reason(error)})`) },
       );
     } catch (error) {
       if (error instanceof StoreMissError) {
@@ -90,7 +92,7 @@ export class Viewblock {
   }
 
   // What the run should say about Viewblock in its summary: lists it could not fetch or that came back short, and
-  // inbounds whose gas it could not fetch
+  // inbounds whose gas it could not fetch (left out, or the stored copy used)
   warnings(): string[] {
     return [
       ...(this.rateLimited
@@ -102,6 +104,11 @@ export class Viewblock {
       ...(this.gasSkipped.length
         ? [
             `Viewblock: could not fetch the gas of ${this.gasSkipped.length} inbound(s) THORNode has pruned; their fee is left out (docs/specs/fees.md): ${this.gasSkipped.join(", ")}`,
+          ]
+        : []),
+      ...(this.gasStale.length
+        ? [
+            `Viewblock: could not fetch again the gas of ${this.gasStale.length} inbound(s); using the copy stored by an earlier run (docs/specs/fees.md): ${this.gasStale.join(", ")}`,
           ]
         : []),
     ];
