@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import fs from "fs-extra";
 import path from "path";
 import type { Action } from "@xchainjs/xchain-midgard";
@@ -22,6 +23,9 @@ import { EvmReceipts } from "../../src/sources/evm/EvmReceipts.ts";
 import { TcyDistributionService } from "../../src/sources/tcy/TcyDistributionService.ts";
 import { TcyClaimService } from "../../src/sources/tcy/TcyClaimService.ts";
 import { getActionDate } from "../../src/sources/thorchain/MidgardUtils.ts";
+import { runBundle } from "../../src/pipeline/run.ts";
+import { getProtocol } from "../../src/domain/Protocol.ts";
+import type { ViewblockTx } from "../../src/sources/viewblock/index.ts";
 
 // A record store made from the golden cases (test/cases), for running the whole exporter offline
 // (docs/specs/fixtures.md, End-to-end export). Each case's input is a bundle; its records are put in the store
@@ -34,19 +38,21 @@ export interface Case {
   expected: object[];
 }
 
-// The reviewed THORChain cases that can share one store. A case is left out when it would clash with one kept:
-// the same record of the same wallet (e.g. an anonymised placeholder txid), another record under the same key with
-// other data, or a Viewblock send whose hash a Midgard case has, which the exporter drops as that action's inbound
-// or outbound (docs/specs/sends.md). Cases with prices go first. Maya cases are left out (THORChain's sources only).
+// The reviewed THORChain cases that can share one store. A Viewblock send with an anonymised placeholder hash gets
+// a hash of its own first (withOwnHash). A case is left out when it would clash with one kept: the same record of
+// the same wallet (e.g. an anonymised placeholder txid), another record under the same key with other data, or a
+// Viewblock send whose hash a Midgard case has, which the exporter drops as that action's inbound (docs/specs/sends.md).
+// Cases with prices go first. Maya cases are left out (THORChain's sources only).
 export function thorchainCases(root: string): { cases: Case[]; skipped: string[] } {
   const all = findCaseDirs(root)
     .map((dir) => ({ name: path.relative(root, dir), input: readCaseInput(dir), expected: readCaseExpected(dir) }))
     .filter((c): c is Case => c.expected !== undefined && (c.input.protocol ?? "thorchain") === "thorchain")
-    .filter((c) => c.input.source !== "maya-distribution");
+    .filter((c) => c.input.source !== "maya-distribution")
+    .map(withOwnHash);
   const midgardTxIds = new Set(
     all
       .filter((c) => c.input.source === "midgard")
-      .flatMap((c) => [...(c.input.data as Action).in, ...(c.input.data as Action).out].map((tx) => tx.txID)),
+      .flatMap((c) => (c.input.data as Action).in.map((tx) => tx.txID?.toUpperCase())),
   );
   const bundles = new Set<string>();
   const records = new Map<string, string>();
@@ -60,7 +66,7 @@ export function thorchainCases(root: string): { cases: Case[]; skipped: string[]
     if (
       bundles.has(bundle) ||
       own.some(([key, data]) => records.has(key) && records.get(key) !== data) ||
-      (c.input.source === "viewblock" && midgardTxIds.has((c.input.data as any).hash))
+      (c.input.source === "viewblock" && midgardTxIds.has((c.input.data as ViewblockTx).hash.toUpperCase()))
     ) {
       skipped.push(c.name);
       continue;
@@ -72,6 +78,44 @@ export function thorchainCases(root: string): { cases: Case[]; skipped: string[]
   }
 
   return { cases: all.filter((c) => cases.includes(c)), skipped };
+}
+
+// An anonymised Viewblock send's placeholder hash (all zeros) is the same in every such case, and the same as the
+// placeholder txids of anonymised Midgard cases, so in one store the sends would be one record, dropped as a
+// Midgard action's inbound. The case gets a hash of its own, from its name; its expected rows name that hash, and
+// their IDs are those the rows get from it (the row the case gives with the placeholder, matched by its ID).
+function withOwnHash(c: Case): Case {
+  const tx = c.input.data as ViewblockTx;
+
+  if (c.input.source !== "viewblock" || !/^0+$/.test(tx.hash)) {
+    return c;
+  }
+
+  const hash = crypto.createHash("sha256").update(c.name).digest("hex").toUpperCase();
+  const input = { ...c.input, data: { ...tx, hash } };
+  const rowsOf = (caseInput: GoldenCaseInput) =>
+    runBundle(toBundle(caseInput), getProtocol(caseInput.protocol), caseInput.treatment).rows;
+  const before = rowsOf(c.input);
+  const after = rowsOf(input);
+  const newId = (id: string) => {
+    const i = before.findIndex((row) => row.id === id);
+
+    if (i < 0 || before.length !== after.length) {
+      throw new Error(`${c.name}: no row ${id} to give a hash of its own`);
+    }
+
+    return after[i].id;
+  };
+
+  return {
+    ...c,
+    input,
+    expected: c.expected.map((row: any) => ({
+      ...row,
+      id: newId(row.id),
+      description: row.description.replaceAll(tx.hash, hash),
+    })),
+  };
 }
 
 // The records a midgard case's bundle was made from, by '<source>|<key>' as the services key them

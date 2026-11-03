@@ -51,19 +51,25 @@ to the CSV files, with no network:
    stored under the key its service gives it. A record a case does not hold
    gets a stand-in that adds nothing to its rows: a THORNode status with
    nothing observed, a Viewblock lookup that found nothing, a Cosmos tx with
-   no events, a claim list without the address, no price. A case is left out
-   when it would clash with one already in the store: the same record of the
-   same wallet (a case and its copy with prices: the one with prices is
-   kept), another record under the same key with other data (anonymised
+   no events, a claim list without the address, no price. An anonymised
+   Viewblock send's placeholder hash (all zeros) is shared by every such case
+   and by the anonymised Midgard cases' placeholder txids, so each gets a
+   hash of its own, made from the case's name; its expected rows name that
+   hash and take the row IDs it gives. A case is left out when it would
+   clash with one already in the store: the same record of the same wallet
+   (a case and its copy with prices: the one with prices is kept), another
+   record under the same key with other data (anonymised Midgard cases'
    placeholder txids), or a Viewblock send whose hash a Midgard case also
-   has, which the exporter drops as that action's inbound or outbound
-   (`sends.md`). Maya cases are not in it.
+   has, which the exporter drops as that action's inbound (`sends.md`). The
+   test checks that Midgard, Viewblock and TCY cases are all in the store,
+   and that no Viewblock case is left out. Maya cases are not in it.
 2. It runs `src/full-export.ts --offline` on that config and checks that
    `all.csv` holds every case's `expected.yaml` rows and nothing else; that
    each row is in its period's `all-<period>` file and its wallet's file, and
    no other file is written; that `summary.md` reports the run with no
    warnings and no failed or unsupported actions; and that `snapshots.json`
-   names every list and record read, each in the store.
+   names every list and record in the store and nothing else (the store
+   holds what the sources read, and the offline run reads it all).
 3. It replays the run (`--replay`) and checks that it writes the same files.
 4. It removes one record from a copy of the store and checks that an offline
    run fails, naming it.

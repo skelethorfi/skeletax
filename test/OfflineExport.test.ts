@@ -8,6 +8,7 @@ import { caseWallets, type Case, fillStore, runFolders, thorchainCases } from ".
 import { ROW_IDS_FILE, txToCsv } from "../src/export/summ/csv/index.ts";
 import { MANIFEST_FILE, SnapshotManifest } from "../src/sources/store/SnapshotManifest.ts";
 import { SUMMARY_FILE } from "../src/cli/RunSummary.ts";
+import { readCaseInput } from "../src/fixtures/GoldenCase.ts";
 
 // The whole export, offline: a store made from the golden cases, the CLI run on it, then replayed
 // (docs/specs/fixtures.md, End-to-end export)
@@ -69,9 +70,20 @@ describe("offline export of the golden cases", () => {
   after(() => fs.removeSync(dir));
 
   test("most cases share the store", () => {
-    // Left out: duplicates of a case with prices, and anonymised cases whose placeholder txids clash
+    // Left out: duplicates of a case with prices, and anonymised Midgard cases whose placeholder txids clash
     assert.ok(cases.length >= 50, `${cases.length} cases, skipped ${skipped.join(", ")}`);
     assert.ok(skipped.length <= 15, `skipped ${skipped.join(", ")}`);
+  });
+
+  test("every source's cases are in the store: Midgard, Viewblock and TCY", () => {
+    const count = (source: string) => cases.filter((c) => c.input.source === source).length;
+    const skippedViewblock = skipped.filter((name) => readCaseInput(path.join(CASES, name)).source === "viewblock");
+
+    assert.ok(count("midgard") >= 40, `${count("midgard")} Midgard cases`);
+    // The anonymised Viewblock sends each get a hash of their own, so none clashes with another case
+    assert.ok(count("viewblock") >= 3, `${count("viewblock")} Viewblock cases`);
+    assert.deepEqual(skippedViewblock, []);
+    assert.ok(count("tcy") >= 1, `${count("tcy")} TCY cases`);
   });
 
   test("all.csv holds every case's expected rows, and only those", () => {
@@ -122,7 +134,7 @@ describe("offline export of the golden cases", () => {
     assert.equal(fs.readFileSync(path.join(run, ROW_IDS_FILE), "utf8").trim().split("\n").length - 1, rows);
   });
 
-  test("snapshots.json names every list and record the run read, each in the store", () => {
+  test("snapshots.json names every list and record in the store, and only those", () => {
     const manifest = fs.readJsonSync(path.join(run, MANIFEST_FILE));
     const thorWallets = wallets.filter((w) => w.address.startsWith("thor1")).length;
 
@@ -130,9 +142,15 @@ describe("offline export of the golden cases", () => {
     assert.equal(manifest.lists.length, wallets.length + 2 * thorWallets);
     assert.ok(manifest.records.length > cases.length);
 
-    for (const entry of [...manifest.records, ...manifest.lists]) {
-      assert.ok(fs.existsSync(path.join(dir, "store", entry.file)), entry.file);
-    }
+    // The store holds what the sources read, and the offline run read it all
+    const stored = (folder: string) =>
+      fs
+        .readdirSync(path.join(dir, "store", folder), { recursive: true, withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map((entry) => path.relative(path.join(dir, "store"), path.join(entry.parentPath, entry.name)))
+        .sort();
+    assert.deepEqual(manifest.records.map((entry: any) => entry.file).sort(), stored("records"));
+    assert.deepEqual(manifest.lists.map((entry: any) => entry.file).sort(), stored("lists"));
 
     assert.ok(manifest.records.every((entry: any) => entry.fetched === undefined));
     assert.ok(SnapshotManifest.load(run).findList("midgard", wallets[0].address));
