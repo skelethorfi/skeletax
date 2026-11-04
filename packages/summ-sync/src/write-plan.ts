@@ -361,6 +361,7 @@ export function writePlan(stateDir: string, runDir: string, only?: string): stri
       plan.delete.length ? `${plan.delete.length} deletes` : "",
       categorising.length ? `${categorising.length} categorisations` : "",
       plan.edit.some((e) => e.filed) ? `edits in filed years` : "",
+      plan.currency?.length ? `${plan.currency.length} currency corrections` : "",
     ].filter(Boolean);
     if (wider.length)
       throw new Error(

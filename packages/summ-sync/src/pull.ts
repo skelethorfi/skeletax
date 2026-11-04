@@ -212,9 +212,18 @@ export async function pull(
     }
     if (txids) for (const id of actionsWithTxids(actions, txids)) needed.add(id);
     // Every leg on a token Summ's import got wrong is put right together, run or not: plan must see them all
-    for (const a of (await queryAll(client, inRange(range, { type: "txCurrency", value: MISIDENTIFIED_IDS }))).flatMap(
-      parseActions,
-    ))
+    for (const a of (
+      await queryAll(
+        client,
+        inRange(range, {
+          type: "or",
+          rules: [
+            { type: "txCurrency", value: MISIDENTIFIED_IDS },
+            { type: "feeCurrency", value: MISIDENTIFIED_IDS },
+          ],
+        }),
+      )
+    ).flatMap(parseActions))
       if (listed.has(a["Action ID"])) needed.add(a["Action ID"] as string);
     // A made-up leg an apply left in place can be outside all of those: plan must see whether it is still there
     // and so can a manual entry the config names, alone in its action
