@@ -290,7 +290,7 @@ legs fit, is reported, and no row the leg fits at any rank is uploaded.
 import has Terra Classic's stablecoin as TerraUSD (Wormhole) (`terrausd-wormhole`, symbol
 UST), a different token, where the run has USTC (`terrausd`). The plan keeps a short list of
 these by Summ's currency id and the chain the import gets it wrong on (a leg of the token itself,
-on its own chain, is right as it is, and a leg with no chain is left as it is), and sets each such leg's `currencyId` to the right one, so
+on its own chain, is right as it is), and sets each such leg's `currencyId` to the right one, so
 Summ prices it, and keeps its cost base, as the run's currency. All of a token's legs move in
 one plan: a leg left on the wrong token sits in a cost-base pool of its own, and a disposal of
 the right one finds no cost base. So `pull` also reads every action holding a listed id in a leg
@@ -301,8 +301,8 @@ the same edit as its type. Any other such leg of Summ's imports (a fee, a send o
 is put right in the Currency section, one entry per action; a leg ignored, named in
 `ignoreImportLegs`, already in the plan (a made-up leg it ignores), or one Summ issues itself
 (`assumed-fee`, `soft-transfer`) needs none. A leg the plan cannot put right (a held row's, one
-beside a manual entry, or one a row takes with no entry putting it right: a kept value, or two
-rows on it) holds back every correction of the token, with a note naming it. A fee Summ keeps on a leg itself
+beside a manual entry, one a row takes with no entry putting it right: a kept value, or two
+rows on it; or one with no chain, which may be the import's) holds back every correction of the token, with a note naming it. A fee Summ keeps on a leg itself
 (`feeCurrency`) cannot be edited, so it stays. Apply runs Currency entries with no wait for
 uploads, as it does Ignore. Verify counts the symbol read with a `currencyId` it set as part of
 the plan.

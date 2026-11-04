@@ -1681,8 +1681,8 @@ export function makePlan(input: PlanInput): PlanResult {
 
   // ---- Legs on a wrong token that no row takes (a fee, a send outside the run): put right with the rest, whatever
   // the scope, so all of the token's legs keep one cost base. A leg to be ignored, or ignored, needs none
-  // A leg a categorise entry puts right, one already in this plan (a made-up leg it ignores), one of a held row, and
-  // a fee leg Summ issues itself (a new id on every rebuild) are left out
+  // Legs a categorise entry puts right are done; legs no row takes that the plan already names (a made-up leg it
+  // ignores), ignored or to be ignored, and legs Summ issues itself (a new id on every rebuild) need none
   const putRight = new Set(
     plan.categorise.flatMap((e) => e.changes.filter((c) => c.field === "currencyId").map((c) => c.legId)),
   );
@@ -1692,8 +1692,14 @@ export function makePlan(input: PlanInput): PlanResult {
   const keptWrong: Leg[] = [];
   for (const leg of input.legs) {
     const wrong = misidentified(leg);
-    if (!wrong || putRight.has(leg.legId) || toIgnore.has(leg.legId) || IGNORED.has(leg.trade)) continue;
+    if (putRight.has(leg.legId) || toIgnore.has(leg.legId) || IGNORED.has(leg.trade)) continue;
     if (managedSources.has(leg.source) || ["manual", "assumed-fee", SOFT_TRANSFER].includes(leg.importType)) continue;
+    // A listed token with no chain may be the import's: not known, so the rest wait rather than move without it
+    if (!wrong && leg.currencyId && MISIDENTIFIED[leg.currencyId] && !leg.blockchain) {
+      keptWrong.push(leg);
+      continue;
+    }
+    if (!wrong) continue;
     // Before the plan's other entries: a row's leg whose entry changes its type but not its token is still kept
     if (legClaims.has(leg.legId) || manualIn([leg.actionId]).length) {
       keptWrong.push(leg);
@@ -1727,7 +1733,7 @@ export function makePlan(input: PlanInput): PlanResult {
       .map((e) => ({ ...e, changes: e.changes.filter((c) => c.field !== "currencyId") }))
       .filter((e) => e.changes.length || e.ignore?.length);
     plan.notes.push(
-      `a wrong token's legs wait: ${keptWrong.map((l) => `${l.quantity} ${l.currency} (leg ${l.legId})`).join(", ")} cannot be put right in this plan (a held row's, beside a manual entry, or a row's with no entry putting it right), and the token's legs move together or not at all`,
+      `a wrong token's legs wait: ${keptWrong.map((l) => `${l.quantity} ${l.currency} (leg ${l.legId})`).join(", ")} cannot be put right in this plan (a held row's, beside a manual entry, a row's with no entry putting it right, or one with no chain), and the token's legs move together or not at all`,
     );
   } else if (currency.length) plan.currency = currency;
 

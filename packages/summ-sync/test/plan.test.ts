@@ -1009,8 +1009,10 @@ test("legs of the wrong token that no row takes are put right with the rest, one
     [["trade"]],
   );
   assert.ok(scoped.notes.includes("scope: 2 entries putting a wrong token right wait for a full plan"));
-  // A leg with no chain is not known to be the import's: left as it is
-  assert.equal(plan({ rows: [], legs: [{ ...send, blockchain: "" }] }).plan.currency, undefined);
+  // A leg with no chain is not known to be the import's: the token's others wait for it
+  const unknown = plan({ rows: [], legs: [send, { ...fee, legId: "nochain", actionId: "n", blockchain: "" }] }).plan;
+  assert.equal(unknown.currency, undefined);
+  assert.ok(unknown.notes.some((n) => n.startsWith("a wrong token's legs wait:")));
   // A leg of the token the plan cannot put right holds them all back: here two rows on one leg
   const twice = btcRow({ ...r, id: "2024-03-01T10:00:00.000Z.in.eeeeeeeeeeee" });
   const waiting = plan({ rows: [r, twice], legs: [mine, send] }).plan;
