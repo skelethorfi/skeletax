@@ -283,7 +283,7 @@ export function same(field: string, a: Value, b: Value): boolean {
   return String(a).toLowerCase() === String(b).toLowerCase();
 }
 
-// Terra Classic's stablecoin: the exporter writes USTC, and Summ's Terra import has it as UST (spec: Categorised rows)
+// Every currency comparison: Terra Classic's stablecoin is USTC in the run and UST in Summ's Terra import (spec: Categorised rows)
 const currencyNames: Record<string, string> = { ust: "ustc" };
 const currencyName = (c: string) => currencyNames[c.toLowerCase()] ?? c.toLowerCase();
 export const sameCurrency = (a: string, b: string) => currencyName(a) === currencyName(b);
