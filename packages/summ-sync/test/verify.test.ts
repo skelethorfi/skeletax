@@ -144,6 +144,18 @@ test("a planned edit that holds has landed, and one that does not is said", () =
   assert.match(verifyMarkdown(failed, "p", "x", "y"), /edit-0 NOT LANDED[\s\S]*trade: sell, the plan said buy/);
 });
 
+test("a currency put right by its id has landed, and the symbol read with it moved with the plan", () => {
+  const p = plan({ categorise: [edit("a", "currencyId", "terrausd-wormhole", "terrausd")] });
+  const was = leg("a", { currency: "UST", currencyId: "terrausd-wormhole" });
+  const v = run([was], [leg("a", { currency: "USTC", currencyId: "terrausd" })], p, [
+    start,
+    log({ entry: "categorise-0", legId: "a", field: "currencyId" }),
+    done,
+  ]);
+  assert.equal(stateOf(v, "categorise-0"), "landed");
+  assert.deepEqual(v.changed, []);
+});
+
 test("a change on a leg named for something else is still outside the plan", () => {
   const p = plan({ edit: [edit("a", "trade", "sell", "buy")] });
   const v = run([leg("a")], [leg("a", { trade: "buy", quantity: 3 })], p, [

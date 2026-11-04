@@ -922,16 +922,45 @@ test("a categorised row sets the type of Summ's own leg with its txid, currency 
   );
 });
 
-test("a categorised USTC row matches Summ's UST leg: Summ's Terra import names Terra Classic's stablecoin UST", () => {
+test("a categorised USTC row takes Summ's UST (Wormhole) leg and puts its currency right, in the one edit", () => {
   const r = btcRow({ type: "bridge-trade-out", baseCurrency: "USTC", feeCurrency: "", feeAmount: "" });
-  const { plan: p } = plan({ rows: [r], legs: [ownLeg({ currency: "UST", quantity: 0.01 })] });
+  const wormhole = ownLeg({ currency: "UST", currencyId: "terrausd-wormhole", quantity: 0.01 });
+  const { plan: p } = plan({ rows: [r], legs: [wormhole] });
   assert.deepEqual(
-    p.categorise.map((c) => c.changes.map((x) => [x.leg, x.field, x.desired])),
-    [[["base", "trade", "bridgeTradeOut"]]],
+    p.categorise.map((c) => c.changes.map((x) => [x.leg, x.field, x.summ, x.desired])),
+    [
+      [
+        ["base", "trade", "withdrawal", "bridgeTradeOut"],
+        ["base", "currencyId", "terrausd-wormhole", "terrausd"],
+      ],
+    ],
   );
   assert.deepEqual(p.report, []);
-  // another currency is still no match
-  assert.equal(plan({ rows: [r], legs: [ownLeg({ currency: "USDT", quantity: 0.01 })] }).plan.categorise.length, 0);
+  // Put right already: only its type
+  assert.deepEqual(
+    plan({
+      rows: [r],
+      legs: [ownLeg({ currency: "USTC", currencyId: "terrausd", quantity: 0.01 })],
+    }).plan.categorise.map((c) => c.changes.map((x) => x.field)),
+    [["trade"]],
+  );
+  // A UST that is no wrong id of USTC is another currency: no match
+  const other = plan({ rows: [r], legs: [ownLeg({ currency: "UST", currencyId: "some-ust", quantity: 0.01 })] }).plan;
+  assert.equal(other.categorise.length, 0);
+  assert.deepEqual(
+    other.report.map((x) => x.kind),
+    ["no-leg"],
+  );
+});
+
+test("a leg of the wrong token that no row takes is reported, not put right", () => {
+  const leg = ownLeg({ currency: "UST", currencyId: "terrausd-wormhole", quantity: 5 });
+  const { plan: p } = plan({ rows: [], legs: [leg] });
+  assert.deepEqual(p.categorise, []);
+  assert.deepEqual(
+    p.report.map((x) => [x.kind, x.legIds]),
+    [["misidentified", [leg.legId]]],
+  );
 });
 
 test("the receive Summ made up to pair a categorised send as a transfer is ignored, never matched", () => {

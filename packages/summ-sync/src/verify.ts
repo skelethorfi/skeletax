@@ -290,6 +290,8 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
   const touched = new Set<string>();
   const explain = (legId: string, field: string) => {
     explained.add(`${legId}|${field}`);
+    // Setting a currency's id changes the symbol read with it
+    if (field === "currencyId") explained.add(`${legId}|currency`);
     touched.add(legId);
   };
   for (const kind of ["edit", "categorise", "ignore"] as const) {

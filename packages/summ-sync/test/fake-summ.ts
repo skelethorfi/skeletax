@@ -9,6 +9,9 @@ import { parseDetail } from "../src/parse.ts";
 import { legValues } from "../src/plan.ts";
 import { legsOf } from "../src/snapshot.ts";
 
+/** The catalogue's symbol of each currency id the tests set. */
+const CATALOGUE: Record<string, string> = { terrausd: "USTC" };
+
 export interface FakeLeg {
   price?: number;
   priceValueCurrency?: string;
@@ -20,7 +23,7 @@ export interface FakeLeg {
   id?: string;
   importType?: string;
   side?: "incoming" | "outgoing" | "fees";
-  currencyIdentifier?: { symbol?: string; source?: string };
+  currencyIdentifier?: { id?: string; symbol?: string; source?: string };
   from?: string;
   to?: string;
   blockchain?: string;
@@ -239,7 +242,10 @@ export class FakeSumm implements ToolCaller {
     return this.write(() => {
       for (const { transactionId, updates } of changes) {
         const leg = legs.find((l) => l._id === transactionId) as FakeLeg;
-        Object.assign(leg, updates);
+        const { currencyId, ...rest } = updates as Partial<FakeLeg> & { currencyId?: string };
+        Object.assign(leg, rest);
+        // Real: the server resolves the id to the catalogue's currency
+        if (currencyId) leg.currencyIdentifier = { id: currencyId, symbol: CATALOGUE[currencyId], source: "coingecko" };
         if (updates.priceValueCurrency === "USD") leg.price = (updates.price as number) * this.usdRate;
         this.stamp(leg);
         // Real: a fee leg moves to outgoing when ignored

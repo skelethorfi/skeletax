@@ -174,7 +174,8 @@ export interface ReportEntry {
     | "other-source"
     | "foreign-pair"
     | "price-blank"
-    | "made-up-left";
+    | "made-up-left"
+    | "misidentified";
   filed: boolean;
   id?: string;
   legIds?: string[];
@@ -283,10 +284,16 @@ export function same(field: string, a: Value, b: Value): boolean {
   return String(a).toLowerCase() === String(b).toLowerCase();
 }
 
-// Every currency comparison: Terra Classic's stablecoin is USTC in the run and UST in Summ's Terra import (spec: Categorised rows)
-const currencyNames: Record<string, string> = { ust: "ustc" };
-const currencyName = (c: string) => currencyNames[c.toLowerCase()] ?? c.toLowerCase();
-export const sameCurrency = (a: string, b: string) => currencyName(a) === currencyName(b);
+export const sameCurrency = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+/** Currencies Summ's imports give the wrong token: by Summ's id, the run's currency and the id of its token. Summ's
+ * Terra import has Terra Classic's stablecoin as TerraUSD (Wormhole) (spec: Categorised rows). */
+const MISIDENTIFIED: Record<string, { currency: string; id: string }> = {
+  "terrausd-wormhole": { currency: "USTC", id: "terrausd" },
+};
+/** The run's currency a leg of Summ's import holds once its currency is put right: its own when Summ has it right. */
+const misidentified = (leg: Leg) => (leg.currencyId ? MISIDENTIFIED[leg.currencyId] : undefined);
+const holdsCurrency = (leg: Leg, currency: string) =>
+  sameCurrency(misidentified(leg)?.currency ?? leg.currency, currency);
 /** The wallet of the leg's side: the sender of an outgoing leg, the receiver of an incoming one. */
 const sameWallet = (leg: Leg, row: Row) =>
   leg.side === "outgoing" ? sameCurrency(leg.from, row.from) : sameCurrency(leg.to, row.to);
@@ -1019,8 +1026,7 @@ export function makePlan(input: PlanInput): PlanResult {
     const amount = Number(row.baseAmount);
     const gross = amount + (hasFee(row) && sameCurrency(row.feeCurrency, row.baseCurrency) ? Number(row.feeAmount) : 0);
     const withTxid = ownLegs.filter(
-      (l) =>
-        l.side === type.side && row.txids.includes(normaliseTxid(l.id)) && sameCurrency(l.currency, row.baseCurrency),
+      (l) => l.side === type.side && row.txids.includes(normaliseTxid(l.id)) && holdsCurrency(l, row.baseCurrency),
     );
     const found = withTxid.filter((l) => sameAmount(l.quantity, amount) || sameAmount(l.quantity, gross));
     const filed = isFiled(row.timestamp);
@@ -1164,6 +1170,9 @@ export function makePlan(input: PlanInput): PlanResult {
       continue;
     }
     const changes: Change[] = [...compare(leg, "base", "trade", typeOf(row).trade)];
+    // A token Summ's import got wrong is put right, so its price and cost base are the run currency's
+    const wrong = misidentified(leg);
+    if (wrong) changes.push(...compare(leg, "base", "currencyId", wrong.id));
     const feeLegs = feeLegsOf(leg);
     const inline = inlineFeeOf(leg);
     if (hasFee(row) && shapeRank(row, leg) !== 1) {
@@ -1235,6 +1244,20 @@ export function makePlan(input: PlanInput): PlanResult {
         ...(ignore.length ? { ignore } : {}),
       });
     }
+  }
+
+  // A token Summ's import got wrong on a leg no row takes: put right with a row's leg only, so the leg is reported, as
+  // its cost base sits apart from the run currency's until it is
+  for (const leg of ownLegs) {
+    const wrong = misidentified(leg);
+    if (!wrong || legClaims.has(leg.legId) || IGNORED.has(leg.trade)) continue;
+    plan.report.push({
+      kind: "misidentified",
+      filed: isFiled(leg.timestamp),
+      legIds: [leg.legId],
+      txids: [normaliseTxid(leg.id)],
+      detail: `Summ's import has ${leg.quantity} ${leg.currency} as ${leg.currencyId}, the run's ${wrong.currency} is ${wrong.id}; no row takes the leg, so it is not put right`,
+    });
   }
 
   // Made-up legs an apply left in place: counted on their own until ignored. A leg gone, or ignored, is no longer one

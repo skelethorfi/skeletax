@@ -23,6 +23,8 @@ export interface Leg {
   id: string;
   trade: string;
   currency: string;
+  /** Summ's id of the currency (`currencyIdentifier.id`), which an edit sets. Absent from an older copy. */
+  currencyId?: string;
   /** Where Summ prices the currency from; `unknown`: it has no market price. Absent from an older copy. */
   currencySource?: string;
   quantity: number;
@@ -76,6 +78,9 @@ export function legsOf(detail: ActionDetail): Leg[] {
       id: text(leg.id),
       trade: text(leg.trade),
       currency: text((leg.currencyIdentifier as { symbol?: string } | undefined)?.symbol) || text(leg.currency),
+      ...(text((leg.currencyIdentifier as { id?: string } | undefined)?.id)
+        ? { currencyId: text((leg.currencyIdentifier as { id?: string }).id) }
+        : {}),
       ...(text((leg.currencyIdentifier as { source?: string } | undefined)?.source)
         ? { currencySource: text((leg.currencyIdentifier as { source?: string }).source) }
         : {}),

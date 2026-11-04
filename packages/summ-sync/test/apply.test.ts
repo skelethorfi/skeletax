@@ -227,6 +227,30 @@ test("a leg that changed since the pull stops the run, and is not edited", async
 
 const MADE_UP: FakeLeg = { _id: "made-up", trade: "deposit", quantity: "1", importType: "soft-transfer" };
 
+test("a categorise puts the leg's currency right by its id, in the same edit, and reads it back", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [
+    {
+      _id: "leg-1",
+      trade: "withdrawal",
+      quantity: "1",
+      currencyIdentifier: { id: "terrausd-wormhole", symbol: "UST", source: "coingecko" },
+    },
+  ]);
+  const changes: EditEntry["changes"] = [
+    { leg: "base", legId: "leg-1", field: "trade", summ: "withdrawal", desired: "bridgeTradeOut" },
+    { leg: "base", legId: "leg-1", field: "currencyId", summ: "terrausd-wormhole", desired: "terrausd" },
+  ];
+  const { result } = await run(summ, planFile({ categorise: [edit({ changes })] }));
+  assert.equal(result.edited, 1);
+  const call = summ.calls.find((c) => c.name === "edit_transaction");
+  assert.deepEqual((call?.args.edits as { updates: unknown }[])[0].updates, {
+    trade: "bridgeTradeOut",
+    currencyId: "terrausd",
+  });
+  assert.deepEqual(summ.leg("leg-1")?.currencyIdentifier, { id: "terrausd", symbol: "USTC", source: "coingecko" });
+});
+
 test("after categorising, the receive Summ made up is ignored by its own action id once it is alone", async () => {
   const summ = new FakeSumm();
   summ.add("a", [{ _id: "leg-1", trade: "withdrawal", quantity: "1" }, { ...MADE_UP }]);
