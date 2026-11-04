@@ -251,6 +251,22 @@ test("a categorise puts the leg's currency right by its id, in the same edit, an
   assert.deepEqual(summ.leg("leg-1")?.currencyIdentifier, { id: "terrausd", symbol: "USTC", source: "coingecko" });
 });
 
+test("a leg on a wrong token that no row takes is put right, waiting for no upload", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [
+    { _id: "leg-1", trade: "withdrawal", quantity: "1", currencyIdentifier: { id: "terrausd-wormhole" } },
+  ]);
+  const currency = [
+    edit({
+      id: "legs leg-1",
+      changes: [{ leg: "base", legId: "leg-1", field: "currencyId", summ: "terrausd-wormhole", desired: "terrausd" }],
+    }),
+  ];
+  const { result } = await run(summ, planFile({ currency, upload: [{ file: "f.csv", ids: ["r"] }] as never }));
+  assert.equal(result.edited, 1);
+  assert.equal(summ.leg("leg-1")?.currencyIdentifier?.id, "terrausd");
+});
+
 test("after categorising, the receive Summ made up is ignored by its own action id once it is alone", async () => {
   const summ = new FakeSumm();
   summ.add("a", [{ _id: "leg-1", trade: "withdrawal", quantity: "1" }, { ...MADE_UP }]);

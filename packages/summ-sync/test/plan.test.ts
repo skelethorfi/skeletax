@@ -953,14 +953,33 @@ test("a categorised USTC row takes Summ's UST (Wormhole) leg and puts its curren
   );
 });
 
-test("a leg of the wrong token that no row takes is reported, not put right", () => {
-  const leg = ownLeg({ currency: "UST", currencyId: "terrausd-wormhole", quantity: 5 });
-  const { plan: p } = plan({ rows: [], legs: [leg] });
+test("legs of the wrong token that no row takes are put right with the rest, one entry per action", () => {
+  const send = ownLeg({ currency: "UST", currencyId: "terrausd-wormhole", quantity: 5, actionId: "s" });
+  const fee = ownLeg({
+    side: "fees",
+    trade: "fee",
+    currency: "UST",
+    currencyId: "terrausd-wormhole",
+    quantity: 0.01,
+    actionId: "s",
+  });
+  const ignored = ownLeg({ trade: "ignoreOut", currency: "UST", currencyId: "terrausd-wormhole", actionId: "i" });
+  const right = ownLeg({ currency: "USTC", currencyId: "terrausd", actionId: "r" });
+  const { plan: p } = plan({ rows: [], legs: [send, fee, ignored, right] });
   assert.deepEqual(p.categorise, []);
   assert.deepEqual(
-    p.report.map((x) => [x.kind, x.legIds]),
-    [["misidentified", [leg.legId]]],
+    p.currency?.map((e) => [e.actionId, e.changes.map((c) => [c.legId, c.field, c.summ, c.desired])]),
+    [
+      [
+        "s",
+        [
+          [send.legId, "currencyId", "terrausd-wormhole", "terrausd"],
+          [fee.legId, "currencyId", "terrausd-wormhole", "terrausd"],
+        ],
+      ],
+    ],
   );
+  assert.deepEqual(p.report, []);
 });
 
 test("the receive Summ made up to pair a categorised send as a transfer is ignored, never matched", () => {

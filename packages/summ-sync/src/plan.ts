@@ -174,8 +174,7 @@ export interface ReportEntry {
     | "other-source"
     | "foreign-pair"
     | "price-blank"
-    | "made-up-left"
-    | "misidentified";
+    | "made-up-left";
   filed: boolean;
   id?: string;
   legIds?: string[];
@@ -225,6 +224,8 @@ export interface Plan {
   categorise: EditEntry[];
   /** Legs of Summ's imports the config names in ignoreImportLegs: their type set to ignored. Absent from older plans. */
   ignore?: EditEntry[];
+  /** Legs of Summ's imports on a wrong token that no row takes: their currency put right. Absent from older plans. */
+  currency?: EditEntry[];
   report: ReportEntry[];
   held: HeldEntry[];
   overridden: OverriddenEntry[];
@@ -290,6 +291,8 @@ export const sameCurrency = (a: string, b: string) => a.toLowerCase() === b.toLo
 const MISIDENTIFIED: Record<string, { currency: string; id: string }> = {
   "terrausd-wormhole": { currency: "USTC", id: "terrausd" },
 };
+/** Summ's ids of the wrong tokens: pull reads every action that holds one. */
+export const MISIDENTIFIED_IDS = Object.keys(MISIDENTIFIED);
 /** The run's currency a leg of Summ's import holds once its currency is put right: its own when Summ has it right. */
 const misidentified = (leg: Leg) => (leg.currencyId ? MISIDENTIFIED[leg.currencyId] : undefined);
 const holdsCurrency = (leg: Leg, currency: string) =>
@@ -1246,20 +1249,6 @@ export function makePlan(input: PlanInput): PlanResult {
     }
   }
 
-  // A token Summ's import got wrong on a leg no row takes: put right with a row's leg only, so the leg is reported, as
-  // its cost base sits apart from the run currency's until it is
-  for (const leg of ownLegs) {
-    const wrong = misidentified(leg);
-    if (!wrong || legClaims.has(leg.legId) || IGNORED.has(leg.trade)) continue;
-    plan.report.push({
-      kind: "misidentified",
-      filed: isFiled(leg.timestamp),
-      legIds: [leg.legId],
-      txids: [normaliseTxid(leg.id)],
-      detail: `Summ's import has ${leg.quantity} ${leg.currency} as ${leg.currencyId}, the run's ${wrong.currency} is ${wrong.id}; no row takes the leg, so it is not put right`,
-    });
-  }
-
   // Made-up legs an apply left in place: counted on their own until ignored. A leg gone, or ignored, is no longer one
   for (const left of input.leftLegs ?? []) {
     const leg = input.legs.find((l) => l.legId === left.legId);
@@ -1686,6 +1675,36 @@ export function makePlan(input: PlanInput): PlanResult {
       plan.notes.push(`scope: the legs in ignoreImportLegs (${ignore.length} entries) are ignored whatever the scope`);
   }
 
+  // ---- Legs on a wrong token that no row takes (a fee, a send outside the run): put right with the rest, whatever
+  // the scope, so all of the token's legs keep one cost base. A leg to be ignored, or ignored, needs none
+  const currency: EditEntry[] = [];
+  for (const leg of input.legs) {
+    const wrong = misidentified(leg);
+    if (!wrong || legClaims.has(leg.legId) || toIgnore.has(leg.legId) || IGNORED.has(leg.trade)) continue;
+    if (managedSources.has(leg.source) || leg.importType === "manual") continue;
+    const change: Change = {
+      leg: "base",
+      legId: leg.legId,
+      field: "currencyId",
+      summ: leg.currencyId as string,
+      desired: wrong.id,
+    };
+    const same = currency.find((e) => e.actionId === leg.actionId);
+    if (same) {
+      same.id = `${same.id}, ${leg.legId}`;
+      same.changes.push(change);
+      same.filed ||= isFiled(leg.timestamp);
+      continue;
+    }
+    currency.push({
+      id: `legs ${leg.legId}`,
+      filed: isFiled(leg.timestamp),
+      actionId: leg.actionId,
+      changes: [change],
+    });
+  }
+  if (currency.length) plan.currency = currency;
+
   if (input.scope) narrow(plan, input.scope, rows, legsOf, eventOf);
 
   // After the scope: what this plan does is what it leaves behind
@@ -1730,6 +1749,7 @@ export function makePlan(input: PlanInput): PlanResult {
     uploads: plan.upload.reduce((n, u) => n + u.ids.length, 0),
     categorise: plan.categorise.length,
     ...(plan.ignore ? { ignore: plan.ignore.length } : {}),
+    ...(plan.currency ? { currency: plan.currency.length } : {}),
     reports: plan.report.length,
     held: plan.held.length,
     overridden: plan.overridden.length,

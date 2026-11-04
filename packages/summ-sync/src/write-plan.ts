@@ -163,6 +163,15 @@ export function renderPlan(plan: Plan, snapshot: string, run: string, legs: Map<
       "| --- | --- | --- | --- | --- |",
       ...changeLines(es),
     ]),
+    ...section("Currency (Summ's import legs on a wrong token that no row takes)", plan.currency ?? [], (es) => [
+      "| Leg | Field | Summ | Desired |",
+      "| --- | --- | --- | --- |",
+      ...es.flatMap((e) =>
+        e.changes.map(
+          (c) => `| ${show(c.legId)} | ${c.field} | ${show(String(c.summ))} | ${show(String(c.desired))} |`,
+        ),
+      ),
+    ]),
     ...section("Ignore (Summ's import legs named in ignoreImportLegs)", plan.ignore ?? [], (es) => [
       "| Leg | Field | Summ | Desired |",
       "| --- | --- | --- | --- |",

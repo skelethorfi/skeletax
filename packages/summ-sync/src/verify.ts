@@ -245,7 +245,7 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
     const chosen = flags.approveDeletes && d.filed === flags.approveFiled;
     entries.push({ key, state: stateOf(problems, key, chosen, false), problems, rates: [] });
   }
-  for (const kind of ["edit", "categorise", "ignore"] as const) {
+  for (const kind of ["edit", "categorise", "ignore", "currency"] as const) {
     for (const [i, e] of (plan[kind] ?? []).entries()) {
       const key = `${kind}-${i}`;
       const rates: string[] = [];
@@ -294,7 +294,7 @@ export function verifyPlan({ plan, before, beforeFile, after, afterFile, lines }
     if (field === "currencyId") explained.add(`${legId}|currency`);
     touched.add(legId);
   };
-  for (const kind of ["edit", "categorise", "ignore"] as const) {
+  for (const kind of ["edit", "categorise", "ignore", "currency"] as const) {
     for (const [i, e] of (plan[kind] ?? []).entries()) {
       const key = `${kind}-${i}`;
       if (!ranLines(key).length) continue;
