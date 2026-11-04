@@ -297,7 +297,8 @@ export const MISIDENTIFIED_IDS = Object.keys(MISIDENTIFIED);
 // Only the import that gets it wrong: the token itself, held on its own chain, is right as it is
 const misidentified = (leg: Leg) => {
   const wrong = leg.currencyId ? MISIDENTIFIED[leg.currencyId] : undefined;
-  return wrong && sameCurrency(leg.blockchain, wrong.chain) ? wrong : undefined;
+  // Summ can leave a leg's chain blank, to be read from its wallet
+  return wrong && (!leg.blockchain || sameCurrency(leg.blockchain, wrong.chain)) ? wrong : undefined;
 };
 const holdsCurrency = (leg: Leg, currency: string) =>
   sameCurrency(misidentified(leg)?.currency ?? leg.currency, currency);
@@ -1686,13 +1687,20 @@ export function makePlan(input: PlanInput): PlanResult {
   const putRight = new Set(
     plan.categorise.flatMap((e) => e.changes.filter((c) => c.field === "currencyId").map((c) => c.legId)),
   );
-  const heldRows = new Set(plan.held.map((h) => h.id));
   const currency: EditEntry[] = [];
+  // A leg of the token the plan cannot put right (a held row's, one beside a manual entry, one a row takes with no
+  // entry putting it right: your value kept, or two rows on it) would keep a cost-base pool of its own
+  const keptWrong: Leg[] = [];
   for (const leg of input.legs) {
     const wrong = misidentified(leg);
     if (!wrong || putRight.has(leg.legId) || planned.has(leg.legId) || toIgnore.has(leg.legId)) continue;
-    if (IGNORED.has(leg.trade) || (legClaims.get(leg.legId) ?? []).some((id) => heldRows.has(id))) continue;
+    if (IGNORED.has(leg.trade)) continue;
     if (managedSources.has(leg.source) || ["manual", "assumed-fee", SOFT_TRANSFER].includes(leg.importType)) continue;
+    const rowsOn = legClaims.get(leg.legId) ?? [];
+    if (rowsOn.length || manualIn([leg.actionId]).length) {
+      keptWrong.push(leg);
+      continue;
+    }
     const change: Change = {
       leg: "base",
       legId: leg.legId,
@@ -1714,7 +1722,16 @@ export function makePlan(input: PlanInput): PlanResult {
       changes: [change],
     });
   }
-  if (currency.length) plan.currency = currency;
+  // The token's legs move together or not at all
+  const legsPutRight = putRight.size + currency.reduce((n, e) => n + e.changes.length, 0);
+  if (keptWrong.length && legsPutRight) {
+    plan.categorise = plan.categorise
+      .map((e) => ({ ...e, changes: e.changes.filter((c) => c.field !== "currencyId") }))
+      .filter((e) => e.changes.length || e.ignore?.length);
+    plan.notes.push(
+      `a wrong token's legs wait: ${keptWrong.map((l) => `${l.quantity} ${l.currency} (leg ${l.legId})`).join(", ")} cannot be put right in this plan (a held row's, beside a manual entry, or a row's with no entry putting it right), and the token's legs move together or not at all`,
+    );
+  } else if (currency.length) plan.currency = currency;
 
   if (input.scope) narrow(plan, input.scope, rows, legsOf, eventOf);
   // A token's legs are put right together or not at all, and a scope leaves some out: only a full plan does it

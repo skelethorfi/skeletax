@@ -422,7 +422,19 @@ test("an action holding a token Summ's import got wrong has its action read, tho
     state.currencyIds = ["b"];
     await pull(stateDir, undefined, { client, now: T0 });
     assert.deepEqual(inspected.sort(), ["a", "b"]);
-    assert.ok(filters.some((f) => JSON.stringify(f ?? null).includes('"terrausd-wormhole"')));
+    assert.ok(
+      filters.some(
+        (f) =>
+          JSON.stringify(f) ===
+          JSON.stringify({
+            type: "or",
+            rules: [
+              { type: "txCurrency", value: ["terrausd-wormhole"] },
+              { type: "feeCurrency", value: ["terrausd-wormhole"] },
+            ],
+          }),
+      ),
+    );
   }));
 
 test("a made-up leg an apply left in place has its action read, so plan can see it; a leg gone is not an error", () =>

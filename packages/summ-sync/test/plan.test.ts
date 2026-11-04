@@ -1009,6 +1009,13 @@ test("legs of the wrong token that no row takes are put right with the rest, one
     [["trade"]],
   );
   assert.ok(scoped.notes.includes("scope: 2 entries putting a wrong token right wait for a full plan"));
+  // A leg with its chain left blank is the import's
+  assert.equal(plan({ rows: [], legs: [{ ...send, blockchain: "" }] }).plan.currency?.length, 1);
+  // A leg of the token the plan cannot put right holds them all back: here two rows on one leg
+  const twice = btcRow({ ...r, id: "2024-03-01T10:00:00.000Z.in.eeeeeeeeeeee" });
+  const waiting = plan({ rows: [r, twice], legs: [mine, send] }).plan;
+  assert.equal(waiting.currency, undefined);
+  assert.ok(waiting.notes.some((n) => n.startsWith("a wrong token's legs wait:")));
 });
 
 test("the receive Summ made up to pair a categorised send as a transfer is ignored, never matched", () => {
