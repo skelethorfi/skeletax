@@ -290,7 +290,7 @@ legs fit, is reported, and no row the leg fits at any rank is uploaded.
 import has Terra Classic's stablecoin as TerraUSD (Wormhole) (`terrausd-wormhole`, symbol
 UST), a different token, where the run has USTC (`terrausd`). The plan keeps a short list of
 these by Summ's currency id and the chain the import gets it wrong on (a leg of the token itself,
-on its own chain, is right as it is; a blank chain is the import's), and sets each such leg's `currencyId` to the right one, so
+on its own chain, is right as it is, and a leg with no chain is left as it is), and sets each such leg's `currencyId` to the right one, so
 Summ prices it, and keeps its cost base, as the run's currency. All of a token's legs move in
 one plan: a leg left on the wrong token sits in a cost-base pool of its own, and a disposal of
 the right one finds no cost base. So `pull` also reads every action holding a listed id in a leg
