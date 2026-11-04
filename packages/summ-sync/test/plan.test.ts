@@ -922,6 +922,18 @@ test("a categorised row sets the type of Summ's own leg with its txid, currency 
   );
 });
 
+test("a categorised USTC row matches Summ's UST leg: Summ's Terra import names Terra Classic's stablecoin UST", () => {
+  const r = btcRow({ type: "bridge-trade-out", baseCurrency: "USTC", feeCurrency: "", feeAmount: "" });
+  const { plan: p } = plan({ rows: [r], legs: [ownLeg({ currency: "UST", quantity: 0.01 })] });
+  assert.deepEqual(
+    p.categorise.map((c) => c.changes.map((x) => [x.leg, x.field, x.desired])),
+    [[["base", "trade", "bridgeTradeOut"]]],
+  );
+  assert.deepEqual(p.report, []);
+  // another currency is still no match
+  assert.equal(plan({ rows: [r], legs: [ownLeg({ currency: "USDT", quantity: 0.01 })] }).plan.categorise.length, 0);
+});
+
 test("the receive Summ made up to pair a categorised send as a transfer is ignored, never matched", () => {
   const made = (over: Partial<Leg> = {}) =>
     ownLeg({

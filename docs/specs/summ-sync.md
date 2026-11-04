@@ -286,7 +286,8 @@ planned. A legacy leg that fits several rows, or a row that several legacy
 legs fit, is reported, and no row the leg fits at any rank is uploaded.
 
 **Categorised rows** match a leg of Summ's own imports whose tx hash is a
-txid of the row, on the row's side, with the same currency, and an amount
+txid of the row, on the row's side, with the same currency (the run's USTC is
+Summ's UST: its Terra import names Terra Classic's stablecoin so), and an amount
 equal to the row's or the row's plus its fee (Summ records the gross amount
 on some chains). Exactly one leg must match. A row with no such leg takes
 the one leg with its txid, side and currency whatever the amount (or, when
