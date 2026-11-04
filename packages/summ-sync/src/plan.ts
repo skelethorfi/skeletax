@@ -224,6 +224,8 @@ export interface Plan {
   categorise: EditEntry[];
   /** Legs of Summ's imports the config names in ignoreImportLegs: their type set to ignored. Absent from older plans. */
   ignore?: EditEntry[];
+  /** Legs of Summ's imports on a wrong token that no row takes: their currency put right. Absent from older plans. */
+  currency?: EditEntry[];
   report: ReportEntry[];
   held: HeldEntry[];
   overridden: OverriddenEntry[];
@@ -284,6 +286,21 @@ export function same(field: string, a: Value, b: Value): boolean {
 }
 
 export const sameCurrency = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+/** Currencies Summ's imports give the wrong token: by Summ's id, the run's currency and the id of its token. Summ's
+ * Terra import has Terra Classic's stablecoin as TerraUSD (Wormhole) (spec: Categorised rows). */
+const MISIDENTIFIED: Record<string, { currency: string; id: string; chain: string }> = {
+  "terrausd-wormhole": { currency: "USTC", id: "terrausd", chain: "terra" },
+};
+/** Summ's ids of the wrong tokens: pull reads every action that holds one. */
+export const MISIDENTIFIED_IDS = Object.keys(MISIDENTIFIED);
+/** The run's currency a leg of Summ's import holds once its currency is put right: its own when Summ has it right. */
+// Only the import that gets it wrong: the token itself, held on its own chain, is right as it is
+const misidentified = (leg: Leg) => {
+  const wrong = leg.currencyId ? MISIDENTIFIED[leg.currencyId] : undefined;
+  return wrong && sameCurrency(leg.blockchain, wrong.chain) ? wrong : undefined;
+};
+const holdsCurrency = (leg: Leg, currency: string) =>
+  sameCurrency(misidentified(leg)?.currency ?? leg.currency, currency);
 /** The wallet of the leg's side: the sender of an outgoing leg, the receiver of an incoming one. */
 const sameWallet = (leg: Leg, row: Row) =>
   leg.side === "outgoing" ? sameCurrency(leg.from, row.from) : sameCurrency(leg.to, row.to);
@@ -1016,8 +1033,7 @@ export function makePlan(input: PlanInput): PlanResult {
     const amount = Number(row.baseAmount);
     const gross = amount + (hasFee(row) && sameCurrency(row.feeCurrency, row.baseCurrency) ? Number(row.feeAmount) : 0);
     const withTxid = ownLegs.filter(
-      (l) =>
-        l.side === type.side && row.txids.includes(normaliseTxid(l.id)) && sameCurrency(l.currency, row.baseCurrency),
+      (l) => l.side === type.side && row.txids.includes(normaliseTxid(l.id)) && holdsCurrency(l, row.baseCurrency),
     );
     const found = withTxid.filter((l) => sameAmount(l.quantity, amount) || sameAmount(l.quantity, gross));
     const filed = isFiled(row.timestamp);
@@ -1161,6 +1177,9 @@ export function makePlan(input: PlanInput): PlanResult {
       continue;
     }
     const changes: Change[] = [...compare(leg, "base", "trade", typeOf(row).trade)];
+    // A token Summ's import got wrong is put right, so its price and cost base are the run currency's
+    const wrong = misidentified(leg);
+    if (wrong) changes.push(...compare(leg, "base", "currencyId", wrong.id));
     const feeLegs = feeLegsOf(leg);
     const inline = inlineFeeOf(leg);
     if (hasFee(row) && shapeRank(row, leg) !== 1) {
@@ -1660,7 +1679,75 @@ export function makePlan(input: PlanInput): PlanResult {
       plan.notes.push(`scope: the legs in ignoreImportLegs (${ignore.length} entries) are ignored whatever the scope`);
   }
 
+  // ---- Legs on a wrong token that no row takes (a fee, a send outside the run): put right with the rest, whatever
+  // the scope, so all of the token's legs keep one cost base. A leg to be ignored, or ignored, needs none
+  // Legs a categorise entry puts right are done; legs no row takes that the plan already names (a made-up leg it
+  // ignores), ignored or to be ignored, and legs Summ issues itself (a new id on every rebuild) need none
+  const putRight = new Set(
+    plan.categorise.flatMap((e) => e.changes.filter((c) => c.field === "currencyId").map((c) => c.legId)),
+  );
+  const currency: EditEntry[] = [];
+  // A leg of the token the plan cannot put right (a held row's, one beside a manual entry, one a row takes with no
+  // entry putting it right: a kept override, or two rows on it) would keep a cost-base pool of its own
+  const keptWrong: Leg[] = [];
+  for (const leg of input.legs) {
+    const wrong = misidentified(leg);
+    if (putRight.has(leg.legId) || toIgnore.has(leg.legId) || IGNORED.has(leg.trade)) continue;
+    if (managedSources.has(leg.source) || ["manual", "assumed-fee", SOFT_TRANSFER].includes(leg.importType)) continue;
+    // A listed token with no chain may be the import's: not known, so the rest wait rather than move without it
+    if (!wrong && leg.currencyId && MISIDENTIFIED[leg.currencyId] && !leg.blockchain) {
+      keptWrong.push(leg);
+      continue;
+    }
+    if (!wrong) continue;
+    // Before the plan's other entries: a row's leg whose entry changes its type but not its token is still kept
+    if (legClaims.has(leg.legId) || manualIn([leg.actionId]).length) {
+      keptWrong.push(leg);
+      continue;
+    }
+    if (planned.has(leg.legId)) continue;
+    const change: Change = {
+      leg: "base",
+      legId: leg.legId,
+      field: "currencyId",
+      summ: leg.currencyId as string,
+      desired: wrong.id,
+    };
+    const same = currency.find((e) => e.actionId === leg.actionId);
+    if (same) {
+      same.id = `${same.id}, ${leg.legId}`;
+      same.changes.push(change);
+      same.filed ||= isFiled(leg.timestamp);
+      continue;
+    }
+    currency.push({
+      id: `legs ${leg.legId}`,
+      filed: isFiled(leg.timestamp),
+      actionId: leg.actionId,
+      changes: [change],
+    });
+  }
+  // The token's legs move together or not at all
+  if (keptWrong.length) {
+    plan.categorise = plan.categorise
+      .map((e) => ({ ...e, changes: e.changes.filter((c) => c.field !== "currencyId") }))
+      .filter((e) => e.changes.length || e.ignore?.length);
+    plan.notes.push(
+      `a wrong token's legs wait: ${keptWrong.map((l) => `${l.quantity} ${l.currency} (leg ${l.legId})`).join(", ")} cannot be put right in this plan (a held row's, beside a manual entry, a row's with no entry putting it right, or one with no chain), and the token's legs move together or not at all`,
+    );
+  } else if (currency.length) plan.currency = currency;
+
   if (input.scope) narrow(plan, input.scope, rows, legsOf, eventOf);
+  // A token's legs are put right together or not at all, and a scope leaves some out: only a full plan does it
+  if (input.scope) {
+    const moved = (e: EditEntry) => e.changes.some((c) => c.field === "currencyId");
+    const scoped = (plan.currency?.length ?? 0) + plan.categorise.filter(moved).length;
+    delete plan.currency;
+    plan.categorise = plan.categorise
+      .map((e) => ({ ...e, changes: e.changes.filter((c) => c.field !== "currencyId") }))
+      .filter((e) => e.changes.length || e.ignore?.length);
+    if (scoped) plan.notes.push(`scope: ${scoped} entries putting a wrong token right wait for a full plan`);
+  }
 
   // After the scope: what this plan does is what it leaves behind
   const found = decisionsOf(plan, input.legs, rows, isFiled);
@@ -1704,6 +1791,7 @@ export function makePlan(input: PlanInput): PlanResult {
     uploads: plan.upload.reduce((n, u) => n + u.ids.length, 0),
     categorise: plan.categorise.length,
     ...(plan.ignore ? { ignore: plan.ignore.length } : {}),
+    ...(plan.currency ? { currency: plan.currency.length } : {}),
     reports: plan.report.length,
     held: plan.held.length,
     overridden: plan.overridden.length,

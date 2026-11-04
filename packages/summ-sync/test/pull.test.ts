@@ -32,6 +32,8 @@ function fakeSumm(ids: string[], legs: Record<string, unknown[]> = {}) {
     ids,
     legs,
     sourceIds: null as string[] | null,
+    /** What a query by currency finds: none unless set. */
+    currencyIds: [] as string[],
     gone: new Set<string>(),
     holders: {} as Record<string, string>,
     before: (_: string) => {},
@@ -44,7 +46,8 @@ function fakeSumm(ids: string[], legs: Record<string, unknown[]> = {}) {
       if (name === "query_summ_transactions") {
         filters.push(args.filter);
         const isSource = JSON.stringify(args.filter ?? "").includes('"source"');
-        const actionIds = isSource ? (state.sourceIds ?? state.ids) : state.ids;
+        const isCurrency = JSON.stringify(args.filter ?? "").includes('"txCurrency"');
+        const actionIds = isCurrency ? state.currencyIds : isSource ? (state.sourceIds ?? state.ids) : state.ids;
         const blocks = actionIds.map(
           (id, i) =>
             `## ${i + 1}. send\n- **Action ID**: \`${id}\`\n- **Tx Hash**: \`h${id}\`\n- **Action Category**: send`,
@@ -409,6 +412,29 @@ test("an import leg the config names to ignore has its action read, though nothi
     state.holders = { dup: "b" };
     const file = await pull(stateDir, undefined, { client, now: T0 });
     assert.ok(readSnapshot(file).legs.some((l) => l.legId === "dup"));
+  }));
+
+test("an action holding a token Summ's import got wrong has its action read, though nothing else needs it", () =>
+  quiet(async () => {
+    const stateDir = stateDirOf();
+    const { client, state, inspected, filters } = fakeSumm(["a", "b", "c"]);
+    state.sourceIds = ["a"];
+    state.currencyIds = ["b"];
+    await pull(stateDir, undefined, { client, now: T0 });
+    assert.deepEqual(inspected.sort(), ["a", "b"]);
+    assert.ok(
+      filters.some(
+        (f) =>
+          JSON.stringify(f) ===
+          JSON.stringify({
+            type: "or",
+            rules: [
+              { type: "txCurrency", value: ["terrausd-wormhole"] },
+              { type: "feeCurrency", value: ["terrausd-wormhole"] },
+            ],
+          }),
+      ),
+    );
   }));
 
 test("a made-up leg an apply left in place has its action read, so plan can see it; a leg gone is not an error", () =>

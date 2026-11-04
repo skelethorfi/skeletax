@@ -922,6 +922,127 @@ test("a categorised row sets the type of Summ's own leg with its txid, currency 
   );
 });
 
+test("a categorised USTC row takes Summ's UST (Wormhole) leg and puts its currency right, in the one edit", () => {
+  const r = btcRow({ type: "bridge-trade-out", baseCurrency: "USTC", feeCurrency: "", feeAmount: "" });
+  const wormhole = ownLeg({ currency: "UST", currencyId: "terrausd-wormhole", quantity: 0.01, blockchain: "terra" });
+  const { plan: p } = plan({ rows: [r], legs: [wormhole] });
+  assert.deepEqual(
+    p.categorise.map((c) => c.changes.map((x) => [x.leg, x.field, x.summ, x.desired])),
+    [
+      [
+        ["base", "trade", "withdrawal", "bridgeTradeOut"],
+        ["base", "currencyId", "terrausd-wormhole", "terrausd"],
+      ],
+    ],
+  );
+  assert.deepEqual(p.report, []);
+  // Put right already: only its type
+  assert.deepEqual(
+    plan({
+      rows: [r],
+      legs: [ownLeg({ currency: "USTC", currencyId: "terrausd", quantity: 0.01 })],
+    }).plan.categorise.map((c) => c.changes.map((x) => x.field)),
+    [["trade"]],
+  );
+  // A UST that is no wrong id of USTC is another currency: no match
+  const other = plan({
+    rows: [r],
+    legs: [ownLeg({ currency: "UST", currencyId: "some-ust", quantity: 0.01, blockchain: "terra" })],
+  }).plan;
+  assert.equal(other.categorise.length, 0);
+  assert.deepEqual(
+    other.report.map((x) => x.kind),
+    ["no-leg"],
+  );
+});
+
+test("legs of the wrong token that no row takes are put right with the rest, one entry per action", () => {
+  const send = ownLeg({
+    currency: "UST",
+    currencyId: "terrausd-wormhole",
+    quantity: 5,
+    actionId: "s",
+    blockchain: "terra",
+  });
+  const fee = ownLeg({
+    side: "fees",
+    trade: "fee",
+    currency: "UST",
+    currencyId: "terrausd-wormhole",
+    quantity: 0.01,
+    actionId: "s",
+    blockchain: "terra",
+  });
+  const ignored = ownLeg({
+    trade: "ignoreOut",
+    currency: "UST",
+    currencyId: "terrausd-wormhole",
+    actionId: "i",
+    blockchain: "terra",
+  });
+  const right = ownLeg({ currency: "USTC", currencyId: "terrausd", actionId: "r", blockchain: "terra" });
+  const { plan: p } = plan({ rows: [], legs: [send, fee, ignored, right] });
+  assert.deepEqual(p.categorise, []);
+  assert.deepEqual(
+    p.currency?.map((e) => [e.actionId, e.changes.map((c) => [c.legId, c.field, c.summ, c.desired])]),
+    [
+      [
+        "s",
+        [
+          [send.legId, "currencyId", "terrausd-wormhole", "terrausd"],
+          [fee.legId, "currencyId", "terrausd-wormhole", "terrausd"],
+        ],
+      ],
+    ],
+  );
+  assert.deepEqual(p.report, []);
+  // The token itself on its own chain is right as it is
+  const held = ownLeg({ currency: "UST", currencyId: "terrausd-wormhole", quantity: 5, blockchain: "eth" });
+  assert.equal(plan({ rows: [], legs: [held] }).plan.currency, undefined);
+  // A scope leaves some of the token's legs out, so it puts none right
+  const r = btcRow({ type: "bridge-trade-out", baseCurrency: "USTC", feeCurrency: "", feeAmount: "" });
+  const mine = ownLeg({ currency: "UST", currencyId: "terrausd-wormhole", quantity: 0.01, blockchain: "terra" });
+  const scoped = plan({ rows: [r], legs: [mine, send], scope: [r.id] }).plan;
+  assert.equal(scoped.currency, undefined);
+  assert.deepEqual(
+    scoped.categorise.map((e) => e.changes.map((c) => c.field)),
+    [["trade"]],
+  );
+  assert.ok(scoped.notes.includes("scope: 2 entries putting a wrong token right wait for a full plan"));
+  // A leg with no chain is not known to be the import's: the token's others wait for it
+  const unknown = plan({ rows: [], legs: [send, { ...fee, legId: "nochain", actionId: "n", blockchain: "" }] }).plan;
+  assert.equal(unknown.currency, undefined);
+  assert.ok(unknown.notes.some((n) => n.startsWith("a wrong token's legs wait:")));
+  // A leg of the token the plan cannot put right holds them all back: here two rows on one leg
+  const twice = btcRow({ ...r, id: "2024-03-01T10:00:00.000Z.in.eeeeeeeeeeee" });
+  const waiting = plan({ rows: [r, twice], legs: [mine, send] }).plan;
+  assert.equal(waiting.currency, undefined);
+  assert.ok(waiting.notes.some((n) => n.startsWith("a wrong token's legs wait:")));
+  // An override keeping a row's leg on the token, beside a change of its type: the others wait too
+  const kept = plan({
+    rows: [r],
+    legs: [mine, send],
+    overrides: [
+      {
+        id: r.id,
+        leg: "base",
+        field: "currencyId",
+        run: "terrausd",
+        summ: "terrausd-wormhole",
+        seenAt: "",
+        reason: "kept",
+        retainUserEdit: "yes",
+      },
+    ],
+  }).plan;
+  assert.deepEqual(
+    kept.categorise.map((e) => e.changes.map((c) => c.field)),
+    [["trade"]],
+  );
+  assert.equal(kept.currency, undefined);
+  assert.ok(kept.notes.some((n) => n.startsWith("a wrong token's legs wait:")));
+});
+
 test("the receive Summ made up to pair a categorised send as a transfer is ignored, never matched", () => {
   const made = (over: Partial<Leg> = {}) =>
     ownLeg({
@@ -2344,6 +2465,16 @@ test("a partial snapshot refuses deletes and filed-year edits, and notes its lim
   const allowed = setup([leg("l1", id, 2)]);
   const dir = writePlan(allowed.state, allowed.run);
   assert.match(readFileSync(join(dir, "plan.md"), "utf8"), /covers only 2023-07-01 to 2024-06-30/);
+  // A leg on a wrong token: its others may sit outside the range, and they move together or not at all
+  const wrong = {
+    ...leg("w1", "f".repeat(64), 5),
+    source: "terra-import",
+    importType: "",
+    blockchain: "terra",
+    currencyIdentifier: { id: "terrausd-wormhole", symbol: "UST" },
+  };
+  const token = setup([leg("l1", id, 1), wrong]);
+  assert.throws(() => writePlan(token.state, token.run), /1 currency corrections.*Pull with --all/);
 });
 
 test("a partial snapshot allows an import leg's price alone in a current year; any other categorise needs a whole pull", () => {

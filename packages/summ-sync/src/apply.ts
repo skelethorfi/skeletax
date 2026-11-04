@@ -440,6 +440,8 @@ export async function applyPlan(
     ...(uploads.length ? [] : categorise).map((e) => ["categorise", e] as const),
     // An import's leg the user named to ignore: nothing pairs with it, so it waits for no upload
     ...selected(plan.ignore ?? [], opts).map((e) => ["ignore", e] as const),
+    // A leg on a wrong token that no row takes: as an ignore, it waits for no upload
+    ...selected(plan.currency ?? [], opts).map((e) => ["currency", e] as const),
   ];
 
   if (opts.approveDeletes) {
@@ -736,7 +738,7 @@ export async function applyPlan(
   let manualNow: Leg[] | null = null;
 
   // ---- Edits, then categorisation: the same call on a managed row's legs or on Summ's own leg
-  async function applyEdit(kind: "edit" | "categorise" | "ignore", entry: EditEntry) {
+  async function applyEdit(kind: "edit" | "categorise" | "ignore" | "currency", entry: EditEntry) {
     const key = `${kind}-${(plan[kind] ?? []).indexOf(entry)}`;
     if (entry.txids?.length) {
       manualNow ??= manualList ?? (await manualEntries(client));
