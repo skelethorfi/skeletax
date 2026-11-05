@@ -128,3 +128,66 @@ describe("refund", () => {
     assert.equal(refundRows(action, [thornodeTx])[0].type, "failed-out");
   });
 });
+
+describe("pending add withdrawn (Viewblock)", () => {
+  const add = {
+    hash: "tx-add",
+    timestamp: Date.parse("2020-12-01T10:00:00Z"),
+    height: 1,
+    blockIndex: 0,
+    code: 0,
+    status: "success",
+    types: ["liquidity", "add", "main"],
+    memo: { raw: "ADD:ETH.TKN-0XABC:0x-user-eth-wallet" },
+    signer: "thor1-user-wallet-11111",
+    input: { chain: "THOR", asset: "THOR.RUNE", amount: "5000000000" },
+    msgs: [],
+  };
+  const withdraw = {
+    hash: "tx-withdraw",
+    timestamp: Date.parse("2020-12-02T10:00:00Z"),
+    height: 2,
+    blockIndex: 0,
+    code: 0,
+    status: "success",
+    types: ["liquidity", "withdraw", "main"],
+    memo: { raw: "-:ETH.TKN-ABC:10000" },
+    signer: "thor1-user-wallet-11111",
+    msgs: [],
+    outbounds: [
+      {
+        chain: "THOR",
+        from: "thor1-module",
+        to: "thor1-user-wallet-11111",
+        amount: "4998000000",
+        asset: "THOR.RUNE",
+        timestamp: Date.parse("2020-12-02T10:00:00Z"),
+      },
+    ],
+  };
+  const rows = runBundle(
+    {
+      source: "viewblock",
+      protocol: "thorchain",
+      wallet: "thor1-user-wallet-11111",
+      data: withdraw as any,
+      pendingAdd: add as any,
+      thornodeTxs: [],
+      cosmosTxs: [],
+    },
+    THORCHAIN,
+  ).rows;
+
+  test("a RUNE side gives the refund rows and the request's fee, on the one wallet, and no return row", () => {
+    assert.deepEqual(
+      rows.map((row) => [row.type, row.baseCurrency, row.baseAmount, row.feeAmount ?? ""]),
+      [
+        ["failed-out", "RUNE", "50", "0.02"],
+        ["fee", "RUNE", "0.02", ""],
+        ["fee", "RUNE", "0.02", ""],
+      ],
+    );
+    assert.equal(rows[2].timestamp.toISOString(), "2020-12-02T10:00:00.000Z");
+    assert.match(rows[2].description ?? "", /withdrawal request tx-withdraw/);
+  });
+});
