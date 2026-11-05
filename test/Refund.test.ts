@@ -191,3 +191,73 @@ describe("pending add withdrawn (Viewblock)", () => {
     assert.match(rows[2].description ?? "", /withdrawal request tx-withdraw/);
   });
 });
+
+test("an L1 pending add with no gas recorded takes no fee from the withdrawal request", () => {
+  const add = {
+    hash: "tx-add-l1",
+    timestamp: Date.parse("2020-12-01T10:00:00Z"),
+    height: 1,
+    types: ["liquidity", "add", "main"],
+    memo: { raw: "ADD:BNB.BNB:thor1-user-wallet-11111" },
+    input: { chain: "BNB", asset: "BNB.BNB", amount: "100000000" },
+    observation: { from: "bnb1-user-wallet", to: "bnb1-vault", chain: "BNB" },
+    msgs: [],
+  };
+  const withdraw = {
+    hash: "tx-withdraw-l1",
+    timestamp: Date.parse("2020-12-02T10:00:00Z"),
+    height: 2,
+    types: ["liquidity", "withdraw", "main"],
+    memo: { raw: "-:BNB.BNB:10000" },
+    signer: "thor1-user-wallet-11111",
+    msgs: [],
+    outbounds: [
+      {
+        hash: "tx-out-l1",
+        chain: "BNB",
+        from: "bnb1-vault",
+        to: "bnb1-user-wallet",
+        amount: "99000000",
+        asset: "BNB.BNB",
+        timestamp: Date.parse("2020-12-02T10:00:10Z"),
+      },
+    ],
+  };
+  const rows = runBundle(
+    {
+      source: "viewblock",
+      protocol: "thorchain",
+      wallet: "thor1-user-wallet-11111",
+      data: withdraw as any,
+      pendingAdd: add as any,
+      thornodeTxs: [],
+      cosmosTxs: [],
+    },
+    THORCHAIN,
+  ).rows;
+  assert.deepEqual(
+    rows.map((row) => [row.type, row.baseCurrency, row.baseAmount, row.feeCurrency ?? "", row.feeAmount ?? ""]),
+    [
+      ["failed-out", "BNB", "1", "", ""],
+      ["fee", "BNB", "0.01", "", ""],
+      ["failed-in", "BNB", "0.99", "", ""],
+      ["fee", "RUNE", "0.02", "", ""],
+    ],
+  );
+});
+
+test("a withdrawal with no pending add gives no rows, and a warning", () => {
+  const result = runBundle(
+    {
+      source: "viewblock",
+      protocol: "thorchain",
+      wallet: "thor1-user-wallet-11111",
+      data: { hash: "tx-w", timestamp: 0, types: ["liquidity", "withdraw", "main"], msgs: [] } as any,
+      thornodeTxs: [],
+      cosmosTxs: [],
+    },
+    THORCHAIN,
+  );
+  assert.deepEqual(result.rows, []);
+  assert.ok(result.issues.some((issue) => issue.kind === "warning" && /no pending add/.test(issue.message)));
+});

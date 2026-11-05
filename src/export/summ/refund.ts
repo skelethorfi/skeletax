@@ -2,7 +2,7 @@ import type { Activity } from "../../domain/Activity.ts";
 import { formatAmount } from "../../domain/Amount.ts";
 import { type SummRow, SummRowType } from "./csv/index.ts";
 import { formatBlockchain, MAYA, type Protocol, THORCHAIN } from "../../domain/Protocol.ts";
-import { fee, findLeg, leg, legTrace, named, plusSeconds } from "./common.ts";
+import { findLeg, leg, legTrace, named, plusSeconds } from "./common.ts";
 
 // A refund (docs/specs/fees.md): the send is a failed-out carrying the inbound fee, as Summ counts only a
 // failed transaction's fee. What the protocol kept (sent − returned) is a separate fee row, or lost for a
@@ -26,7 +26,7 @@ export function refundRows(activity: Activity, protocol: Protocol): SummRow[] {
       type: SummRowType.FailedOut,
       baseCurrency: currency,
       baseAmount: sentAmount,
-      ...fee(activity, protocol),
+      ...sendFee(activity, sent.txid, protocol),
       from: sent.wallet,
       to: protocol.counterparty,
       blockchain: formatBlockchain(blockchain),
@@ -97,4 +97,16 @@ export function refundRows(activity: Activity, protocol: Protocol): SummRow[] {
 // A wallet on THORChain or Maya: no import of it holds a return, and this CSV is its only record
 function onNativeChain(wallet: string): boolean {
   return [THORCHAIN, MAYA].some((protocol) => wallet.toLowerCase().startsWith(protocol.nativeAddressPrefix));
+}
+
+// The fee of the send: its own gas, not a pending add's withdrawal request's (another tx's gas leg)
+function sendFee(activity: Activity, txid: string | undefined, protocol: Protocol) {
+  const gas = activity.legs.find((item) => item.role === "gas" && (!item.txid || item.txid === txid));
+
+  if (!gas) {
+    return { feeCurrency: "", feeAmount: "" };
+  }
+
+  const { currency, amount } = named(gas, protocol);
+  return { feeCurrency: currency, feeAmount: amount };
 }

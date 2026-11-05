@@ -18,7 +18,15 @@ export function interpretPendingWithdraw(
   const add = bundle.pendingAdd;
 
   if (!add) {
-    throw new Error("a Viewblock withdrawal with no pending add");
+    return {
+      activities: [],
+      issues: [
+        {
+          kind: "warning",
+          message: `a withdrawal (${withdraw.hash}) Midgard does not list, with no pending add to pair it with: check what it paid back`,
+        },
+      ],
+    };
   }
 
   const asset = add.input.asset;

@@ -148,15 +148,34 @@ export function selectSends(bundles: RawBundle[]): {
   const unlisted = (tx: ViewblockTx) => tx.timestamp < cutoff && !listed.has(tx.hash.toUpperCase());
   // A withdrawal of a pending add is kept with that add (docs/specs/fees.md, Pending adds that are withdrawn)
   const viewblockTxs = bundles.filter((bundle) => bundle.source === "viewblock");
-  const withPendingAdd = (bundle: RawBundle): RawBundle | undefined => {
-    const tx = bundle.data as ViewblockTx;
-    const add = pendingAddOf(
-      tx,
-      viewblockTxs.filter((other) => other.wallet === bundle.wallet).map((other) => other.data as ViewblockTx),
-      bundle.wallet,
-      unlisted,
-    );
-    return add ? { ...bundle, pendingAdd: add } : undefined;
+  // Each add pays back one withdrawal: the earliest withdrawals pair first
+  const paired = new Map<RawBundle, ViewblockTx>();
+  const used = new Set<string>();
+  viewblockTxs
+    .filter((bundle) => {
+      const tx = bundle.data as ViewblockTx;
+      return isViewblockWithdraw(tx) && unlisted(tx) && tx.signer === bundle.wallet;
+    })
+    .sort((a, b) => (a.data as ViewblockTx).timestamp - (b.data as ViewblockTx).timestamp)
+    .forEach((bundle) => {
+      const wallet = viewblockTxs
+        .filter((other) => other.wallet === bundle.wallet)
+        .map((other) => other.data as ViewblockTx);
+      const add = pendingAddOf(
+        bundle.data as ViewblockTx,
+        wallet,
+        bundle.wallet,
+        (tx) => unlisted(tx) && !used.has(`${bundle.wallet}:${tx.hash}`),
+      );
+      if (add) {
+        paired.set(bundle, add);
+        used.add(`${bundle.wallet}:${add.hash}`);
+      }
+    });
+  // An unpaired withdrawal is kept, so the interpreter warns of it (docs/specs/fees.md)
+  const withPendingAdd = (bundle: RawBundle): RawBundle => {
+    const add = paired.get(bundle);
+    return add ? { ...bundle, pendingAdd: add } : bundle;
   };
   const viewblockGap = (bundle: RawBundle): RawBundle | undefined => {
     const tx = bundle.data as ViewblockTx;
@@ -282,17 +301,41 @@ function isAuctionDeposit(send: Action, runeAddress: string, mayaAddress: string
   );
 }
 
-// The pool a liquidity memo names: 'ADD:<pool>:…', '+:<pool>:…' or '-:<pool>:<basis points>'
+// THORChain's short chain names in memos
+const SHORT_CHAINS: Record<string, string> = {
+  A: "AVAX",
+  B: "BNB",
+  C: "BCH",
+  D: "DOGE",
+  E: "ETH",
+  F: "BASE",
+  G: "GAIA",
+  L: "LTC",
+  S: "BSC",
+};
+
+// The pool a liquidity memo names: 'ADD:<pool>:…', '+:<pool>:…' or '-:<pool>:<basis points>', with its chain in full
 function memoPool(memo: string): string | undefined {
   const [action, pool] = memo.trim().split(":");
-  return ["ADD", "A", "+", "-", "WD", "WITHDRAW"].includes((action ?? "").toUpperCase()) && pool ? pool : undefined;
+
+  if (!["ADD", "A", "+", "-", "WD", "WITHDRAW"].includes((action ?? "").toUpperCase()) || !pool) {
+    return undefined;
+  }
+
+  const [chain, ...rest] = pool.toUpperCase().split(".");
+  return rest.length ? [SHORT_CHAINS[chain] ?? chain, ...rest].join(".") : undefined;
 }
 
-// Two names of one pool: a token's contract may be shortened to its end ('ETH.XRUNE-71C')
+// Two names of one pool: a token's contract may be shortened to its end ('ETH.XRUNE-71C'); a name with a contract
+// is not the same pool as one without
 function samePool(a: string, b: string): boolean {
-  const [nameA, contractA = ""] = a.toUpperCase().split("-");
-  const [nameB, contractB = ""] = b.toUpperCase().split("-");
-  return nameA === nameB && (contractA.endsWith(contractB) || contractB.endsWith(contractA));
+  const [nameA, contractA = ""] = a.split("-");
+  const [nameB, contractB = ""] = b.split("-");
+  const contracts =
+    !contractA && !contractB
+      ? true
+      : !!contractA && !!contractB && (contractA.endsWith(contractB) || contractB.endsWith(contractA));
+  return nameA === nameB && contracts;
 }
 
 // The pending add a withdrawal pays back (docs/specs/fees.md, Pending adds that are withdrawn): the latest
@@ -317,9 +360,9 @@ export function pendingAddOf(
       const addPool = memoPool(memoOf(tx));
       const memo = memoOf(tx).toLowerCase();
       const fromWallet = tx.signer === wallet || tx.observation?.from === wallet;
-      const paid = payouts
-        .filter((out) => out.asset.toUpperCase() === tx.input.asset.toUpperCase())
-        .reduce((sum, out) => sum + BigInt(out.amount), 0n);
+      // A pending withdrawal pays back only the pending asset
+      const inAsset = payouts.every((out) => out.asset.toUpperCase() === tx.input.asset.toUpperCase());
+      const paid = inAsset ? payouts.reduce((sum, out) => sum + BigInt(out.amount), 0n) : 0n;
       return (
         !!addPool &&
         samePool(addPool, pool) &&

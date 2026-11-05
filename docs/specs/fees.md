@@ -310,8 +310,13 @@ recipient and, on an L1, txid.
 **Which txs.** Only a Viewblock withdrawal (`types` `liquidity`,
 `withdraw`) dated before 2022-04-01 that Midgard does not list, signed by the
 wallet. It is paired with the latest Viewblock add before it to the same
-pool, which Midgard does not list either, whose memo names the wallet (or is
-sent from it), and whose amount is at least the payout. A pending add that
+pool (a memo's short chain name, e.g. `B.`, read in full; a token's contract may
+be shortened to its end, but a pool named without one is another pool), which
+Midgard does not list either, whose memo names the wallet (or is sent from
+it), and whose amount is at least the payout, all paid in the asset added.
+Each add pays back one withdrawal, the earliest first. Two pending adds to one
+pool that a single withdrawal pays back together are not covered: the
+withdrawal pairs with an earlier add that covers the sum, or with none. A pending add that
 the depositor completed or that THORChain merged into another add (Midgard
 lists that add under the other tx's txid only) has no withdrawal of its own,
 so it gives no row: its amount is in the add Midgard lists. A withdrawal with
