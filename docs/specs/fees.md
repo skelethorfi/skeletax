@@ -236,12 +236,15 @@ protocol kept: the amount sent minus the amount returned. A modern THORChain
 refund returns the full amount; an L1 refund returns less, because the
 outbound fee is deducted.
 
-**What is exported.** The outbound is not a row.
+**What is exported.** On THORChain and Maya the outbound is not a row. On an
+L1 it is a `FailedIn` row, so the wallet's import of the return carries no
+amount either (below).
 
 | Row                                                                                | Type                                                | Amount                             | Fee                            |
 | ---------------------------------------------------------------------------------- | --------------------------------------------------- | ---------------------------------- | ------------------------------ |
 | The send                                                                           | `FailedOut`, on the sending wallet, to the protocol | amount sent                        | inbound fee (the one fee rule) |
 | What the protocol kept, only when the amount returned is less than the amount sent | `Fee`, same wallet and time                         | sent − returned, in the asset sent | none                           |
+| The return, only on an L1 and when the outbound has a txid                         | `FailedIn`, on the wallet paid, from the protocol   | amount returned                    | none                           |
 
 - `FailedOut`, not `FailedIn`: the wallet sent this transaction.
 - The `Fee` row is separate, not added to the `FailedOut` fee: the gas and the
@@ -273,6 +276,11 @@ outbound fee is deducted.
   holds the gas inside the amount sent, so the fee to add there is this
   `FailedOut` row's fee plus the `Fee` row; on EVM chains the import has the
   gas as a separate fee and only the `Fee` row is added.
+- So the return on an L1 is a `FailedIn` row with the outbound's txid: Summ
+  counts nothing for a failed transaction's amount, so the import's receive
+  takes no cost base and adds no balance, as the ignored return did. A return
+  left as a plain receive would enter the balance with no cost base, and the
+  next disposal of that asset would draw on it at zero cost.
 
 **Not exported.**
 
@@ -282,6 +290,43 @@ outbound fee is deducted.
 - A partially filled swap's refund (see Partially filled swaps).
 - Old L1 refunds for which neither THORNode nor Viewblock has a record of
   the inbound: the `FailedOut` fee is blank, per the inbound fee rule.
+
+### Pending adds that are withdrawn
+
+A one-sided add whose memo names a paired address (`ADD:<pool>:<paired
+address>`) waits for the other side and stays pending. If that side never
+comes, a withdrawal from the paired address (`-:<pool>:10000`) pays the
+pending asset back to its sender, less the outbound fee. No position was
+made, so it is exported as a refund: the add is the send, the withdrawal's
+payout the return.
+
+**Source.** Before the chain upgrade of March 2022, Midgard lists neither
+tx, and THORNode no longer serves them (its oldest block is far later). The
+paired THORChain wallet's Viewblock listing, read for sends before
+2022-04-01 (`sends.md`, Sources), has both: the add (filed under the paired
+address too) and the withdrawal it signed, with the payout's amount, asset,
+recipient and, on an L1, txid.
+
+**Which txs.** Only a Viewblock withdrawal (`types` `liquidity`,
+`withdraw`) dated before 2022-04-01 that Midgard does not list, signed by the
+wallet. It is paired with the latest Viewblock add before it to the same
+pool, which Midgard does not list either, whose memo names the wallet (or is
+sent from it), and whose amount is at least the payout. A pending add that
+the depositor completed or that THORChain merged into another add (Midgard
+lists that add under the other tx's txid only) has no withdrawal of its own,
+so it gives no row: its amount is in the add Midgard lists. A withdrawal with
+no such add, or no payout, gives no row and a warning.
+
+**Rows.** The refund rows above, on the add's sending wallet, with the add's
+txid; the reason is `pending add withdrawn (<withdrawal txid>)`. The
+withdrawal request is a native `MsgDeposit` of dust from the paired wallet:
+its native fee (default 0.02 RUNE) is one more `Fee` row on that wallet, to
+the protocol.
+
+| Case                             | Rows                                                                                                                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| L1 side (an add of a BEP2 token) | `FailedOut` of the amount added with its L1 gas; `Fee` of sent − returned; `FailedIn` of the payout with its txid; `Fee` 0.02 RUNE on the THORChain wallet (the request) |
+| THORChain side (an add of RUNE)  | `FailedOut` of the RUNE added, fee 0.02 RUNE; `Fee` of sent − returned; `Fee` 0.02 RUNE (the request)                                                                    |
 
 ### Refunds of an affiliate's cut
 

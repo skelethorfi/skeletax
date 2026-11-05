@@ -20,7 +20,9 @@ until it is withdrawn.
   asymmetric (one) or savers.
 
 Savers use the same rows with their own position token (`savers.md`); Maya's
-liquidity auction adds rows of its own (`maya.md`).
+liquidity auction adds rows of its own (`maya.md`). A one-sided add left
+pending and then withdrawn made no position: it is exported as a refund
+(`fees.md`, Pending adds that are withdrawn).
 
 ## Price helper
 
