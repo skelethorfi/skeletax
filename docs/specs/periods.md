@@ -23,7 +23,8 @@ layout is `csvFiles` in `src/export/summ/files.ts`.
   naming the key:
   - `fromDate` is required. `fromDate` and `toDate` are calendar dates,
     `"2025-07-01"`; an unquoted TOML date (`fromDate = 2025-07-01`) is read as
-    the same date, a date-time is refused, and so is a day not on the
+    the same date, a date-time is refused (one at exactly UTC midnight reads
+    as its date), and so is a day not on the
     calendar (`"2023-02-30"`). `toDate` is not before `fromDate`.
   - `frequency` is required: `"monthly"`, `"yearly"` or `"none"`.
   - `wallets` is required (it may be empty). Each wallet has a `name`, an
