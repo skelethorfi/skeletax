@@ -273,3 +273,35 @@ test("an L1 refund paid to a refund address named in the memo has its failed-in 
   assert.equal(back?.to, "bc1-user-refund");
   assert.equal(rows.find((row) => row.type === "failed-out")?.wallet, "bc1-user-sender");
 });
+
+test("an L1 pending add with no sender observed gives no rows, and a warning", () => {
+  const result = runBundle(
+    {
+      source: "viewblock",
+      protocol: "thorchain",
+      wallet: "thor1-user-wallet-11111",
+      data: {
+        hash: "tx-w2",
+        timestamp: 1,
+        types: ["liquidity", "withdraw", "main"],
+        signer: "thor1-user-wallet-11111",
+        msgs: [],
+        outbounds: [
+          { hash: "tx-o2", chain: "BNB", from: "v", to: "bnb1-user", amount: "1", asset: "BNB.BNB", timestamp: 1 },
+        ],
+      } as any,
+      pendingAdd: {
+        hash: "tx-a2",
+        timestamp: 0,
+        types: ["liquidity", "add", "main"],
+        input: { chain: "BNB", asset: "BNB.BNB", amount: "2" },
+        msgs: [],
+      } as any,
+      thornodeTxs: [],
+      cosmosTxs: [],
+    },
+    THORCHAIN,
+  );
+  assert.deepEqual(result.rows, []);
+  assert.ok(result.issues.some((issue) => issue.kind === "warning" && /no sender/.test(issue.message)));
+});
