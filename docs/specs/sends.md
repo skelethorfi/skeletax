@@ -42,7 +42,7 @@ nothing Viewblock does ends a run; each case is a warning in the run summary
 
 The listing is paged until a page comes back empty or adds no new tx, or the
 `total` is reached: the `pages` it reports has been seen to stop short of its
-`total` (25 listed of 39, 200 of 220).
+`total`.
 
 Maya sends (Maya's Midgard `send`, e.g. of `CACAO` or the MAYA token) are
 mapped the same way, from Maya's Midgard, with Maya's native fee (below).
