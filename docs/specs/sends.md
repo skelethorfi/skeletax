@@ -21,8 +21,28 @@ Viewblock is called only when a run exports a period that starts before
 2022-04-01. Its address listing gives every tx of the wallet; only sends
 dated before the cutoff are kept, and a send Midgard also lists is dropped,
 so the overlap gives no second row. A run for a later period never calls
-Viewblock, so if its unofficial API changes, only such runs are affected,
-and they fail rather than lose sends.
+Viewblock, so if its unofficial API changes, only such runs are affected.
+
+### Viewblock is best-effort
+
+Viewblock's API is unofficial, its quota is small, and a 429 can lock a
+client out for days (the answer's `value`, in ms; about 7 days was seen). So
+nothing Viewblock does ends a run; each case is a warning in the run summary
+(`run-summary.md`, Warnings):
+
+| Case                                                          | The run                                                                                                                                                                                   |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A wallet's complete list is stored                            | uses it and does not fetch it again: its txs before 2022-04 do not change. `--refetch-all` fetches it again                                                                               |
+| The listing ends short of the `total` it reports              | keeps what was listed, marked short (`incomplete` in the stored list and the manifest), and warns that a send or a withdrawn pending add (`liquidity.md`) may be missing                  |
+| A wallet's stored list is short                               | fetches it again on the next default run, keeping the stored list if that fails or comes back as short; every run that uses a short list (offline and `--replay` too) repeats the warning |
+| A 429                                                         | is not retried; Viewblock is asked nothing more in the run (lists and inbound gas, `fees.md`), and the summary says until when it is locked out                                           |
+| A list cannot be fetched (429, or an error after the retries) | uses the list stored by an earlier run; with none, the wallet's Viewblock sends and withdrawn pending adds are missing, and the summary says so                                           |
+| An inbound's gas cannot be fetched (`fees.md`)                | uses the copy stored by an earlier run; with none, that inbound's fee is blank, and the summary says so                                                                                   |
+| `--offline` with no list stored                               | an error, as for every source                                                                                                                                                             |
+
+The listing is paged until a page comes back empty or adds no new tx, or the
+`total` is reached: the `pages` it reports has been seen to stop short of its
+`total`.
 
 Maya sends (Maya's Midgard `send`, e.g. of `CACAO` or the MAYA token) are
 mapped the same way, from Maya's Midgard, with Maya's native fee (below).

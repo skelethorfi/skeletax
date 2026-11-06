@@ -37,6 +37,8 @@ export interface StoreOptions {
 export interface Fetched<T> {
   data: T;
   url?: string;
+  // A list the source returned short (e.g. fewer records than the total it reports): why, kept with the stored list
+  incomplete?: string;
 }
 
 // How a source's records are filed and compared
@@ -56,9 +58,23 @@ export interface RecordRules<T = any> {
   membersOf?: (data: T) => string[];
 }
 
+export interface RecordOptions {
+  // A best-effort source: a failed fetch of a record already stored is passed to this instead of failing the run,
+  // which carries on with the stored copy. With none stored, the error is thrown. It may rethrow.
+  onFetchError?: (error: unknown) => void;
+}
+
 export interface ListOptions<T> {
   keyOf: (item: T) => string;
   rules?: RecordRules<T>;
+  // What the source lists does not change (e.g. Viewblock's sends from before 2022-04): once a complete list of the
+  // wallet is stored, it is fetched again only by fetch 'all'. A stored list marked incomplete is fetched again.
+  fetchOnce?: boolean;
+  // Called on every run that uses a list stored as incomplete (fetched now, stored earlier or replayed), with why
+  onIncomplete?: (incomplete: string) => void;
+  // A best-effort source: a failed fetch is passed to this instead of failing the run, which carries on with the
+  // stored lists of the wallet (none: an empty list). stored: whether there are any. It may rethrow.
+  onFetchError?: (error: unknown, stored: boolean) => void;
 }
 
 // What a fetch did: the record's first copy, a new copy, or the same as the latest copy
@@ -87,6 +103,7 @@ interface List extends Origin {
   file: string;
   n: number;
   keys: string[];
+  incomplete?: string;
 }
 
 // Why a copy is used
@@ -193,6 +210,21 @@ export class RecordStore {
     return !!this.replay && !this.replay.hasSource(source);
   }
 
+  // A best-effort source (Viewblock) could not give the record: the manifest says so, and a replay gives nothing
+  recordSkipped(source: string, key: string) {
+    this.manifest?.recordSkipped(source, key);
+  }
+
+  // Replaying a run that could not fetch the record (recordSkipped): it gives nothing, as it gave that run
+  skippedInReplay(source: string, key: string): boolean {
+    if (this.replay?.isSkipped(source, key)) {
+      this.manifest?.recordSkipped(source, key);
+      return true;
+    }
+
+    return false;
+  }
+
   // One record, e.g. a THORNode tx. date: when the record started (e.g. the date of the action it belongs
   // to), for filing a record with no date of its own
   async record<T>(
@@ -201,6 +233,7 @@ export class RecordStore {
     fetch: () => Promise<Fetched<T>>,
     rules: RecordRules<T> = {},
     date?: Date,
+    options: RecordOptions = {},
   ): Promise<T> {
     if (this.replay) {
       return this.replayRecord(source, key);
@@ -210,15 +243,28 @@ export class RecordStore {
 
     if (this.shouldFetchRecord(source, key, rules, date)) {
       this.assertCanFetch(`${source} ${key}`);
-      const fetched = await withRetry(fetch, `${source} ${key}`);
-      fetchedNow = this.store(
-        source,
-        key,
-        fetched.data,
-        rules,
-        { fetchedAt: new Date().toISOString(), url: fetched.url },
-        date,
-      );
+      let fetched: Fetched<T> | undefined;
+
+      try {
+        fetched = await withRetry(fetch, `${source} ${key}`);
+      } catch (error) {
+        if (!options.onFetchError || this.copies<T>(source, key).length === 0) {
+          throw error;
+        }
+
+        options.onFetchError(error);
+      }
+
+      if (fetched) {
+        fetchedNow = this.store(
+          source,
+          key,
+          fetched.data,
+          rules,
+          { fetchedAt: new Date().toISOString(), url: fetched.url },
+          date,
+        );
+      }
     }
 
     return this.use(source, key, rules, fetchedNow);
@@ -248,22 +294,40 @@ export class RecordStore {
 
       this.manifest?.recordList(list);
 
+      if (list.incomplete) {
+        options.onIncomplete?.(list.incomplete);
+      }
+
       return list.keys.map((key) => this.replayRecord(source, key));
     }
 
     let fetchedNow = new Map<string, Stored<T>>();
 
-    if (this.shouldFetchList(source, wallet)) {
+    if (this.shouldFetchList(source, wallet, options.fetchOnce)) {
       this.assertCanFetch(`${source} list ${wallet}`);
-      const fetched = await withRetry(fetch, `${source} list ${wallet}`);
-      fetchedNow = this.storeList(source, wallet, fetched.data, options, {
-        fetchedAt: new Date().toISOString(),
-        url: fetched.url,
-      });
+      let fetched: Fetched<T[]> | undefined;
+
+      try {
+        fetched = await withRetry(fetch, `${source} list ${wallet}`);
+      } catch (error) {
+        if (!options.onFetchError) {
+          throw error;
+        }
+
+        options.onFetchError(error, this.lists(source, wallet).length > 0);
+      }
+
+      if (fetched) {
+        fetchedNow = this.storeList(source, wallet, fetched.data, options, fetched.incomplete, {
+          fetchedAt: new Date().toISOString(),
+          url: fetched.url,
+        });
+      }
     }
 
     const lists = this.lists(source, wallet);
     const latest = lists[lists.length - 1]?.keys ?? [];
+    const incomplete = lists[lists.length - 1]?.incomplete;
     // A record whose key has since changed (the key rule for its shape was refined) is in the latest list under
     // its new key, so it is not missing
     const renamed = (key: string) =>
@@ -279,7 +343,12 @@ export class RecordStore {
       keys,
       missing: earlier,
       file: this.relative(lists[lists.length - 1]?.file),
+      ...(incomplete ? { incomplete } : {}),
     });
+
+    if (incomplete) {
+      options.onIncomplete?.(incomplete);
+    }
 
     return keys.map((key) => this.use(source, key, rules, fetchedNow.get(key), earlier.includes(key)));
   }
@@ -302,10 +371,17 @@ export class RecordStore {
     return wanted && this.firstFetchThisRun(`records/${source}/${key}`);
   }
 
-  // A wallet's list is fetched again on every run that isn't offline, for new activity and changed records
-  private shouldFetchList(source: string, wallet: string): boolean {
+  // A wallet's list is fetched again on every run that isn't offline, for new activity and changed records; one
+  // fetched once is fetched again only by 'all', or while its latest stored list is incomplete
+  private shouldFetchList(source: string, wallet: string, fetchOnce = false): boolean {
+    const lists = this.lists(source, wallet);
+
     if (this.offline) {
-      return this.lists(source, wallet).length === 0;
+      return lists.length === 0;
+    }
+
+    if (fetchOnce && this.fetchMode !== "all" && lists.length > 0 && !lists[lists.length - 1].incomplete) {
+      return false;
     }
 
     return this.firstFetchThisRun(`lists/${source}/${wallet}`);
@@ -456,6 +532,7 @@ export class RecordStore {
     wallet: string,
     items: T[],
     { keyOf, rules = {} }: ListOptions<T>,
+    incomplete: string | undefined,
     origin: Origin,
   ): Map<string, Stored<T>> {
     const stored = new Map<string, Stored<T>>();
@@ -471,10 +548,11 @@ export class RecordStore {
     }
 
     const keys = [...stored.keys()];
-    const lists = this.lists(source, wallet);
+    const latest = this.lists(source, wallet).at(-1);
 
-    if (JSON.stringify(lists[lists.length - 1]?.keys) !== JSON.stringify(keys)) {
-      this.writeList(source, wallet, keys, origin);
+    // The same keys, but now complete (or now short), is a new list too
+    if (JSON.stringify(latest?.keys) !== JSON.stringify(keys) || latest?.incomplete !== incomplete) {
+      this.writeList(source, wallet, keys, origin, incomplete);
     }
 
     return stored;
@@ -501,12 +579,13 @@ export class RecordStore {
     return { ...content, file, n } as Copy<T>;
   }
 
-  private writeList(source: string, wallet: string, keys: string[], origin: Origin) {
+  private writeList(source: string, wallet: string, keys: string[], origin: Origin, incomplete?: string) {
     const files = this.files("lists", source).get(wallet) ?? [];
     this.writeNew("lists", source, wallet, path.join(this.root, "lists", source), files, {
       source,
       wallet,
       ...originFields(origin),
+      ...(incomplete ? { incomplete } : {}),
       keys,
     });
   }

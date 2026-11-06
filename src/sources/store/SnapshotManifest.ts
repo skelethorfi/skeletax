@@ -40,15 +40,25 @@ export interface ListEntry {
   missing: string[];
   // The latest list file
   file: string;
+  // The latest list came back short from the source: why
+  incomplete?: string;
+}
+
+// A record a best-effort source (Viewblock) could not give the run: a replay gives nothing for it, as the run had
+export interface SkippedEntry {
+  source: string;
+  key: string;
 }
 
 export class SnapshotManifest {
   private records = new Map<string, RecordEntry>();
   private lists = new Map<string, ListEntry>();
+  private skipped = new Map<string, SkippedEntry>();
 
-  constructor(records: RecordEntry[] = [], lists: ListEntry[] = []) {
+  constructor(records: RecordEntry[] = [], lists: ListEntry[] = [], skipped: SkippedEntry[] = []) {
     records.forEach((entry) => this.records.set(this.id(entry.source, entry.key), entry));
     lists.forEach((entry) => this.lists.set(this.id(entry.source, entry.wallet), entry));
+    skipped.forEach((entry) => this.skipped.set(this.id(entry.source, entry.key), entry));
   }
 
   // A run folder or its snapshots.json
@@ -57,7 +67,7 @@ export class SnapshotManifest {
       fs.existsSync(runOrFile) && fs.statSync(runOrFile).isDirectory()
         ? path.join(runOrFile, MANIFEST_FILE)
         : runOrFile;
-    const { layout, records, lists } = fs.readJSONSync(file);
+    const { layout, records, lists, skipped } = fs.readJSONSync(file);
 
     if (layout !== LAYOUT) {
       throw new Error(
@@ -65,7 +75,7 @@ export class SnapshotManifest {
       );
     }
 
-    return new SnapshotManifest(records, lists);
+    return new SnapshotManifest(records, lists, skipped);
   }
 
   recordRecord(entry: RecordEntry) {
@@ -79,6 +89,14 @@ export class SnapshotManifest {
 
   recordList(entry: ListEntry) {
     this.lists.set(this.id(entry.source, entry.wallet), entry);
+  }
+
+  recordSkipped(source: string, key: string) {
+    this.skipped.set(this.id(source, key), { source, key });
+  }
+
+  isSkipped(source: string, key: string): boolean {
+    return this.skipped.has(this.id(source, key));
   }
 
   findRecord(source: string, key: string): RecordEntry | undefined {
@@ -103,7 +121,14 @@ export class SnapshotManifest {
     const lists = [...this.lists.values()].sort((a, b) =>
       this.id(a.source, a.wallet).localeCompare(this.id(b.source, b.wallet)),
     );
-    fs.outputJsonSync(path.join(outputPath, MANIFEST_FILE), { layout: LAYOUT, records, lists }, { spaces: 2 });
+    const skipped = [...this.skipped.values()].sort((a, b) =>
+      this.id(a.source, a.key).localeCompare(this.id(b.source, b.key)),
+    );
+    fs.outputJsonSync(
+      path.join(outputPath, MANIFEST_FILE),
+      { layout: LAYOUT, records, lists, ...(skipped.length ? { skipped } : {}) },
+      { spaces: 2 },
+    );
 
     const count = (filter: (entry: RecordEntry) => boolean) => records.filter(filter).length;
     const lines = [

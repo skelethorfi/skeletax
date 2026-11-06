@@ -6,6 +6,7 @@ import path from "path";
 import { Viewblock } from "../src/sources/viewblock/index.ts";
 import { withoutCurrentValues } from "../src/sources/store/Sources.ts";
 import { RecordStore } from "../src/sources/store/RecordStore.ts";
+import { SnapshotManifest } from "../src/sources/store/SnapshotManifest.ts";
 import { http } from "../src/sources/http.ts";
 import { interpretViewblockSend } from "../src/interpret/viewblock/send.ts";
 import { THORCHAIN } from "../src/domain/Protocol.ts";
@@ -53,11 +54,142 @@ describe("Viewblock", () => {
     assert.deepEqual(await new Viewblock(new RecordStore(dir, { offline: true })).getTxs("thor1-empty-wallet"), []);
   });
 
-  test("refuses a listing shorter than the total it reports", async () => {
-    mock.method(http, "get", async () => ({ data: { docs: [tx("A")], pages: 1, total: 2 } }) as any);
-    const store = new RecordStore(fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-viewblock-")));
+  const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-viewblock-"));
+  const rateLimited = (value?: number) =>
+    Object.assign(new Error("Request failed with status code 429"), {
+      response: { status: 429, data: { message: "errors.rateLimited", code: 429, value } },
+    });
 
-    await assert.rejects(new Viewblock(store).getTxs("thor1-wallet"), /Viewblock listed 1 txs but reports 2/);
+  test("keeps a listing shorter than the total it reports, with a warning", async () => {
+    mock.method(http, "get", async () => ({ data: { docs: [tx("A")], pages: 1, total: 2 } }) as any);
+    const viewblock = new Viewblock(new RecordStore(tmp()));
+
+    assert.deepEqual(
+      (await viewblock.getTxs("thor1-wallet")).map((t) => t.hash),
+      ["A"],
+    );
+    assert.match(
+      viewblock.warnings().join("\n"),
+      /list of the txs of thor1-wallet is short \(listed 1 of the 2 txs it reports\)/,
+    );
+  });
+
+  test("pages past the page count it reports, until the total or a page with nothing new", async () => {
+    // pages says 1, but the total is 3 and page 2 has more; page 3 repeats page 2
+    const docs = [[tx("A")], [tx("B"), tx("C")]];
+    const get = mock.method(http, "get", async (url: string) => {
+      const page = Number(new URL(url).searchParams.get("page"));
+      return { data: { docs: docs[page - 1] ?? docs[1], pages: 1, total: 4 } } as any;
+    });
+    const viewblock = new Viewblock(new RecordStore(tmp()));
+
+    assert.deepEqual(
+      (await viewblock.getTxs("thor1-wallet")).map((t) => t.hash),
+      ["A", "B", "C"],
+    );
+    assert.equal(get.mock.calls.length, 3);
+    assert.match(viewblock.warnings().join("\n"), /thor1-wallet is short \(listed 3 of the 4 txs it reports\)/);
+  });
+
+  test("fetches a stored list again only with --refetch-all", async () => {
+    const get = pages([tx("A")]);
+    const dir = tmp();
+    await new Viewblock(new RecordStore(dir)).getTxs("thor1-wallet");
+
+    assert.deepEqual(
+      (await new Viewblock(new RecordStore(dir)).getTxs("thor1-wallet")).map((t) => t.hash),
+      ["A"],
+    );
+    assert.equal(get.mock.calls.length, 1);
+
+    await new Viewblock(new RecordStore(dir, { fetch: "all" })).getTxs("thor1-wallet");
+    assert.equal(get.mock.calls.length, 2);
+  });
+
+  test("a 429 is not retried, skips Viewblock for the rest of the run, and is a warning, not an error", async () => {
+    const get = mock.method(http, "get", async () => {
+      throw rateLimited(604_371_525);
+    });
+    const viewblock = new Viewblock(new RecordStore(tmp()));
+
+    assert.deepEqual(await viewblock.getTxs("thor1-first"), []);
+    assert.deepEqual(await viewblock.getTxs("thor1-second"), []);
+    assert.equal(await viewblock.getInbound("H"), undefined);
+    assert.equal(get.mock.calls.length, 1);
+
+    const warnings = viewblock.warnings().join("\n");
+    assert.match(warnings, /Viewblock answered 429 \(rate-limited until \d{4}-/);
+    assert.match(
+      warnings,
+      /could not list the txs of thor1-first .*sends and withdrawn pending adds before 2022-04-01, .* are missing/,
+    );
+    assert.match(warnings, /could not list the txs of thor1-second/);
+    assert.match(warnings, /could not fetch the gas of 1 inbound\(s\).*H \(/);
+  });
+
+  test("a failed refetch uses the list stored by an earlier run", async () => {
+    pages([tx("A")]);
+    const dir = tmp();
+    await new Viewblock(new RecordStore(dir)).getTxs("thor1-wallet");
+    mock.restoreAll();
+    mock.method(http, "get", async () => {
+      throw rateLimited();
+    });
+    const viewblock = new Viewblock(new RecordStore(dir, { fetch: "all" }));
+
+    assert.deepEqual(
+      (await viewblock.getTxs("thor1-wallet")).map((t) => t.hash),
+      ["A"],
+    );
+    assert.match(viewblock.warnings().join("\n"), /using the list stored by an earlier run/);
+  });
+
+  test("a short stored list is fetched again by the next run, and warned about on every run that uses it", async () => {
+    const dir = tmp();
+    mock.method(http, "get", async () => ({ data: { docs: [tx("A")], pages: 1, total: 2 } }) as any);
+    await new Viewblock(new RecordStore(dir)).getTxs("thor1-wallet");
+    mock.restoreAll();
+
+    // The next default run fetches it again; it fails, so the stored short list is used, with both warnings
+    const failing = mock.method(http, "get", async () => {
+      throw rateLimited();
+    });
+    const manifest = new SnapshotManifest();
+    const second = new Viewblock(new RecordStore(dir, { manifest }));
+    assert.deepEqual(
+      (await second.getTxs("thor1-wallet")).map((t) => t.hash),
+      ["A"],
+    );
+    assert.equal(failing.mock.calls.length, 1);
+    assert.match(second.warnings().join("\n"), /using the list stored by an earlier run/);
+    assert.match(second.warnings().join("\n"), /thor1-wallet is short \(listed 1 of the 2 txs it reports\)/);
+    manifest.write(path.join(dir, "run"));
+    mock.restoreAll();
+
+    // Offline and replayed runs use it without a fetch, and still warn
+    const offline = new Viewblock(new RecordStore(dir, { offline: true }));
+    await offline.getTxs("thor1-wallet");
+    assert.match(offline.warnings().join("\n"), /thor1-wallet is short/);
+    const replay = new Viewblock(new RecordStore(dir, { replay: SnapshotManifest.load(path.join(dir, "run")) }));
+    await replay.getTxs("thor1-wallet");
+    assert.match(replay.warnings().join("\n"), /thor1-wallet is short/);
+
+    // A complete listing replaces it, and is not fetched again
+    const get = pages([tx("A"), tx("B")]);
+    const complete = new Viewblock(new RecordStore(dir));
+    assert.deepEqual(
+      (await complete.getTxs("thor1-wallet")).map((t) => t.hash),
+      ["A", "B"],
+    );
+    assert.deepEqual(complete.warnings(), []);
+    const after = new Viewblock(new RecordStore(dir));
+    await after.getTxs("thor1-wallet");
+    assert.equal(get.mock.calls.length, 1);
+    assert.deepEqual(after.warnings(), []);
+  });
+
+  test("offline, a list not stored is still an error", async () => {
+    await assert.rejects(new Viewblock(new RecordStore(tmp(), { offline: true })).getTxs("thor1-wallet"), /Offline/);
   });
 });
 
@@ -95,6 +227,76 @@ describe("Viewblock.getInbound", () => {
       found: true,
       gas: [{ asset: "BTC.BTC", amount: "5000" }],
     });
+  });
+
+  test("a run that could not reach Viewblock replays without the gas it could not fetch", async () => {
+    mock.method(http, "get", async (url: string) => {
+      if (url.includes("/txs/H2")) {
+        throw Object.assign(new Error("429"), { response: { status: 429, data: { value: 1000 } } });
+      }
+      return { status: 200, data: { observation: { gas: [{ asset: "BTC.BTC", amount: "5000" }] } } } as any;
+    });
+    const dir = tmp();
+    const manifest = new SnapshotManifest();
+    const viewblock = new Viewblock(new RecordStore(dir, { manifest }));
+
+    assert.equal((await viewblock.getInbound("H1"))?.found, true);
+    assert.equal(await viewblock.getInbound("H2"), undefined);
+    // The same inbound again (its action under another wallet) is skipped again, not an error
+    assert.equal(await viewblock.getInbound("H2"), undefined);
+    manifest.write(path.join(dir, "run"));
+
+    const replay = new Viewblock(new RecordStore(dir, { replay: SnapshotManifest.load(path.join(dir, "run")) }));
+    assert.equal((await replay.getInbound("H1"))?.found, true);
+    assert.equal(await replay.getInbound("H2"), undefined);
+    assert.equal(await replay.getInbound("H2"), undefined);
+    assert.match(
+      replay.warnings().join("\n"),
+      /could not fetch the gas of 1 inbound\(s\).*H2 \(skipped by the replayed run\)/,
+    );
+  });
+
+  test("a failed refetch uses the gas stored by an earlier run, and is not skipped", async () => {
+    mock.method(
+      http,
+      "get",
+      async () => ({ status: 200, data: { observation: { gas: [{ asset: "BTC.BTC", amount: "5000" }] } } }) as any,
+    );
+    const dir = tmp();
+    await new Viewblock(new RecordStore(dir)).getInbound("H");
+    mock.restoreAll();
+    mock.method(http, "get", async () => {
+      throw Object.assign(new Error("429"), { response: { status: 429, data: { value: 1000 } } });
+    });
+    const manifest = new SnapshotManifest();
+    const viewblock = new Viewblock(new RecordStore(dir, { fetch: "all", manifest }));
+
+    assert.deepEqual((await viewblock.getInbound("H"))?.gas, [{ asset: "BTC.BTC", amount: "5000" }]);
+    // Nothing is stored for H2, so its fee is left out
+    assert.equal(await viewblock.getInbound("H2"), undefined);
+    const warnings = viewblock.warnings().join("\n");
+    assert.match(warnings, /could not fetch again the gas of 1 inbound\(s\); using the copy stored .*: H \(/);
+    assert.match(warnings, /could not fetch the gas of 1 inbound\(s\).*: H2 \(/);
+    manifest.write(path.join(dir, "run"));
+
+    const replay = new Viewblock(new RecordStore(dir, { replay: SnapshotManifest.load(path.join(dir, "run")) }));
+    assert.deepEqual((await replay.getInbound("H"))?.gas, [{ asset: "BTC.BTC", amount: "5000" }]);
+    assert.equal(await replay.getInbound("H2"), undefined);
+  });
+
+  test("replaying a run whose manifest lacks an inbound it did not skip is an error", async () => {
+    mock.method(http, "get", async () => ({ status: 200, data: { observation: { gas: [] } } }) as any);
+    const dir = tmp();
+    const manifest = new SnapshotManifest();
+    await new Viewblock(new RecordStore(dir, { manifest })).getInbound("H1");
+    manifest.write(path.join(dir, "run"));
+
+    const replay = new Viewblock(new RecordStore(dir, { replay: SnapshotManifest.load(path.join(dir, "run")) }));
+    await assert.rejects(replay.getInbound("H2"), /viewblock-tx H2 in the replayed run/);
+  });
+
+  test("offline, an inbound not stored is still an error", async () => {
+    await assert.rejects(new Viewblock(new RecordStore(tmp(), { offline: true })).getInbound("H"), /Offline/);
   });
 
   test("stores a hash it does not know as not found", async () => {
