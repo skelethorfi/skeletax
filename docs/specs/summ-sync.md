@@ -184,8 +184,8 @@ uploaded, and `all.csv` holds rows outside the run's periods. Any other
 address missing from its config): its rows would be missing from the
 desired state, and plan would delete them from Summ. `row-ids.csv` traces
 an `ID` back to its action for the user; plan does not need it.
-`unmapped.json` lists the records the run could not map (unsupported or
-failed, `run-summary.md`), each with its times and txids: plan holds back
+`unmapped.json` lists the records the run could not map (unsupported,
+failed, or no rows with a warning, `run-summary.md`), each with its times and txids: plan holds back
 the deletes their rows would otherwise get (Held). A run made before it
 has none; plan then notes that its deletes of legs with no row could not
 be checked.

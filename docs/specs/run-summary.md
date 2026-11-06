@@ -16,13 +16,16 @@ after the terminal is gone. The run prints the same lines as before.
 | Unsupported actions | actions with no mapper; each is saved in `unsupported/`                                                                                                                                                               |
 | Failed actions      | actions whose mapper failed, with the error; each is saved in `failures/`                                                                                                                                             |
 
-`unmapped.json` is the same unsupported and failed actions, for summ-sync to
+`unmapped.json` is the same unsupported and failed actions, plus each
+bundle that gave no rows with only a warning (e.g. a withdrawal whose
+pending add is not found), for summ-sync to
 read: `{ "version": 1, "records": [...] }`, each record with its `kind`
-(`unsupported` or `failed`), store record key (`record`), `wallet`, `time`
+(`unsupported`, `failed` or `warning`), store record key (`record`), `wallet`, `time`
 (the action's, as a row ID starts), `times` (every time a row ID made of
 it can start with: the action's, then each attached inbound's, e.g. a Maya
-liquidity auction's deposits, dated by their THORChain send), `txids`
-(every 64-hex string in the action and its attached inbounds, in lower
+liquidity auction's deposits, dated by their THORChain send, and a withdrawn
+pending add's, whose rows carry the add's time), `txids`
+(every 64-hex string anywhere in the bundle, in lower
 case), and its message (`reason`). It is written on every
 run, empty when nothing failed, so summ-sync can tell such a run from one
 made before the file (`summ-sync.md`, Held).

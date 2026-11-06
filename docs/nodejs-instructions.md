@@ -36,8 +36,8 @@ second, and later runs read them from the store. Set `referencePrices = "swaps"`
 2026 (only swaps, bRUNE sells and TCY distributions carry one, and no price is fetched), e.g. to replay an earlier run
 with `--offline`. See [reference prices](specs/prices.md).
 
-The `blockchain` property for each wallet names its CSV files, e.g. "THOR", "BTC", "ETH": letters and digits, written
-in upper case. summ-sync reads it from the file names to tell the chains you upload from the ones Summ imports.
+The `blockchain` property for each wallet names its CSV files, e.g. "THOR", "BTC", "ETH". It is written
+in upper case, letters and digits only (`bnb-chain` names files `BNBCHAIN`). summ-sync reads it from the file names to tell the chains you upload from the ones Summ imports.
 
 ### 4. Run the export
 

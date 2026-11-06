@@ -70,7 +70,7 @@ name = "Sample"
 # wallet address
 address = "thor1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
-# 'blockchain' names the wallet's CSV files, e.g. "THOR", "BTC", "ETH": letters and digits, in upper case.
+# 'blockchain' names the wallet's CSV files, e.g. "THOR", "BTC", "ETH" (written in upper case, letters and digits only).
 # summ-sync reads it from the file names to tell the chains you upload from the ones Summ imports.
 # Only THORChain wallets need to be imported into Crypto Tax Calculator.
 # Other blockchain wallet CSV files can be used for reference when categorising transactions in CTC.
