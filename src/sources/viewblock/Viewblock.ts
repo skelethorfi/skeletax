@@ -48,14 +48,14 @@ export class Viewblock {
       onIncomplete: (incomplete) =>
         this.listWarnings.push(
           `Viewblock's list of the txs of ${address} is short (${incomplete}); ` +
-            "a send before 2022-04-01 that Midgard does not list may be missing (docs/specs/sends.md)",
+            "a send or a withdrawn pending add before 2022-04-01, which Midgard does not list, may be missing (docs/specs/sends.md)",
         ),
       onFetchError: (error, stored) =>
         this.listWarnings.push(
           `Viewblock: could not list the txs of ${address} (${reason(error)}); ` +
             (stored
               ? "using the list stored by an earlier run"
-              : "its sends before 2022-04-01 that Midgard does not list are missing") +
+              : "its sends and withdrawn pending adds before 2022-04-01, which Midgard does not list, are missing") +
             " (docs/specs/sends.md)",
         ),
     });

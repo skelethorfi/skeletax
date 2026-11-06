@@ -119,7 +119,10 @@ describe("Viewblock", () => {
 
     const warnings = viewblock.warnings().join("\n");
     assert.match(warnings, /Viewblock answered 429 \(rate-limited until \d{4}-/);
-    assert.match(warnings, /could not list the txs of thor1-first .*sends before 2022-04-01 .* are missing/);
+    assert.match(
+      warnings,
+      /could not list the txs of thor1-first .*sends and withdrawn pending adds before 2022-04-01, .* are missing/,
+    );
     assert.match(warnings, /could not list the txs of thor1-second/);
     assert.match(warnings, /could not fetch the gas of 1 inbound\(s\).*H \(/);
   });
