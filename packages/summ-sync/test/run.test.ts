@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseCsvLine, parseWalletFile, readRun, txidsOf } from "../src/run.ts";
+import { parseCsvLine, parseWalletFile, readRun, readUnmapped, txidsOf } from "../src/run.ts";
 import { inPeriod, before, startOfDay } from "../src/dates.ts";
 
 const HEADER =
@@ -99,4 +99,41 @@ test("periods are whole days in the timezone", () => {
   assert.equal(inPeriod("2024-06-30T13:00:00.000Z", period, "Pacific/Auckland"), false);
   assert.equal(inPeriod("2023-06-30T13:00:00.000Z", period, "Pacific/Auckland"), true);
   assert.equal(before("2023-12-31T23:59:59.000Z", "2024-01-01", "UTC"), true);
+});
+
+test("readRun takes the chain in any case, and refuses any other CSV file in csv/", () => {
+  const run = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
+  mkdirSync(join(run, "csv"));
+  writeFileSync(join(run, "csv", "all.csv"), `${HEADER}\n${LINE}`);
+  writeFileSync(join(run, "csv", "all-2023-07-01_2024-06-30.csv"), `${HEADER}\n${LINE}`);
+  writeFileSync(join(run, "csv", "2023-07-01_2024-06-30_thor_abcde_Example.csv"), `${HEADER}\n${LINE}`);
+  const { files, rows } = readRun(run);
+  assert.deepEqual(
+    [files.map((f) => [f.name, f.chain]), rows.map((r) => r.chain)],
+    [[["2023-07-01_2024-06-30_thor_abcde_Example.csv", "THOR"]], ["THOR"]],
+  );
+  // A wallet the exporter's config lacks gets a file named after its address: its rows would be missing
+  writeFileSync(join(run, "csv", "2023-07-01_2024-06-30_thor1wallet.csv"), `${HEADER}\n${LINE}`);
+  assert.throws(() => readRun(run), /Not period wallet files .*: 2023-07-01_2024-06-30_thor1wallet\.csv/);
+});
+
+test("readUnmapped reads the run's unmapped.json, or null when the run has none", () => {
+  const run = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
+  assert.equal(readUnmapped(run), null);
+  const record = {
+    kind: "failed",
+    record: "midgard/swap.x",
+    wallet: "thor1wallet",
+    time: "2024-03-01T10:00:00.000Z",
+    txids: [TXID],
+    reason: "boom",
+  };
+  writeFileSync(join(run, "unmapped.json"), JSON.stringify({ version: 1, records: [record] }));
+  // An exporter before times: the record's own time
+  assert.deepEqual(readUnmapped(run), [{ ...record, times: [record.time], txids: [TXID.toLowerCase()] }]);
+  const times = [record.time, "2024-02-28T09:00:00.000Z"];
+  writeFileSync(join(run, "unmapped.json"), JSON.stringify({ version: 1, records: [{ ...record, times }] }));
+  assert.deepEqual(readUnmapped(run), [{ ...record, times, txids: [TXID.toLowerCase()] }]);
+  writeFileSync(join(run, "unmapped.json"), JSON.stringify({ records: [] }));
+  assert.throws(() => readUnmapped(run), /not version 1/);
 });

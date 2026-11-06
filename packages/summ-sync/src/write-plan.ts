@@ -21,7 +21,7 @@ import {
   type UploadedFile,
   type ValueMatch,
 } from "./plan.ts";
-import { parseCsvLine, readRun, type Row, type RunFile } from "./run.ts";
+import { parseCsvLine, readRun, readUnmapped, type Row, type RunFile } from "./run.ts";
 import { latestSnapshot, type PullRange, readSnapshot, readSnapshotFile } from "./snapshot.ts";
 import { readAdopted, readApplyLog, readLeftLegs, readOverrides } from "./state.ts";
 
@@ -91,7 +91,7 @@ function fateOf(plan: Plan, l: LegValues): string {
 
 /** Where a file on an unmanaged chain goes: its rows have no tx of that chain (PROTOCOL_TYPES), so not into its wallet. */
 function uploadNote(plan: Plan, file: string): string {
-  const chain = file.split("_")[2];
+  const chain = file.split("_")[2].toUpperCase();
   return plan.managedChains.includes(chain)
     ? ""
     : ` (into the THORChain or Maya account, not the ${chain} wallet: no ${chain} tx of their own)`;
@@ -182,7 +182,7 @@ export function renderPlan(plan: Plan, snapshot: string, run: string, legs: Map<
       ),
     ]),
     ...section(
-      "Held (nothing planned: held in summ-sync.json, or the user's manual pairing; a price edit awaiting a test)",
+      "Held (nothing planned: held in summ-sync.json, the user's manual pairing, or a record the run could not map; a price edit awaiting a test)",
       plan.held,
       (es) => [
         "| Kind | Row | Reason | Left out |",
@@ -347,6 +347,7 @@ export function writePlan(stateDir: string, runDir: string, only?: string): stri
     uploadFiles: uploadPriceFiles(stateDir),
     now,
     scope,
+    unmapped: readUnmapped(runDir),
   });
 
   // A leg dated outside the range is not in the snapshot, so a row could look missing, or a tx's other copy go unseen.

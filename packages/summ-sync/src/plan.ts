@@ -4,7 +4,7 @@
 import type { Config, Hold } from "./config.ts";
 import { type Decided, type Decision, decisionsOf, type PlanCheck } from "./decisions.ts";
 import { before, inPeriod } from "./dates.ts";
-import { parseCsvLine, periodsOf, type Row, type RunFile } from "./run.ts";
+import { parseCsvLine, periodsOf, type Row, type RunFile, type Unmapped } from "./run.ts";
 import { type Leg, normaliseTxid } from "./snapshot.ts";
 import type { AppliedEdit, LegRole, Override, Value, LeftLeg } from "./state.ts";
 import { type SummType, summBlockchain, summType } from "./summ-types.ts";
@@ -44,6 +44,8 @@ export interface PlanInput {
   now: string;
   /** plan --only: the scope's entries (scopeMatch); the plan covers only the rows they match. */
   scope?: string[];
+  /** The records the run could not map (readUnmapped); null for a run made before unmapped.json. */
+  unmapped?: Unmapped[] | null;
 }
 
 export interface Change {
@@ -184,14 +186,15 @@ export interface ReportEntry {
 }
 
 /** A row nothing is planned for: held by the config, or in an event whose Summ actions hold a manual entry. Kind
- * `price`: only the row's price edit is left out. */
+ * `price`: only the row's price edit is left out. Kind `unmapped`: legs with no row in the run, of a record the run
+ * could not map. */
 export interface HeldEntry {
-  kind: "hold" | "manual-pairing" | "price";
+  kind: "hold" | "manual-pairing" | "price" | "unmapped";
   filed: boolean;
   /** The row, or null for legs with no row in the run (then summId names them). */
   id: string | null;
   summId?: string;
-  /** For manual-pairing: the manual legs; for a hold with no row: the held legs. */
+  /** For manual-pairing: the manual legs; for a hold or an unmapped record with no row: the held legs. */
   legIds?: string[];
   reason: string;
   /** What the plan would have done, left out. */
@@ -1472,6 +1475,33 @@ export function makePlan(input: PlanInput): PlanResult {
     }
     return !h;
   });
+  // Legs with no row in the run, of a record the run could not map (unsupported, failed, or no rows with a warning; in unmapped.json): their
+  // row is missing because the run failed on it, not because it is gone. Matched by one of the record's times, which a
+  // row ID starts with, or by a txid: a match too many keeps legs, one too few would delete them
+  const unmappedRecords = input.unmapped ?? [];
+  const unmappedAt = new Map(unmappedRecords.flatMap((u) => u.times.map((t) => [t, u] as const)));
+  const unmappedTx = new Map(unmappedRecords.flatMap((u) => u.txids.map((t) => [t, u] as const)));
+  plan.delete = plan.delete.filter((d) => {
+    if (d.manual || d.id !== null) return true;
+    const u =
+      (STABLE_ID.test(d.summId) ? unmappedAt.get(d.summId.slice(0, 24)) : undefined) ??
+      (d.txids ?? []).map((t) => unmappedTx.get(t)).find((x) => x !== undefined);
+    if (!u) return true;
+    plan.held.push({
+      kind: "unmapped",
+      filed: d.filed,
+      id: null,
+      summId: d.summId,
+      legIds: d.legIds,
+      reason: `the run could not map ${u.record} (${u.kind}: ${u.reason}), so it has no row for these legs: they stay until a run maps it`,
+      held: [`delete (${d.reason})`],
+    });
+    return false;
+  });
+  if (input.unmapped === null && plan.delete.some((d) => d.id === null && !d.manual))
+    plan.notes.push(
+      "the run has no unmapped.json (made by an older exporter): a delete of legs with no row cannot be checked against the records it could not map; read its failures/ and unsupported/, or export again",
+    );
   for (const [section, label] of [
     ["edit", "edit"],
     ["categorise", "categorise"],
@@ -1937,7 +1967,9 @@ function narrow(
     r.id !== undefined ? ids.has(r.id) : [...ids].some((id) => r.detail.includes(id)),
   );
   plan.held = plan.held.filter((h) =>
-    h.id !== null ? ids.has(h.id) : legsIn(h.summId as string, h.kind === "hold" ? (h.legIds ?? []) : [], false),
+    h.id !== null
+      ? ids.has(h.id)
+      : legsIn(h.summId as string, h.kind === "hold" || h.kind === "unmapped" ? (h.legIds ?? []) : [], false),
   );
   plan.overridden = plan.overridden.filter((o) => ids.has(o.override.id));
   const legEntries = [

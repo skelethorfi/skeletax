@@ -1,7 +1,7 @@
 # Run summary
 
 Each run writes `summary.md` to its folder, next to `csv/`, `snapshots.json`,
-`unsupported/` and `failures/`. It keeps what the run printed that is worth
+`unsupported/`, `failures/` and `unmapped.json`. It keeps what the run printed that is worth
 reading later, so a run (and a filed year) still shows what was flagged
 after the terminal is gone. The run prints the same lines as before.
 
@@ -15,6 +15,20 @@ after the terminal is gone. The run prints the same lines as before.
 | Not final           | every Midgard action whose status is not `success`, oldest first: its status, age, whether it is recent, waiting or stuck, and whether it was exported, what covers it, or which send stands in for it (`pending.md`) |
 | Unsupported actions | actions with no mapper; each is saved in `unsupported/`                                                                                                                                                               |
 | Failed actions      | actions whose mapper failed, with the error; each is saved in `failures/`                                                                                                                                             |
+
+`unmapped.json` is the same unsupported and failed actions, plus each
+bundle that gave no rows with only a warning (e.g. a withdrawal whose
+pending add is not found), for summ-sync to
+read: `{ "version": 1, "records": [...] }`, each record with its `kind`
+(`unsupported`, `failed` or `warning`), store record key (`record`), `wallet`, `time`
+(the action's, as a row ID starts), `times` (every time a row ID made of
+it can start with: the action's, then each attached inbound's, e.g. a Maya
+liquidity auction's deposits, dated by their THORChain send, and a withdrawn
+pending add's, whose rows carry the add's time), `txids`
+(every 64-hex string anywhere in the bundle, in lower
+case), and its message (`reason`). It is written on every
+run, empty when nothing failed, so summ-sync can tell such a run from one
+made before the file (`summ-sync.md`, Held).
 
 Each line about one action ends with its store record key (e.g.
 `midgard/swap.<txid>`), which says which action it was. A section with

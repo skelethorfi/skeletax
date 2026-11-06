@@ -2,7 +2,8 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { ActionTypeEnum } from "@xchainjs/xchain-midgard";
 import { getInboundTxs, getThornodeTxIds, shouldIncludeAction } from "../src/sources/Source.ts";
-import { unsupportedActionFile } from "../src/cli/Exporter.ts";
+import { renderUnmapped, unmappedRecords, unsupportedActionFile } from "../src/cli/Exporter.ts";
+import type { BundleResult } from "../src/pipeline/run.ts";
 import type { RawBundle } from "../src/sources/RawBundle.ts";
 
 describe("Exporter thornode fetch wiring", () => {
@@ -145,5 +146,91 @@ describe("unsupported action files", () => {
       metadata: {},
     };
     assert.equal(unsupportedActionFile(bundle(action)), "donate/donate.date-1700000000000000000.json");
+  });
+});
+
+describe("unmapped records", () => {
+  const txId = "A".repeat(64);
+  const action = (type: string) => ({
+    type,
+    date: "1700000000000000000",
+    pools: [],
+    in: [{ txID: txId, address: "thor1-user-wallet-11111", coins: [] }],
+    out: [],
+    metadata: {},
+  });
+  const result = (type: string, issues: BundleResult["issues"]): BundleResult => ({
+    bundle: {
+      source: "midgard",
+      protocol: "thorchain",
+      wallet: "thor1-user-wallet-11111",
+      data: action(type),
+      thornodeTxs: [],
+      cosmosTxs: [],
+    } as unknown as RawBundle,
+    time: new Date(1700000000000),
+    activities: [],
+    rows: [],
+    issues,
+  });
+
+  test("each unsupported or failed bundle, or one with no rows but a warning, is listed; the rest are not", () => {
+    const withRow = { ...result("bond", [{ kind: "warning", message: "odd" }]), rows: [{} as never] };
+    const results = [
+      result("swap", [{ kind: "failed", message: "boom" }]),
+      result("donate", [{ kind: "unsupported", message: "unsupported action: donate" }]),
+      result("send", [{ kind: "ignored", message: "Midgard send with no coins" }]),
+      withRow,
+      result("withdraw", [{ kind: "warning", message: "no pending add" }]),
+    ];
+    assert.deepEqual(unmappedRecords(results), [
+      {
+        kind: "failed",
+        record: `midgard/swap.${txId}`,
+        wallet: "thor1-user-wallet-11111",
+        time: "2023-11-14T22:13:20.000Z",
+        times: ["2023-11-14T22:13:20.000Z"],
+        txids: [txId.toLowerCase()],
+        reason: "boom",
+      },
+      {
+        kind: "unsupported",
+        record: `midgard/donate.${txId}`,
+        wallet: "thor1-user-wallet-11111",
+        time: "2023-11-14T22:13:20.000Z",
+        times: ["2023-11-14T22:13:20.000Z"],
+        txids: [txId.toLowerCase()],
+        reason: "unsupported action: donate",
+      },
+      {
+        kind: "warning",
+        record: `midgard/withdraw.${txId}`,
+        wallet: "thor1-user-wallet-11111",
+        time: "2023-11-14T22:13:20.000Z",
+        times: ["2023-11-14T22:13:20.000Z"],
+        txids: [txId.toLowerCase()],
+        reason: "no pending add",
+      },
+    ]);
+    assert.deepEqual(JSON.parse(renderUnmapped([])), { version: 1, records: [] });
+  });
+
+  test("an attached inbound's time and txid are the record's too (a liquidity auction's deposits)", () => {
+    const sendTx = "B".repeat(64);
+    const send = { ...action("send"), date: "1690000000000000000", in: [{ txID: sendTx, address: "x", coins: [] }] };
+    const r = result("addLiquidity", [{ kind: "failed", message: "boom" }]);
+    r.bundle = { ...r.bundle, inbounds: [send as never] };
+    const [record] = unmappedRecords([r]);
+    assert.deepEqual(record.times, ["2023-11-14T22:13:20.000Z", "2023-07-22T04:26:40.000Z"]);
+    assert.deepEqual(record.txids, [txId.toLowerCase(), sendTx.toLowerCase()]);
+  });
+
+  test("a withdrawn pending add's time and txid are the record's too (its rows carry the add's)", () => {
+    const addTx = "C".repeat(64);
+    const r = result("withdraw", [{ kind: "failed", message: "boom" }]);
+    r.bundle = { ...r.bundle, pendingAdd: { hash: addTx, timestamp: 1690000000000 } as never };
+    const [record] = unmappedRecords([r]);
+    assert.deepEqual(record.times, ["2023-11-14T22:13:20.000Z", "2023-07-22T04:26:40.000Z"]);
+    assert.deepEqual(record.txids, [txId.toLowerCase(), addTx.toLowerCase()]);
   });
 });
