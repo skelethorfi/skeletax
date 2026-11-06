@@ -7,7 +7,7 @@
 // Extra folders (config.extraDirs) hold hand-made files of the same shape (manual rows, amendments);
 // a file there counts only when its period is one of the run's, so it never widens the plan's scope.
 //
-//   <run dir>/unmapped.json   the records the run could not map (unsupported or failed), with their time and txids
+//   <run dir>/unmapped.json   the records the run could not map (unsupported, failed, or no rows with a warning), with their time and txids
 //
 // The chain in a file's name is read in any case. Any other .csv in csv/ is refused: its rows would be missing
 // from the run, and the plan would delete them from Summ.
@@ -194,7 +194,7 @@ export interface Unmapped {
   wallet: string;
   /** The record's time, as a row ID made from it starts. */
   time: string;
-  /** Every time a row ID made from it can start with: its own, and each attached inbound's. */
+  /** Every time a row ID made from it can start with: its own, each attached inbound's, and a withdrawn pending add's. */
   times: string[];
   /** Lower case. */
   txids: string[];

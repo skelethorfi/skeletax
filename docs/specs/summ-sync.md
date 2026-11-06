@@ -609,7 +609,7 @@ with the entries left out:
   change can make an action that mapped before fail now). A leg is taken
   as the record's when its ID starts with one of the record's times (a
   row ID starts with its action's time, `periods.md`, or with an attached
-  inbound's: a liquidity auction deposit's send) or it names one of the
+  inbound's: a liquidity auction deposit's send, or a withdrawn pending add's) or it names one of the
   record's txids. A file without `times` (an earlier exporter) gives the
   record's `time` alone. A match too many keeps legs that should go, until a
   run maps the record; one too few would delete them with no undo. The
