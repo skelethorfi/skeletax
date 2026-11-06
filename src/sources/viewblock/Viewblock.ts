@@ -33,6 +33,8 @@ export class Viewblock {
   private rateLimited?: { until?: Date };
   private listWarnings: string[] = [];
   private gasSkipped: string[] = [];
+  // The inbounds skipped this run: one asked for again (the same action under another wallet) is skipped again
+  private skippedHashes = new Set<string>();
   private gasStale: string[] = [];
   constructor(store: RecordStore) {
     this.store = store;
@@ -65,7 +67,13 @@ export class Viewblock {
   // this source was read or that could not reach it, or when Viewblock cannot be reached and nothing is stored
   // (a stored copy is used when a refetch fails, as for lists). date: of the action the tx belongs to
   async getInbound(hash: string, date?: Date): Promise<ViewblockInbound | undefined> {
-    if (this.store.addedSinceReplay("viewblock-tx") || this.store.skippedInReplay("viewblock-tx", hash)) {
+    if (this.skippedHashes.has(hash) || this.store.addedSinceReplay("viewblock-tx")) {
+      return undefined;
+    }
+
+    if (this.store.skippedInReplay("viewblock-tx", hash)) {
+      this.skippedHashes.add(hash);
+      this.gasSkipped.push(`${hash} (skipped by the replayed run)`);
       return undefined;
     }
 
@@ -86,6 +94,7 @@ export class Viewblock {
       }
 
       this.store.recordSkipped("viewblock-tx", hash);
+      this.skippedHashes.add(hash);
       this.gasSkipped.push(`${hash} (${reason(error)})`);
       return undefined;
     }

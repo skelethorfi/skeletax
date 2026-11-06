@@ -242,11 +242,18 @@ describe("Viewblock.getInbound", () => {
 
     assert.equal((await viewblock.getInbound("H1"))?.found, true);
     assert.equal(await viewblock.getInbound("H2"), undefined);
+    // The same inbound again (its action under another wallet) is skipped again, not an error
+    assert.equal(await viewblock.getInbound("H2"), undefined);
     manifest.write(path.join(dir, "run"));
 
     const replay = new Viewblock(new RecordStore(dir, { replay: SnapshotManifest.load(path.join(dir, "run")) }));
     assert.equal((await replay.getInbound("H1"))?.found, true);
     assert.equal(await replay.getInbound("H2"), undefined);
+    assert.equal(await replay.getInbound("H2"), undefined);
+    assert.match(
+      replay.warnings().join("\n"),
+      /could not fetch the gas of 1 inbound\(s\).*H2 \(skipped by the replayed run\)/,
+    );
   });
 
   test("a failed refetch uses the gas stored by an earlier run, and is not skipped", async () => {
