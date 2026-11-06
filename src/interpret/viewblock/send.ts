@@ -2,7 +2,7 @@ import type { Activity } from "../../domain/Activity.ts";
 import type { Issue } from "../../domain/Issue.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
-import { MSG_SEND_TYPES, type ViewblockTx } from "../../sources/viewblock/index.ts";
+import { memoOf, MSG_SEND_TYPES, type ViewblockTx } from "../../sources/viewblock/index.ts";
 import { failedSend, type Send, sendActivity } from "../midgard/send.ts";
 
 // A Viewblock send, for sends before 2022-04 that Midgard does not list (docs/specs/sends.md). The coin is
@@ -26,7 +26,7 @@ export function interpretViewblockSend(
     to: msgs[0].to_address,
     asset: tx.input.asset,
     amount: msgs[0].amount[0].amount,
-    memo: tx.memo ?? "",
+    memo: memoOf(tx),
   };
 
   if (tx.code !== 0) {

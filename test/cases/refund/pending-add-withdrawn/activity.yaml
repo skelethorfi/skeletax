@@ -1,0 +1,52 @@
+id: viewblock/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2
+protocol: thorchain
+kind: refund
+status: success
+time: 2020-12-31T13:00:00.000Z
+memo: ADD:BNB.BUSD-BD1:thor1-anon-wallet-1
+legs:
+  - direction: out
+    wallet: bnb1-anon-wallet-3
+    asset:
+      notation: BNB.BUSD-BD1
+      kind: token
+    role: principal
+    basis: observed
+    txid: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4
+    amount: "50"
+    decimals: 8
+  - direction: out
+    wallet: bnb1-anon-wallet-3
+    asset:
+      notation: BNB.BNB
+      kind: native
+    role: gas
+    basis: observed
+    txid: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4
+    amount: "20"
+    decimals: 8
+  - direction: in
+    wallet: bnb1-anon-wallet-3
+    asset:
+      notation: BNB.BUSD-BD1
+      kind: token
+    role: returned
+    basis: observed
+    txid: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1
+    amount: "40"
+    decimals: 8
+  - direction: out
+    wallet: thor1-anon-wallet-1
+    asset:
+      notation: THOR.RUNE
+      kind: native
+    role: gas
+    basis: default
+    txid: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2
+    amount: "0.02"
+    decimals: 8
+prices: []
+details:
+  reason: pending add withdrawn (AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2)
+  returnTime: 2020-12-31T13:00:00.000Z
+  requestTime: 2020-12-31T13:00:00.000Z

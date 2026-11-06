@@ -1,0 +1,104 @@
+{
+  "description": "A pending one-sided BUSD add, withdrawn before it made a position (anonymised)",
+  "source": "viewblock",
+  "wallet": "thor1-anon-wallet-1",
+  "data": {
+    "blockIndex": 0,
+    "code": 0,
+    "height": 10000000,
+    "memo": {
+      "raw": "-:BNB.BUSD-BD1:10000",
+      "chain": "BNB",
+      "asset": "BNB.BUSD-BD1",
+      "basisPoints": "3000000000"
+    },
+    "msgs": [
+      {
+        "@type": "/types.MsgDeposit",
+        "coins": [
+          {
+            "asset": "THOR.RUNE",
+            "amount": "1000000000",
+            "decimals": "0"
+          }
+        ],
+        "memo": "-:BNB.BUSD-BD1:3000000000"
+      }
+    ],
+    "outbounds": [
+      {
+        "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1",
+        "chain": "BNB",
+        "from": "bnb1-anon-wallet-2",
+        "to": "bnb1-anon-wallet-3",
+        "amount": "4000000000",
+        "asset": "BNB.BUSD-BD1",
+        "height": 10000000,
+        "timestamp": 1609419600000
+      }
+    ],
+    "signer": "thor1-anon-wallet-1",
+    "status": "success",
+    "timestamp": 1609419600000,
+    "types": [
+      "liquidity",
+      "withdraw",
+      "main"
+    ],
+    "output": {
+      "chain": "BNB",
+      "asset": "BNB.BUSD-BD1",
+      "type": "L1",
+      "usd": "0"
+    },
+    "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2"
+  },
+  "pendingAdd": {
+    "height": 10000000,
+    "input": {
+      "chain": "BNB",
+      "asset": "BNB.BUSD-BD1",
+      "amount": "5000000000",
+      "type": "L1",
+      "usd": "0"
+    },
+    "memo": {
+      "raw": "ADD:BNB.BUSD-BD1:thor1-anon-wallet-1",
+      "chain": "BNB",
+      "asset": "BNB.BUSD-BD1",
+      "pairedAddress": "thor1-anon-wallet-1"
+    },
+    "observation": {
+      "from": "bnb1-anon-wallet-3",
+      "to": "bnb1-anon-wallet-4",
+      "chain": "BNB",
+      "coins": [
+        {
+          "asset": "BNB.BUSD-BD1",
+          "amount": "5000000000",
+          "decimals": "0"
+        }
+      ],
+      "gas": [
+        {
+          "asset": "BNB.BNB",
+          "amount": "2000000000",
+          "decimals": "0"
+        }
+      ],
+      "in": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA3"
+    },
+    "output": {
+      "chain": "BNB",
+      "asset": "BNB.BUSD-BD1",
+      "type": "L1"
+    },
+    "timestamp": 1609419600000,
+    "types": [
+      "liquidity",
+      "add",
+      "main"
+    ],
+    "hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4"
+  }
+}

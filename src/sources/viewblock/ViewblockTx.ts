@@ -10,15 +10,36 @@ export interface ViewblockTx {
   status: string; // "success"
   // What Viewblock makes of the tx, e.g. ["network", "send", "main"] or ["swap", "main"]
   types: string[];
-  memo?: string;
+  // A string on sends; an object with the raw memo on other txs
+  memo?: string | { raw?: string };
   signer: string;
-  // The coin sent
+  // The coin sent; none on a withdrawal request
   input: {
     chain: string; // "THOR"
     asset: string; // "THOR.RUNE", "DOGE/DOGE", "TCY"
     amount: string; // 1e8 units
   };
   msgs: ViewblockMsg[];
+  // A liquidity tx (docs/specs/fees.md, Pending adds that are withdrawn): an L1 inbound's observation, and the
+  // payouts of a withdrawal
+  observation?: {
+    from: string;
+    to: string;
+    chain: string;
+    gas?: { asset: string; amount: string }[];
+  } | null;
+  outbounds?: ViewblockOutbound[] | null;
+}
+
+// A payout of a withdrawal: an L1 tx with its own hash, or a THORChain payout with none
+export interface ViewblockOutbound {
+  hash?: string;
+  chain: string;
+  from: string;
+  to: string;
+  amount: string; // 1e8 units
+  asset: string;
+  timestamp: number;
 }
 
 export interface ViewblockMsg {
@@ -43,3 +64,13 @@ export interface ViewblockInbound {
   // 1e8 units, whatever Viewblock's decimals field says
   gas: { asset: string; amount: string }[];
 }
+
+// The tx's memo as written
+export function memoOf(tx: ViewblockTx): string {
+  return (typeof tx.memo === "string" ? tx.memo : tx.memo?.raw) ?? "";
+}
+
+// Viewblock's kind of a tx, from its types
+export const isViewblockSend = (tx: ViewblockTx) => tx.types.includes("send");
+export const isViewblockWithdraw = (tx: ViewblockTx) => tx.types.includes("liquidity") && tx.types.includes("withdraw");
+export const isViewblockAdd = (tx: ViewblockTx) => tx.types.includes("liquidity") && tx.types.includes("add");

@@ -14,6 +14,8 @@ import { interpretRujira, RUJIRA_CONTRACT_TYPES } from "./midgard/rujira.ts";
 import { interpretSend } from "./midgard/send.ts";
 import { interpretFailedDeposit } from "./midgard/failed.ts";
 import { interpretViewblockSend } from "./viewblock/send.ts";
+import { interpretPendingWithdraw } from "./viewblock/pending.ts";
+import { isViewblockWithdraw, type ViewblockTx } from "../sources/viewblock/index.ts";
 import { interpretMayaDistribution } from "./maya/distribution.ts";
 
 // The activities of one bundle, which an exporter turns into rows, and its problems
@@ -49,8 +51,10 @@ const REGISTRY: Record<string, Interpreter> = {
   [`midgard/${ActionType.Send}`]: interpretSend,
   "midgard/failed": interpretFailedDeposit,
   ...Object.fromEntries(RUJIRA_CONTRACT_TYPES.map((type) => [`midgard/contract/${type}`, interpretRujira])),
-  // Viewblock gives only sends from before 2022-04 that Midgard does not list (docs/specs/sends.md)
+  // Viewblock gives only sends from before 2022-04 that Midgard does not list (docs/specs/sends.md), and the
+  // withdrawals of pending adds Midgard does not list either (docs/specs/fees.md, Pending adds that are withdrawn)
   "viewblock/send": interpretViewblockSend,
+  "viewblock/withdraw": interpretPendingWithdraw,
   "tcy/distribution": activity(interpretTcyDistribution),
   "maya-distribution/payout": (bundle, protocol) => ({
     activities: interpretMayaDistribution(bundle, protocol),
@@ -87,7 +91,7 @@ export function getBundleType(bundle: RawBundle): { type: string; subtype?: stri
       return { type: action.type };
     }
     case "viewblock":
-      return { type: "send" };
+      return { type: isViewblockWithdraw(bundle.data as ViewblockTx) ? "withdraw" : "send" };
     case "tcy":
       return { type: "distribution" };
     case "maya-distribution":

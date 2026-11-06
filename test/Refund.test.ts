@@ -128,3 +128,180 @@ describe("refund", () => {
     assert.equal(refundRows(action, [thornodeTx])[0].type, "failed-out");
   });
 });
+
+describe("pending add withdrawn (Viewblock)", () => {
+  const add = {
+    hash: "tx-add",
+    timestamp: Date.parse("2020-12-01T10:00:00Z"),
+    height: 1,
+    blockIndex: 0,
+    code: 0,
+    status: "success",
+    types: ["liquidity", "add", "main"],
+    memo: { raw: "ADD:ETH.TKN-0XABC:0x-user-eth-wallet" },
+    signer: "thor1-user-wallet-11111",
+    input: { chain: "THOR", asset: "THOR.RUNE", amount: "5000000000" },
+    msgs: [],
+  };
+  const withdraw = {
+    hash: "tx-withdraw",
+    timestamp: Date.parse("2020-12-02T10:00:00Z"),
+    height: 2,
+    blockIndex: 0,
+    code: 0,
+    status: "success",
+    types: ["liquidity", "withdraw", "main"],
+    memo: { raw: "-:ETH.TKN-ABC:10000" },
+    signer: "thor1-user-wallet-11111",
+    msgs: [],
+    outbounds: [
+      {
+        chain: "THOR",
+        from: "thor1-module",
+        to: "thor1-user-wallet-11111",
+        amount: "4998000000",
+        asset: "THOR.RUNE",
+        timestamp: Date.parse("2020-12-02T10:00:00Z"),
+      },
+    ],
+  };
+  const rows = runBundle(
+    {
+      source: "viewblock",
+      protocol: "thorchain",
+      wallet: "thor1-user-wallet-11111",
+      data: withdraw as any,
+      pendingAdd: add as any,
+      thornodeTxs: [],
+      cosmosTxs: [],
+    },
+    THORCHAIN,
+  ).rows;
+
+  test("a RUNE side gives the refund rows and the request's fee, on the one wallet, and no return row", () => {
+    assert.deepEqual(
+      rows.map((row) => [row.type, row.baseCurrency, row.baseAmount, row.feeAmount ?? ""]),
+      [
+        ["failed-out", "RUNE", "50", "0.02"],
+        ["fee", "RUNE", "0.02", ""],
+        ["fee", "RUNE", "0.02", ""],
+      ],
+    );
+    assert.equal(rows[2].timestamp.toISOString(), "2020-12-02T10:00:00.000Z");
+    assert.match(rows[2].description ?? "", /withdrawal request tx-withdraw/);
+  });
+});
+
+test("an L1 pending add with no gas recorded takes no fee from the withdrawal request", () => {
+  const add = {
+    hash: "tx-add-l1",
+    timestamp: Date.parse("2020-12-01T10:00:00Z"),
+    height: 1,
+    types: ["liquidity", "add", "main"],
+    memo: { raw: "ADD:BNB.BNB:thor1-user-wallet-11111" },
+    input: { chain: "BNB", asset: "BNB.BNB", amount: "100000000" },
+    observation: { from: "bnb1-user-wallet", to: "bnb1-vault", chain: "BNB" },
+    msgs: [],
+  };
+  const withdraw = {
+    hash: "tx-withdraw-l1",
+    timestamp: Date.parse("2020-12-02T10:00:00Z"),
+    height: 2,
+    types: ["liquidity", "withdraw", "main"],
+    memo: { raw: "-:BNB.BNB:10000" },
+    signer: "thor1-user-wallet-11111",
+    msgs: [],
+    outbounds: [
+      {
+        hash: "tx-out-l1",
+        chain: "BNB",
+        from: "bnb1-vault",
+        to: "bnb1-user-wallet",
+        amount: "99000000",
+        asset: "BNB.BNB",
+        timestamp: Date.parse("2020-12-02T10:00:10Z"),
+      },
+    ],
+  };
+  const rows = runBundle(
+    {
+      source: "viewblock",
+      protocol: "thorchain",
+      wallet: "thor1-user-wallet-11111",
+      data: withdraw as any,
+      pendingAdd: add as any,
+      thornodeTxs: [],
+      cosmosTxs: [],
+    },
+    THORCHAIN,
+  ).rows;
+  assert.deepEqual(
+    rows.map((row) => [row.type, row.baseCurrency, row.baseAmount, row.feeCurrency ?? "", row.feeAmount ?? ""]),
+    [
+      ["failed-out", "BNB", "1", "", ""],
+      ["fee", "BNB", "0.01", "", ""],
+      ["failed-in", "BNB", "0.99", "", ""],
+      ["fee", "RUNE", "0.02", "", ""],
+    ],
+  );
+});
+
+test("a withdrawal with no pending add gives no rows, and a warning", () => {
+  const result = runBundle(
+    {
+      source: "viewblock",
+      protocol: "thorchain",
+      wallet: "thor1-user-wallet-11111",
+      data: { hash: "tx-w", timestamp: 0, types: ["liquidity", "withdraw", "main"], msgs: [] } as any,
+      thornodeTxs: [],
+      cosmosTxs: [],
+    },
+    THORCHAIN,
+  );
+  assert.deepEqual(result.rows, []);
+  assert.ok(result.issues.some((issue) => issue.kind === "warning" && /no pending add/.test(issue.message)));
+});
+
+test("an L1 refund paid to a refund address named in the memo has its failed-in on that wallet", () => {
+  const action = refund([]);
+  action.in[0].coins[0].asset = "BTC.BTC";
+  action.in[0].address = "bc1-user-sender";
+  action.out = [{ address: "bc1-user-refund", txID: "tx-return", coins: [{ asset: "BTC.BTC", amount: "98000000" }] }];
+  const rows = refundRows(action);
+  const back = rows.find((row) => row.type === "failed-in");
+  assert.equal(back?.wallet, "bc1-user-refund");
+  assert.equal(back?.to, "bc1-user-refund");
+  assert.equal(rows.find((row) => row.type === "failed-out")?.wallet, "bc1-user-sender");
+});
+
+test("an L1 pending add with no sender observed gives no rows, and a warning", () => {
+  const result = runBundle(
+    {
+      source: "viewblock",
+      protocol: "thorchain",
+      wallet: "thor1-user-wallet-11111",
+      data: {
+        hash: "tx-w2",
+        timestamp: 1,
+        types: ["liquidity", "withdraw", "main"],
+        signer: "thor1-user-wallet-11111",
+        msgs: [],
+        outbounds: [
+          { hash: "tx-o2", chain: "BNB", from: "v", to: "bnb1-user", amount: "1", asset: "BNB.BNB", timestamp: 1 },
+        ],
+      } as any,
+      pendingAdd: {
+        hash: "tx-a2",
+        timestamp: 0,
+        types: ["liquidity", "add", "main"],
+        input: { chain: "BNB", asset: "BNB.BNB", amount: "2" },
+        msgs: [],
+      } as any,
+      thornodeTxs: [],
+      cosmosTxs: [],
+    },
+    THORCHAIN,
+  );
+  assert.deepEqual(result.rows, []);
+  assert.ok(result.issues.some((issue) => issue.kind === "warning" && /no sender/.test(issue.message)));
+});

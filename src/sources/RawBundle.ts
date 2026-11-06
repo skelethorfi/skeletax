@@ -1,6 +1,13 @@
 import type { Action } from "@xchainjs/xchain-midgard";
 import type { TxStatusResponse } from "@xchainjs/xchain-thornode";
-import type { ViewblockInbound, ViewblockTx } from "./viewblock/index.ts";
+import {
+  isViewblockAdd,
+  isViewblockSend,
+  isViewblockWithdraw,
+  memoOf,
+  type ViewblockInbound,
+  type ViewblockTx,
+} from "./viewblock/index.ts";
 import type { EvmReceipt, EvmTokenPayout } from "./evm/EvmReceipts.ts";
 import { getDistributionDate, type TcyDistributionItem } from "./tcy/TcyDistributionService.ts";
 import type { CosmosTx } from "./thorchain/CosmosTxService.ts";
@@ -46,6 +53,8 @@ export interface RawBundle {
   inbounds?: Action[];
   // A TCY claim's claim-list entries, and the claiming address's savers positions and loans (docs/specs/thorfi-collapse.md)
   tcyClaim?: TcyClaimData;
+  // The pending add a Viewblock withdrawal pays back (docs/specs/fees.md, Pending adds that are withdrawn)
+  pendingAdd?: ViewblockTx;
 }
 
 export function getBundleDate(bundle: RawBundle): Date {
@@ -136,9 +145,50 @@ export function selectSends(bundles: RawBundle[]): {
   const payoutFor = (bundle: RawBundle) => (midgardSend(bundle) ? outboundMemoTxid(bundle.data as Action) : undefined);
   const isOutbound = (bundle: RawBundle) =>
     midgardSend(bundle) && (actionOutbounds.has(sendTxid(bundle)) || actionInbounds.has(payoutFor(bundle) ?? ""));
-  const isViewblockGap = (bundle: RawBundle) => {
+  const unlisted = (tx: ViewblockTx) => tx.timestamp < cutoff && !listed.has(tx.hash.toUpperCase());
+  // A withdrawal of a pending add is kept with that add (docs/specs/fees.md, Pending adds that are withdrawn)
+  const viewblockTxs = bundles.filter((bundle) => bundle.source === "viewblock");
+  // Each add pays back one withdrawal: the earliest withdrawals pair first
+  const paired = new Map<RawBundle, ViewblockTx>();
+  const used = new Set<string>();
+  viewblockTxs
+    .filter((bundle) => {
+      const tx = bundle.data as ViewblockTx;
+      return isViewblockWithdraw(tx) && unlisted(tx) && tx.signer === bundle.wallet;
+    })
+    .sort((a, b) => (a.data as ViewblockTx).timestamp - (b.data as ViewblockTx).timestamp)
+    .forEach((bundle) => {
+      const wallet = viewblockTxs
+        .filter((other) => other.wallet === bundle.wallet)
+        .map((other) => other.data as ViewblockTx);
+      const add = pendingAddOf(
+        bundle.data as ViewblockTx,
+        wallet,
+        bundle.wallet,
+        (tx) => unlisted(tx) && !used.has(`${bundle.wallet}:${tx.hash}`),
+      );
+      if (add) {
+        paired.set(bundle, add);
+        used.add(`${bundle.wallet}:${add.hash}`);
+      }
+    });
+  // An unpaired withdrawal is kept, so the interpreter warns of it (docs/specs/fees.md)
+  const withPendingAdd = (bundle: RawBundle): RawBundle => {
+    const add = paired.get(bundle);
+    return add ? { ...bundle, pendingAdd: add } : bundle;
+  };
+  const viewblockGap = (bundle: RawBundle): RawBundle | undefined => {
     const tx = bundle.data as ViewblockTx;
-    return tx.types.includes("send") && tx.timestamp < cutoff && !listed.has(tx.hash.toUpperCase());
+
+    if (!unlisted(tx)) {
+      return undefined;
+    }
+
+    if (isViewblockSend(tx)) {
+      return bundle;
+    }
+
+    return isViewblockWithdraw(tx) && tx.signer === bundle.wallet ? withPendingAdd(bundle) : undefined;
   };
 
   // A pending refund's outbound found by its memo: the refund was paid
@@ -166,11 +216,18 @@ export function selectSends(bundles: RawBundle[]): {
     };
   };
 
-  const kept = bundles
-    .filter((bundle) =>
-      bundle.source === "viewblock" ? isViewblockGap(bundle) : !isInbound(bundle) && !isOutbound(bundle),
-    )
-    .map((bundle) => (bundle.source === "midgard" ? settled(bundle) : bundle));
+  const kept = bundles.flatMap((bundle) => {
+    if (bundle.source === "viewblock") {
+      const gap = viewblockGap(bundle);
+      return gap ? [gap] : [];
+    }
+
+    if (isInbound(bundle) || isOutbound(bundle)) {
+      return [];
+    }
+
+    return [bundle.source === "midgard" ? settled(bundle) : bundle];
+  });
 
   return {
     bundles: kept,
@@ -242,4 +299,60 @@ function isAuctionDeposit(send: Action, runeAddress: string, mayaAddress: string
     memo.startsWith(`+:thor.rune:${mayaAddress}`) &&
     BigInt(send.date) < BigInt(addDate)
   );
+}
+
+// The pool a liquidity memo names: 'ADD:<pool>:…', '+:<pool>:…' or '-:<pool>:<basis points>'
+function memoPool(memo: string): string | undefined {
+  const [action, pool] = memo.trim().split(":");
+  return ["ADD", "A", "+", "-", "WD", "WITHDRAW"].includes((action ?? "").toUpperCase()) && pool?.includes(".")
+    ? pool.toUpperCase()
+    : undefined;
+}
+
+// Two names of one pool: a token's contract may be shortened to its end ('ETH.XRUNE-71C'); a name with a contract
+// is not the same pool as one without
+function samePool(a: string, b: string): boolean {
+  const [nameA, contractA = ""] = a.split("-");
+  const [nameB, contractB = ""] = b.split("-");
+  const contracts =
+    !contractA && !contractB
+      ? true
+      : !!contractA && !!contractB && (contractA.endsWith(contractB) || contractB.endsWith(contractA));
+  return nameA === nameB && contracts;
+}
+
+// The pending add a withdrawal pays back (docs/specs/fees.md, Pending adds that are withdrawn): the latest
+// earlier add to the same pool that Midgard does not list, sent from or naming the wallet, of at least the
+// amount paid out in its asset. None when the withdrawal pays nothing.
+export function pendingAddOf(
+  withdraw: ViewblockTx,
+  txs: ViewblockTx[],
+  wallet: string,
+  unlisted: (tx: ViewblockTx) => boolean,
+): ViewblockTx | undefined {
+  const pool = memoPool(memoOf(withdraw));
+  const payouts = withdraw.outbounds ?? [];
+
+  if (!pool || !payouts.length) {
+    return undefined;
+  }
+
+  return txs
+    .filter((tx) => isViewblockAdd(tx) && unlisted(tx) && tx.timestamp < withdraw.timestamp && tx.input)
+    .filter((tx) => {
+      const addPool = memoPool(memoOf(tx));
+      const memo = memoOf(tx).toLowerCase();
+      const fromWallet = tx.signer === wallet || tx.observation?.from === wallet;
+      // A pending withdrawal pays back only the pending asset
+      const inAsset = payouts.every((out) => out.asset.toUpperCase() === tx.input.asset.toUpperCase());
+      const paid = inAsset ? payouts.reduce((sum, out) => sum + BigInt(out.amount), 0n) : 0n;
+      return (
+        !!addPool &&
+        samePool(addPool, pool) &&
+        (fromWallet || memo.includes(wallet.toLowerCase())) &&
+        paid > 0n &&
+        BigInt(tx.input.amount) >= paid
+      );
+    })
+    .sort((a, b) => b.timestamp - a.timestamp)[0];
 }

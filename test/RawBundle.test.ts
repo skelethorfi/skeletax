@@ -113,6 +113,70 @@ describe("selectSends", () => {
     });
   });
 
+  test("keeps a Viewblock withdrawal of a pending add, with that add; an add alone, or listed, gives nothing", () => {
+    const add = (hash: string, date: string, memo: string, amount: string, from = "bnb1x") => ({
+      hash,
+      timestamp: Date.parse(date),
+      types: ["liquidity", "add", "main"],
+      memo: { raw: memo },
+      input: { chain: "BNB", asset: "BNB.BUSD-BD1", amount },
+      observation: { from, to: "bnb1vault", chain: "BNB" },
+    });
+    const withdraw = (hash: string, date: string, pool: string, amount: string, signer = "thor1a") => ({
+      hash,
+      timestamp: Date.parse(date),
+      types: ["liquidity", "withdraw", "main"],
+      memo: { raw: `-:${pool}:10000` },
+      signer,
+      outbounds: [{ hash: "OUT1", chain: "BNB", from: "bnb1vault", to: "bnb1x", amount, asset: "BNB.BUSD-BD1" }],
+    });
+    const older = add("A0", "2020-12-01T09:00:00Z", "ADD:BNB.BUSD-BD1:thor1a", "500");
+    const pending = add("A1", "2020-12-01T10:00:00Z", "ADD:BNB.BUSD-BD1:thor1a", "500");
+    const other = add("A2", "2020-12-01T10:05:00Z", "ADD:BNB.BNB:thor1a", "500");
+    const later = add("A3", "2020-12-01T11:00:00Z", "ADD:BNB.BUSD-BD1:thor1a", "500");
+    const back = withdraw("W1", "2020-12-01T10:30:00Z", "BNB.BUSD-BD1", "490");
+    const bundles = [older, pending, other, later, back].map((tx) => bundle("viewblock", "thor1a", tx));
+    const back2 = () => bundle("viewblock", "thor1a", back);
+
+    const kept = selectSends(bundles).bundles;
+    assert.deepEqual(
+      kept.map((b) => [(b.data as any).hash, b.pendingAdd?.hash]),
+      [["W1", "A1"]],
+    );
+    // Midgard listing that add (it made a position after all): the latest add it does not list is the pending one
+    assert.deepEqual(
+      selectSends([...bundles, bundle("midgard", "thor1a", action("A1", "addLiquidity"))])
+        .bundles.filter((b) => b.source === "viewblock")
+        .map((b) => b.pendingAdd?.hash),
+      ["A0"],
+    );
+    // Paid out more than any add: kept unpaired, so its mapping warns
+    const more = bundle("viewblock", "thor1a", withdraw("W2", "2020-12-01T10:30:00Z", "BNB.BUSD-BD1", "501"));
+    assert.deepEqual(
+      selectSends([bundles[1], more]).bundles.map((b) => [(b.data as any).hash, b.pendingAdd?.hash]),
+      [["W2", undefined]],
+    );
+    // One add pays back one withdrawal: the earlier withdrawal takes it
+    const second = bundle("viewblock", "thor1a", withdraw("W4", "2020-12-01T10:40:00Z", "BNB.BUSD-BD1", "490"));
+    assert.deepEqual(
+      selectSends([bundles[1], back2(), second]).bundles.map((b) => [(b.data as any).hash, b.pendingAdd?.hash]),
+      [
+        ["W1", "A1"],
+        ["W4", undefined],
+      ],
+    );
+    // A pool named without a contract is not one named with it
+    const bare = bundle("viewblock", "thor1a", withdraw("W6", "2020-12-01T10:30:00Z", "BNB.BUSD", "490"));
+    assert.equal(selectSends([bundles[1], bare]).bundles[0].pendingAdd, undefined);
+    // Signed by another wallet: not this wallet's
+    const foreign = bundle(
+      "viewblock",
+      "thor1a",
+      withdraw("W3", "2020-12-01T10:30:00Z", "BNB.BUSD-BD1", "490", "thor1b"),
+    );
+    assert.deepEqual(selectSends([bundles[1], foreign]).bundles, []);
+  });
+
   test("drops a THORChain send that is a Maya action's outbound, by txid", () => {
     const swap = bundle(
       "midgard",

@@ -54,6 +54,8 @@ export interface GoldenCaseInput {
   usdPrices?: Record<string, string>;
   // What a TCY claim was for (docs/specs/thorfi-collapse.md)
   tcyClaim?: TcyClaimData;
+  // The pending add a Viewblock withdrawal pays back (docs/specs/fees.md, Pending adds that are withdrawn)
+  pendingAdd?: ViewblockTx;
   // The config's treatment choices the case is mapped with, e.g. {mayaLiquidityAuction: 'income'}
   treatment?: Treatment;
 }
@@ -169,6 +171,7 @@ export function toBundle(input: GoldenCaseInput): RawBundle {
     ...(input.runePriceUsd ? { runePriceUsd: input.runePriceUsd } : {}),
     ...(input.usdPrices ? { usdPrices: input.usdPrices } : {}),
     ...(input.tcyClaim ? { tcyClaim: input.tcyClaim } : {}),
+    ...(input.pendingAdd ? { pendingAdd: input.pendingAdd } : {}),
   };
 }
 
@@ -189,6 +192,7 @@ export function toCaseInput(bundle: RawBundle, description: string): GoldenCaseI
     ...(bundle.runePriceUsd ? { runePriceUsd: bundle.runePriceUsd } : {}),
     ...(bundle.usdPrices ? { usdPrices: bundle.usdPrices } : {}),
     ...(bundle.tcyClaim ? { tcyClaim: bundle.tcyClaim } : {}),
+    ...(bundle.pendingAdd ? { pendingAdd: bundle.pendingAdd } : {}),
   };
 }
 
