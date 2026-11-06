@@ -165,9 +165,7 @@ describe("selectSends", () => {
         ["W4", undefined],
       ],
     );
-    // A short chain name and a shortened contract name the same pool; a pool without a contract does not match one with
-    const short = bundle("viewblock", "thor1a", withdraw("W5", "2020-12-01T10:30:00Z", "B.BUSD-BD1", "490"));
-    assert.equal(selectSends([bundles[1], short]).bundles[0].pendingAdd?.hash, "A1");
+    // A pool named without a contract is not one named with it
     const bare = bundle("viewblock", "thor1a", withdraw("W6", "2020-12-01T10:30:00Z", "BNB.BUSD", "490"));
     assert.equal(selectSends([bundles[1], bare]).bundles[0].pendingAdd, undefined);
     // Signed by another wallet: not this wallet's

@@ -301,29 +301,12 @@ function isAuctionDeposit(send: Action, runeAddress: string, mayaAddress: string
   );
 }
 
-// THORChain's short chain names in memos
-const SHORT_CHAINS: Record<string, string> = {
-  A: "AVAX",
-  B: "BNB",
-  C: "BCH",
-  D: "DOGE",
-  E: "ETH",
-  F: "BASE",
-  G: "GAIA",
-  L: "LTC",
-  S: "BSC",
-};
-
-// The pool a liquidity memo names: 'ADD:<pool>:…', '+:<pool>:…' or '-:<pool>:<basis points>', with its chain in full
+// The pool a liquidity memo names: 'ADD:<pool>:…', '+:<pool>:…' or '-:<pool>:<basis points>'
 function memoPool(memo: string): string | undefined {
   const [action, pool] = memo.trim().split(":");
-
-  if (!["ADD", "A", "+", "-", "WD", "WITHDRAW"].includes((action ?? "").toUpperCase()) || !pool) {
-    return undefined;
-  }
-
-  const [chain, ...rest] = pool.toUpperCase().split(".");
-  return rest.length ? [SHORT_CHAINS[chain] ?? chain, ...rest].join(".") : undefined;
+  return ["ADD", "A", "+", "-", "WD", "WITHDRAW"].includes((action ?? "").toUpperCase()) && pool?.includes(".")
+    ? pool.toUpperCase()
+    : undefined;
 }
 
 // Two names of one pool: a token's contract may be shortened to its end ('ETH.XRUNE-71C'); a name with a contract

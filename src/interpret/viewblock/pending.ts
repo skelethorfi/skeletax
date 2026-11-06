@@ -31,7 +31,21 @@ export function interpretPendingWithdraw(
 
   const asset = add.input.asset;
   const decimals = protocol.decimals(asset);
-  const sender = add.observation?.from || add.signer;
+  // An L1 add's sender is in its observation; a THORChain add's is its signer
+  const sender =
+    add.observation?.from || (asset.startsWith(`${protocol.nativeAsset.split(".")[0]}.`) ? add.signer : "");
+
+  if (!sender) {
+    return {
+      activities: [],
+      issues: [
+        {
+          kind: "warning",
+          message: `a pending add (${add.hash}) with no sender Viewblock observed, withdrawn by ${withdraw.hash}: check what it paid back`,
+        },
+      ],
+    };
+  }
   const payouts = (withdraw.outbounds ?? []).filter((out) => out.asset.toUpperCase() === asset.toUpperCase());
   const returned = payouts.reduce((sum, out) => sum + BigInt(out.amount), 0n);
   const returnTxid = payouts.find((out) => out.hash)?.hash;

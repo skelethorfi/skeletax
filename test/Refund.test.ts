@@ -261,3 +261,15 @@ test("a withdrawal with no pending add gives no rows, and a warning", () => {
   assert.deepEqual(result.rows, []);
   assert.ok(result.issues.some((issue) => issue.kind === "warning" && /no pending add/.test(issue.message)));
 });
+
+test("an L1 refund paid to a refund address named in the memo has its failed-in on that wallet", () => {
+  const action = refund([]);
+  action.in[0].coins[0].asset = "BTC.BTC";
+  action.in[0].address = "bc1-user-sender";
+  action.out = [{ address: "bc1-user-refund", txID: "tx-return", coins: [{ asset: "BTC.BTC", amount: "98000000" }] }];
+  const rows = refundRows(action);
+  const back = rows.find((row) => row.type === "failed-in");
+  assert.equal(back?.wallet, "bc1-user-refund");
+  assert.equal(back?.to, "bc1-user-refund");
+  assert.equal(rows.find((row) => row.type === "failed-out")?.wallet, "bc1-user-sender");
+});

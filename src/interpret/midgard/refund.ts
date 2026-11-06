@@ -56,7 +56,8 @@ export function interpretRefund(bundle: RawBundle, protocol: Protocol): { activi
       ? [
           {
             direction: "in",
-            wallet: input.address,
+            // Paid where the payout went: a memo can name a refund address other than the sender
+            wallet: action.out.find((out) => out.address)?.address ?? input.address,
             asset: inputAsset,
             amount: parseAmount(returned.toString(), decimals),
             role: "returned",
