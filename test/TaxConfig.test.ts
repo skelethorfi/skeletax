@@ -30,9 +30,10 @@ describe("TaxConfig", () => {
   });
 
   test("a wallet's blockchain is written in upper case, letters and digits only; one with neither is an error", () => {
-    const wallet = (blockchain: unknown) => ({ name: "Example", address: "thor1example", blockchain }) as any;
+    let n = 0;
+    const wallet = (blockchain: unknown) => ({ name: "Example", address: `thor1example${n++}`, blockchain }) as any;
     const result = TaxConfig.applyDefaults(
-      { wallets: [wallet("thor"), wallet("Eth2"), wallet("BNB-Chain"), wallet("Terra Classic")] },
+      { ...base, wallets: [wallet("thor"), wallet("Eth2"), wallet("BNB-Chain"), wallet("Terra Classic")] },
       new Date(),
     );
     assert.deepEqual(
@@ -41,7 +42,7 @@ describe("TaxConfig", () => {
     );
     for (const bad of ["", "-_", undefined]) {
       assert.throws(
-        () => TaxConfig.applyDefaults({ wallets: [wallet(bad)] }, new Date()),
+        () => TaxConfig.applyDefaults({ ...base, wallets: [wallet(bad)] }, new Date()),
         /wallet Example: blockchain must hold letters or digits/,
       );
     }
@@ -184,8 +185,7 @@ describe("TaxConfig checks, before anything is fetched", () => {
     const invalid: [object, RegExp][] = [
       [{ ...wallet, address: "" }, /wallets\[0\]\.address must be set/],
       [{ ...wallet, name: undefined }, /wallets\[0\]\.name must be set/],
-      [{ ...wallet, blockchain: "thor" }, /wallets\[0\]\.blockchain must be capital letters and digits/],
-      [{ ...wallet, blockchain: undefined }, /wallets\[0\]\.blockchain must be/],
+      [{ ...wallet, blockchain: undefined }, /blockchain must hold letters or digits/],
     ];
     for (const [entry, error] of invalid) {
       assert.throws(() => TaxConfig.applyDefaults({ ...base, wallets: [entry as any] }, today), error);

@@ -27,9 +27,10 @@ layout is `csvFiles` in `src/export/summ/files.ts`.
     calendar (`"2023-02-30"`). `toDate` is not before `fromDate`.
   - `frequency` is required: `"monthly"`, `"yearly"` or `"none"`.
   - `wallets` is required (it may be empty). Each wallet has a `name`, an
-    `address` no other wallet has (in any letter case) and a `blockchain` of
-    capital letters and digits (`THOR`, `ETH`), the form summ-sync reads
-    back from the file names.
+    `address` no other wallet has (in any letter case) and a `blockchain`
+    holding a letter or digit, written in upper case with anything else
+    dropped (`thor` gives `THOR`), the form summ-sync reads back from the
+    file names.
   - `protocols`, when set, lists `"thorchain"` and `"maya"`, each at most once.
 - File names keep the period's dates (`2025-07-01_2026-06-30_…`); the
   timezone does not appear in them.

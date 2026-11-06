@@ -12,8 +12,6 @@ import { checkTimeZone, dateIn, isCalendarDate } from "../utils/DateRange.ts";
 import { REFERENCE_PRICES } from "../export/summ/prices.ts";
 import { PROTOCOLS } from "../domain/Protocol.ts";
 
-// The wallet's part of its CSV file names, which summ-sync reads back (packages/summ-sync/src/run.ts)
-
 // A config date as YYYY-MM-DD. An unquoted TOML date (fromDate = 2020-01-01) loads as a Date at UTC midnight;
 // any other Date is a date-time, whose calendar day is not clear, so it is refused.
 function configDate(value: unknown, key: string): string {
