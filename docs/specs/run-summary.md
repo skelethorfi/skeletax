@@ -119,5 +119,7 @@ listed among the records the run found changed. `--offline` compares with the
 latest stored balance; `--replay` with the one the replayed run read. The
 Counts section says how many wallets were compared and what was found.
 
+A wallet the run skipped (Not fetched) has no rows and is not checked.
+
 Not checked yet: LP, savers and RUNEPool positions against Midgard's member
 endpoints, trade account balances, and L1 balances.

@@ -384,7 +384,10 @@ export class Exporter {
     ];
     const wallets: WalletBalances[] = [];
 
-    for (const wallet of this.config.wallets) {
+    // A wallet the run skipped has no rows, so there is nothing to check (Not fetched names it)
+    const skipped = new Set(this.notFetched.map(({ wallet }) => addressKey(wallet.address)));
+
+    for (const wallet of this.config.wallets.filter((w) => !skipped.has(addressKey(w.address)))) {
       const node = nodes.find(({ protocol }) => wallet.address.startsWith(protocol.nativeAddressPrefix));
       const entry: WalletBalances = { address: wallet.address, name: wallet.name, native: !!node, source: node?.name };
       wallets.push(entry);
