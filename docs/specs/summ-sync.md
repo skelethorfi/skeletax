@@ -327,8 +327,10 @@ on its own chain, is right as it is), and sets each such leg's `currencyId` to t
 Summ prices it, and keeps its cost base, as the run's currency. All of a token's legs move in
 one plan: a leg left on the wrong token sits in a cost-base pool of its own, and a disposal of
 the right one finds no cost base. So `pull` also reads every action holding a listed id, or the
-id it is put right to, in a leg or a fee (a query by currency), run or not: the legs already put
-right stay in view, so verify sees a Currency entry land and a later plan sees the leg right, and only a full plan from a whole pull puts any right:
+id it is put right to, in a leg or a fee (a query by currency), run or not. The legs already put
+right stay in view: verify sees a Currency entry land, and a later plan sees the leg is right
+(and any manual entry in the token, which it then treats as any other). Only a full plan from a
+whole pull puts any right:
 a snapshot of the run's range refuses it, and `--only` leaves it for a full plan. A leg a
 categorised row takes holds the run's currency for matching, and the row's entry puts it right in
 the same edit as its type. Any other such leg of Summ's imports (a fee, a send outside the run)
