@@ -256,6 +256,19 @@ describe("Viewblock.getInbound", () => {
     );
   });
 
+  test("an inbound asked for twice at once, whose fetch fails, is skipped and warned about once", async () => {
+    mock.method(http, "get", async () => {
+      throw Object.assign(new Error("429"), { response: { status: 429, data: { value: 1000 } } });
+    });
+    const viewblock = new Viewblock(new RecordStore(tmp()));
+
+    assert.deepEqual(await Promise.all([viewblock.getInbound("H1"), viewblock.getInbound("H1")]), [
+      undefined,
+      undefined,
+    ]);
+    assert.match(viewblock.warnings().join("\n"), /could not fetch the gas of 1 inbound\(s\)/);
+  });
+
   test("a failed refetch uses the gas stored by an earlier run, and is not skipped", async () => {
     mock.method(
       http,

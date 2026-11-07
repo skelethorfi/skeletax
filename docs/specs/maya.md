@@ -191,8 +191,8 @@ pages) is kept once.
 For payouts before that height, the source reads the wallet's balance on Maya's Midgard just before and at
 each payout height (`/v2/balance/<address>?height=h−1` and `?height=h`): the
 CACAO paid is the step between them, and the MAYA held at `h−1` is kept with
-it (Midgard's shared client sends one request a second, so this is about 2 s
-a payout). Where both have a payout, its height, amount and date (to the
+it (the shared client sends one request a second to each host, so this is about
+2 s a payout). Where both have a payout, its height, amount and date (to the
 second) equal the dividends list's. That step is exact only when nothing else moved the wallet's CACAO in
 block `h`. When one of the wallet's Midgard actions was sent or paid out at
 `h` (its own height or an outbound's: a streaming swap pays out blocks after

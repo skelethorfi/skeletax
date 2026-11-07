@@ -529,3 +529,62 @@ describe("replaying a run made before a source existed", () => {
     await assert.rejects(store.list("midgard", "w2", never, { keyOf: (item: any) => item.id }), /in the replayed run/);
   });
 });
+
+// Bundles are built a few at a time (docs/specs/snapshots.md), so two can ask for the same record at once: e.g. a
+// swap and its refund for the inbound's THORNode status, or two actions in one price bucket
+describe("Concurrent use", () => {
+  test("a record asked for twice at once is fetched once, and both get it", async () => {
+    const root = makeDir();
+    const store = new RecordStore(root);
+    const fetch = mock.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return { data: { id: "a", gas: "1" } as Tx, url: "https://source/x" };
+    });
+
+    const [first, second] = await Promise.all([
+      store.record("thornode", "a", fetch, RULES),
+      store.record("thornode", "a", fetch, RULES),
+    ]);
+
+    assert.deepEqual(first, { id: "a", gas: "1" });
+    assert.deepEqual(second, { id: "a", gas: "1" });
+    assert.equal(fetch.mock.callCount(), 1);
+    assert.equal(new RecordStore(root).copies("thornode", "a").length, 1);
+  });
+
+  test("the second caller gets the first's error", async () => {
+    const store = new RecordStore(makeDir());
+    const fetch = mock.fn(async (): Promise<any> => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      throw { response: { status: 404 } };
+    });
+
+    const results = await Promise.allSettled([
+      store.record("thornode", "a", fetch),
+      store.record("thornode", "a", fetch),
+    ]);
+
+    assert.deepEqual(
+      results.map((result) => result.status === "rejected" && result.reason),
+      [{ response: { status: 404 } }, { response: { status: 404 } }],
+    );
+    assert.equal(fetch.mock.callCount(), 1);
+  });
+
+  test("a list asked for twice at once is fetched once", async () => {
+    const store = new RecordStore(makeDir());
+    const fetch = mock.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return { data: [{ id: "a" }, { id: "b" }] as Tx[], url: "https://source/list" };
+    });
+
+    const [first, second] = await Promise.all([
+      store.list("midgard", "w1", fetch, LIST),
+      store.list("midgard", "w1", fetch, LIST),
+    ]);
+
+    assert.deepEqual(first, [{ id: "a" }, { id: "b" }]);
+    assert.deepEqual(second, first);
+    assert.equal(fetch.mock.callCount(), 1);
+  });
+});

@@ -190,6 +190,9 @@ export class RecordStore {
   private readonly stuckBefore?: Date;
   // Records and lists fetched in this run: one shared by several wallets is fetched once
   private readonly fetchedThisRun = new Set<string>();
+  // Fetches in progress, by the same ids: a caller asking for a record or list being fetched waits for that fetch
+  // (bundles are built a few at a time) instead of finding nothing stored
+  private readonly inFlight = new Map<string, Promise<unknown>>();
   // File names under records/<source> or lists/<source>, by key; built on first use
   private readonly index = new Map<string, Map<string, string[]>>();
 
@@ -240,31 +243,34 @@ export class RecordStore {
     }
 
     let fetchedNow: Stored<T> | undefined;
+    const id = `records/${source}/${key}`;
+    const inProgress = this.inFlight.get(id);
+
+    // Only awaited when there is one: an await yields, and another caller could start the same fetch meanwhile
+    if (inProgress) {
+      await inProgress;
+    }
 
     if (this.shouldFetchRecord(source, key, rules, date)) {
       this.assertCanFetch(`${source} ${key}`);
-      let fetched: Fetched<T> | undefined;
+      fetchedNow = await this.fetching(id, async () => {
+        let fetched: Fetched<T> | undefined;
 
-      try {
-        fetched = await withRetry(fetch, `${source} ${key}`);
-      } catch (error) {
-        if (!options.onFetchError || this.copies<T>(source, key).length === 0) {
-          throw error;
+        try {
+          fetched = await withRetry(fetch, `${source} ${key}`);
+        } catch (error) {
+          if (!options.onFetchError || this.copies<T>(source, key).length === 0) {
+            throw error;
+          }
+
+          options.onFetchError(error);
         }
 
-        options.onFetchError(error);
-      }
-
-      if (fetched) {
-        fetchedNow = this.store(
-          source,
-          key,
-          fetched.data,
-          rules,
-          { fetchedAt: new Date().toISOString(), url: fetched.url },
-          date,
+        return (
+          fetched &&
+          this.store(source, key, fetched.data, rules, { fetchedAt: new Date().toISOString(), url: fetched.url }, date)
         );
-      }
+      });
     }
 
     return this.use(source, key, rules, fetchedNow);
@@ -302,27 +308,36 @@ export class RecordStore {
     }
 
     let fetchedNow = new Map<string, Stored<T>>();
+    const id = `lists/${source}/${wallet}`;
+    const inProgress = this.inFlight.get(id);
+
+    // Only awaited when there is one: an await yields, and another caller could start the same fetch meanwhile
+    if (inProgress) {
+      await inProgress;
+    }
 
     if (this.shouldFetchList(source, wallet, options.fetchOnce)) {
       this.assertCanFetch(`${source} list ${wallet}`);
-      let fetched: Fetched<T[]> | undefined;
+      fetchedNow = await this.fetching(id, async () => {
+        let fetched: Fetched<T[]> | undefined;
 
-      try {
-        fetched = await withRetry(fetch, `${source} list ${wallet}`);
-      } catch (error) {
-        if (!options.onFetchError) {
-          throw error;
+        try {
+          fetched = await withRetry(fetch, `${source} list ${wallet}`);
+        } catch (error) {
+          if (!options.onFetchError) {
+            throw error;
+          }
+
+          options.onFetchError(error, this.lists(source, wallet).length > 0);
         }
 
-        options.onFetchError(error, this.lists(source, wallet).length > 0);
-      }
-
-      if (fetched) {
-        fetchedNow = this.storeList(source, wallet, fetched.data, options, fetched.incomplete, {
-          fetchedAt: new Date().toISOString(),
-          url: fetched.url,
-        });
-      }
+        return fetched
+          ? this.storeList(source, wallet, fetched.data, options, fetched.incomplete, {
+              fetchedAt: new Date().toISOString(),
+              url: fetched.url,
+            })
+          : new Map<string, Stored<T>>();
+      });
     }
 
     const lists = this.lists(source, wallet);
@@ -389,6 +404,18 @@ export class RecordStore {
 
   private isStuck(date?: Date): boolean {
     return !!date && !!this.stuckBefore && date < this.stuckBefore;
+  }
+
+  // Runs a fetch (and its store), so that a caller asking for the same id meanwhile waits for it, and gets its error
+  private async fetching<R>(id: string, run: () => Promise<R>): Promise<R> {
+    const promise = run();
+    this.inFlight.set(id, promise);
+
+    try {
+      return await promise;
+    } finally {
+      this.inFlight.delete(id);
+    }
   }
 
   private firstFetchThisRun(id: string): boolean {
