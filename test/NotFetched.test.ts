@@ -150,5 +150,15 @@ describe("a wallet a source fails for", () => {
       () => new Exporter(path.join(dir, "config.toml"), { replay: run, today: new Date("2026-11-01") }),
       /that run skipped a wallet \(not-fetched\.json\), so it cannot be replayed/,
     );
+    // Named by its manifest file too
+    fs.outputJsonSync(path.join(run, "snapshots.json"), {});
+    assert.throws(
+      () =>
+        new Exporter(path.join(dir, "config.toml"), {
+          replay: path.join(run, "snapshots.json"),
+          today: new Date("2026-11-01"),
+        }),
+      /cannot be replayed/,
+    );
   });
 });
