@@ -96,6 +96,12 @@ since pruned. It lists what it used in `snapshots.json` in its output folder.
 - `--replay <run folder>`: use exactly the records that an earlier run used, e.g.
   the run you filed.
 
+`node src/full-export.ts --help` lists the options. An unknown option (e.g. a typo
+like `--ofline`) stops the run before it reads anything, so a mistyped `--offline`
+never fetches. A config, replay folder, store or network error (a fetch that still
+fails after its retries) is printed as one line and the command exits 1; a full
+stack trace means a bug, worth reporting.
+
 `node src/full-export.ts --replay ../my-tax/tax2026/2026-10-03_15-33-50 ../my-tax/wallets-config.toml`
 
 To see what changed between two runs, e.g. a replay on new code against the run it

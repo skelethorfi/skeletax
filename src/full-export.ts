@@ -1,50 +1,27 @@
 import * as path from "path";
 import { format } from "date-fns-tz";
 import { Exporter, NOT_FETCHED_FILE } from "./cli/Exporter.ts";
-import { StoreMissError } from "./sources/store/RecordStore.ts";
 import { oldCacheHint } from "./cli/store.ts";
 import { SUMMARY_FILE } from "./cli/RunSummary.ts";
+import { parseExportArgs, printError, USAGE } from "./cli/args.ts";
 
-// An error whose message says what to do (a bad argument or config, a record missing from the store): printed
-// without a stack
-class UsageError extends Error {}
+async function main(argv: string[]): Promise<number> {
+  const { help, configFile, offline, fetch, replay } = parseExportArgs(argv);
 
-async function main(): Promise<number> {
+  if (help) {
+    console.log(USAGE);
+    return 0;
+  }
+
   console.log(`Current directory: ${process.cwd()}`);
 
-  const args = process.argv.slice(2);
-
-  // --offline: only use what is stored, fail on anything not stored
-  const offline = args.includes("--offline");
   // By default a run fetches every wallet's history again (new activity, changed records) and records still
-  // pending; anything stored before is kept (docs/specs/snapshots.md). --refetch-all also fetches every
-  // finalised record again, e.g. to see what was revised or pruned before filing.
-  const fetch = args.includes("--refetch-all") ? "all" : undefined;
-  // --replay <run folder>: read exactly the snapshots that run used
-  const replayIndex = args.indexOf("--replay");
-  const replay = replayIndex >= 0 ? args[replayIndex + 1] : undefined;
-
-  if (replayIndex >= 0 && !replay) {
-    throw new UsageError("--replay needs a run folder");
-  }
-
-  // Get the last non-flag argument as the config filename
-  const configFile = args.filter((arg) => !arg.startsWith("--") && arg !== replay).pop() ?? "";
-
-  if (!configFile.endsWith(".json") && !configFile.endsWith(".toml")) {
-    throw new UsageError("must specify config file (.toml or .json)");
-  }
-
+  // pending; anything stored before is kept (docs/specs/snapshots.md). The flags are in USAGE (src/cli/args.ts).
   const now = new Date();
   const timestamp = format(now, "yyyy-MM-dd_HH-mm-ss");
 
-  // Read config. Anything wrong here is in the config, its paths or the replayed run, which its message names
-  let exporter: Exporter;
-  try {
-    exporter = new Exporter(configFile, { offline, fetch, replay, today: now });
-  } catch (error) {
-    throw new UsageError(error instanceof Error ? error.message : String(error));
-  }
+  // Read config
+  const exporter = new Exporter(configFile, { offline, fetch, replay, today: now });
 
   const outputPath = path.join(exporter.config.outputPath, timestamp);
   const storePath = exporter.config.storePath;
@@ -109,15 +86,7 @@ async function main(): Promise<number> {
   return 0;
 }
 
-main().then(
+main(process.argv.slice(2)).then(
   (code) => process.exit(code),
-  (error) => {
-    if (error instanceof UsageError || error instanceof StoreMissError) {
-      console.error(`Error: ${error.message}`);
-    } else {
-      console.error(error);
-    }
-
-    process.exit(1);
-  },
+  (error) => process.exit(printError(error)),
 );

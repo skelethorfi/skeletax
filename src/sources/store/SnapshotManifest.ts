@@ -1,5 +1,6 @@
 import fs from "fs-extra";
 import * as path from "path";
+import { InputError } from "../../utils/InputError.ts";
 
 // A run's snapshot: the copy of each record it used and the record keys of each wallet list, written to
 // its output folder as snapshots.json, so the run can be replayed exactly (--replay). Paths are relative to
@@ -67,10 +68,22 @@ export class SnapshotManifest {
       fs.existsSync(runOrFile) && fs.statSync(runOrFile).isDirectory()
         ? path.join(runOrFile, MANIFEST_FILE)
         : runOrFile;
-    const { layout, records, lists, skipped } = fs.readJSONSync(file);
+    let manifest;
+
+    // A replayed run folder without a readable manifest is the user's input; fs-extra's message names the file
+    try {
+      manifest = fs.readJSONSync(file);
+    } catch (error: any) {
+      if (error instanceof SyntaxError || error?.code === "ENOENT" || error?.code === "EISDIR") {
+        throw new InputError(`Replay: ${error.message}`, { cause: error });
+      }
+      throw error;
+    }
+
+    const { layout, records, lists, skipped } = manifest;
 
     if (layout !== LAYOUT) {
-      throw new Error(
+      throw new InputError(
         `${file} was written for an older store layout (${layout ?? 1}); its paths no longer exist, so it can't be replayed`,
       );
     }

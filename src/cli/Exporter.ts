@@ -48,6 +48,8 @@ import { midgardActionKey } from "../sources/store/Sources.ts";
 import { PriceSource } from "../sources/Prices.ts";
 import type { IWallet } from "../config/IWallet.ts";
 import { addressKey } from "../utils/Address.ts";
+import { InputError } from "../utils/InputError.ts";
+import { knownErrorMessage } from "./args.ts";
 import { BankBalanceService, bankCurrency } from "../sources/thorchain/BankBalanceService.ts";
 import { balanceReport, computeHoldings, fromBase, type WalletBalances } from "../pipeline/balances.ts";
 import { API_URLS } from "../config/apiUrls.ts";
@@ -131,7 +133,7 @@ export class Exporter {
         ? path.dirname(options.replay)
         : options.replay;
     if (replayDir && fs.existsSync(path.join(replayDir, NOT_FETCHED_FILE))) {
-      throw new Error(
+      throw new InputError(
         `--replay ${options.replay}: that run skipped a wallet (${NOT_FETCHED_FILE}), so it cannot be replayed; replay a run that fetched every wallet`,
       );
     }
@@ -218,7 +220,7 @@ export class Exporter {
         this.report.notFetchedWallet(`${wallet.name} (${wallet.address}): ${current?.name ?? "unknown"}: ${message}`);
 
         // A known error needs no stack; another one keeps it, to debug
-        if (!(error instanceof StoreMissError) && error instanceof Error && error.stack) {
+        if (knownErrorMessage(error) === undefined && error instanceof Error && error.stack) {
           console.error(error.stack);
         }
 
@@ -531,12 +533,16 @@ export class Exporter {
   // Writes the CSV files that csvFiles lays out
   saveToCsv(txs: SummRow[], outputPath: string) {
     const ranges = generateDateRanges(this.config.fromDate, this.config.toDate, this.config.frequency);
-    const { files, exported, warnings } = csvFiles(txs, ranges, this.config.wallets, this.config.timezone);
+    const { files, exported, outside, warnings } = csvFiles(txs, ranges, this.config.wallets, this.config.timezone);
     warnings.forEach((warning) => this.report.warn(`WARN: ${warning}`));
     files.forEach((file) => writeCsv(path.join(outputPath, file.name), file.rows));
     // Next to csv/, so it is not uploaded: it names wallets and records
     fs.outputFileSync(path.join(path.dirname(outputPath), ROW_IDS_FILE), renderRowIds(files[0].rows));
     this.report.info(`Total exported: ${exported}`);
+
+    if (outside > 0) {
+      this.report.info(`${outside} rows outside the periods (all.csv only)`);
+    }
   }
 
   private saveFailure(

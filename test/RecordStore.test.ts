@@ -13,6 +13,7 @@ import {
 } from "../src/sources/store/RecordStore.ts";
 import { SnapshotManifest } from "../src/sources/store/SnapshotManifest.ts";
 import { THORNODE_RULES } from "../src/sources/store/Sources.ts";
+import { InputError } from "../src/utils/InputError.ts";
 
 const makeDir = () => fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-store-"));
 const fetching = <T>(data: T) => mock.fn(async () => ({ data, url: "https://source/x" }));
@@ -459,7 +460,7 @@ describe("Replay", () => {
         "a",
         fetching({ id: "a" }),
       ),
-      /does not match the manifest/,
+      (error: any) => error instanceof InputError && /^Replay: .* does not match the manifest/.test(error.message),
     );
   });
 });
