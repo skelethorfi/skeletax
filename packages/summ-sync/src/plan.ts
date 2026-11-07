@@ -1341,6 +1341,8 @@ export function makePlan(input: PlanInput): PlanResult {
     // isCopy: every fee of the copy's action goes with it; beside an earlier leg only the fees Summ made up do
     const sideToIgnore = (side: Leg[], isCopy: boolean): { legs: Leg[] } | { why: string } => {
       const named = new Set(side.map((l) => l.legId));
+      // A manual entry beside it counts even when ignored, as ignoreImportLegs counts it
+      const mates = input.legs.filter((o) => side.some((l) => l.actionId === o.actionId) && !named.has(o.legId));
       const others = side
         .flatMap((l) =>
           input.legs.filter((o) => o.actionId === l.actionId && !named.has(o.legId) && !IGNORED.has(o.trade)),
@@ -1348,9 +1350,11 @@ export function makePlan(input: PlanInput): PlanResult {
         .filter((o, i, all) => all.findIndex((x) => x.legId === o.legId) === i);
       // Legs made up to pair it go with it, and the fees that would count on their own without it
       const madeUp = others.filter(
-        (o) => o.importType === SOFT_TRANSFER || (o.side === "fees" && (isCopy || o.importType === "assumed-fee")),
+        (o) =>
+          !namedToIgnore.has(o.legId) &&
+          (o.importType === SOFT_TRANSFER || (o.side === "fees" && (isCopy || o.importType === "assumed-fee"))),
       );
-      if (others.some((o) => o.importType === "manual")) return { why: "a manual entry is in its action" };
+      if (mates.some((o) => o.importType === "manual")) return { why: "a manual entry is in its action" };
       const txid = normaliseTxid(side[0].id);
       if (TXID.test(txid) && input.legs.some((o) => o.importType === "manual" && txidsNamedBy(o).includes(txid)))
         return { why: "a manual entry names its tx" };

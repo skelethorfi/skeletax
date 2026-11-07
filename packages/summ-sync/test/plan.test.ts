@@ -3779,6 +3779,24 @@ test("import-copy: offers the side that stands alone; nothing when both are pair
   // A manual entry beside the copy, or naming its tx elsewhere
   const manual = { ...exchange, importType: "manual", source: "manual" };
   assert.match(copies([original, paired, copy, manual])[0].detail, /the copy: a manual entry is in its action/);
+  // An ignored manual entry beside the copy still counts, as ignoreImportLegs counts it
+  const alone = ownLeg({ legId: "o2", actionId: "a1", createdAt: OLD });
+  const copied = ownLeg({ legId: "c2", actionId: "a2", createdAt: LATER });
+  const ignoredManual = ownLeg({
+    legId: "m2",
+    actionId: "a2",
+    side: "incoming",
+    trade: "ignoreIn",
+    importType: "manual",
+    source: "manual",
+    id: "hand",
+  });
+  const beside = copies([alone, copied, ignoredManual])[0].detail;
+  assert.match(beside, /The copy cannot be ignored \(a manual entry is in its action\)/);
+  assert.deepEqual(
+    offered(beside).map((l: { legId: string }) => l.legId),
+    ["o2"],
+  );
   const naming = ownLeg({
     legId: "note",
     actionId: "a9",
