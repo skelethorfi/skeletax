@@ -222,7 +222,8 @@ address paid in an asset other than the input, leaving out affiliate outputs
 The swap's legs are then those of a swap to that address. If no address, or
 more than one, is paid that way, the swap fails with `no matching out tx`,
 saying the destination is a name. A loan's destination is not resolved: a loan
-to a name fails the same way.
+opened to a name fails the same way, and a repayment to a name exports no
+collateral, with a warning that says so (`loans.md`).
 
 The unfilled part of a partly filled swap can go to that refund address instead
 of the sender. An output in the input asset to either address is the return,
