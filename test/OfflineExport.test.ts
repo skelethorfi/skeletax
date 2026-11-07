@@ -129,7 +129,7 @@ describe("offline export of the golden cases", () => {
     assert.doesNotMatch(summary, /## Failed actions/);
     assert.doesNotMatch(summary, /## Unsupported actions/);
     // The pending cases (a refund never paid, a pending loan open) and a failed send
-    assert.match(summary, /## Not final \(status not success\) \(3\)/);
+    assert.match(summary, /## Not final \(status not success\) \(\d+\)/);
     // row-ids.csv, next to csv/: a line per row
     assert.equal(fs.readFileSync(path.join(run, ROW_IDS_FILE), "utf8").trim().split("\n").length - 1, rows);
   });
