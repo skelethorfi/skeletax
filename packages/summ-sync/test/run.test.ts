@@ -153,6 +153,7 @@ test("readUnmapped reads the run's unmapped.json, or null when the run has none"
   assert.deepEqual(readUnmapped(run), [{ ...record, times, txids: [TXID.toLowerCase()] }]);
   writeFileSync(join(run, "unmapped.json"), JSON.stringify({ records: [] }));
   assert.throws(() => readUnmapped(run), /not version 1/);
+});
 
 test("checkRunTimezone refuses a run cut in another timezone and notes a run that does not say", () => {
   const run = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
