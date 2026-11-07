@@ -67,10 +67,9 @@ export function interpretLoanRepay(bundle: RawBundle, protocol: Protocol): Inter
     throw new Error(`loan: the memo names no destination (${memo})`);
   }
 
+  // An output to the destination holds one coin, like every loan tx (activity.md, One coin per tx)
   const isCollateral = (out: Transaction) =>
-    out.address.toLowerCase() === dest.toLowerCase() &&
-    out.coins.length === 1 &&
-    out.coins[0].asset.toUpperCase() === collateral.toUpperCase();
+    out.address.toLowerCase() === dest.toLowerCase() && loanCoin(out).asset.toUpperCase() === collateral.toUpperCase();
   const returned = action.out.filter(isCollateral);
   const others = action.out.filter((out) => !isCollateral(out));
   const issues: Issue[] = others.map((out) => ({

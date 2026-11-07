@@ -83,7 +83,8 @@ case) in the collateral asset, however many outputs the action has:
 
 Any other output (another address, or another asset) is not exported, and
 raises a warning naming its amount, asset and address, so it can be entered by
-hand.
+hand. An output to the destination with several coins fails the action (One
+coin per tx, above).
 
 Checked on 2026-11-02 against 150 public loan repayments from Midgard (via
 Liquify), the latest listed: 89 with no output, 60 with one (the collateral),
