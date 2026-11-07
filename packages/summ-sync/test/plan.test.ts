@@ -3517,7 +3517,6 @@ test("legs with no row, of a record the run could not map, are held, not deleted
   assert.deepEqual([clean.delete.length, clean.held, clean.notes], [3, [], []]);
 });
 
-
 test("two plans made in the same second get folders of their own, oldest first", () => {
   const header =
     "Timestamp (UTC),Type,Base Currency,Base Amount,Quote Currency (Optional),Quote Amount (Optional),Fee Currency (Optional),Fee Amount (Optional),From (Optional),To (Optional),Blockchain (Optional),ID (Optional),Description (Optional)";
