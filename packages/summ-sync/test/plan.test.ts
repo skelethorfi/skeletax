@@ -3633,3 +3633,182 @@ test("two plans made in the same second get folders of their own, oldest first",
     mock.timers.reset();
   }
 });
+
+// import-copy: made-up values throughout (no real tx)
+const OLD = "2021-01-10T00:00:00.000Z";
+const LATER = "2024-05-20T00:00:00.000Z";
+const copies = (legs: Leg[], over: Partial<Config> = {}, rows: Row[] = []) =>
+  plan({ rows, legs, config: { ...CONFIG, ...over } }).plan.report.filter((r) => r.kind === "import-copy");
+/** The ignoreImportLegs lines an import-copy entry offers. */
+const offered = (detail: string) => JSON.parse(`[${detail.split("add to ignoreImportLegs: ")[1] ?? ""}]`);
+
+test("import-copy: a later import's copy of an edited leg is reported with the lines that would ignore it", () => {
+  // The original, edited by the user (To set to the exchange, currency renamed), and its fee
+  const original = ownLeg({
+    legId: "orig",
+    actionId: "a1",
+    currency: "AAA",
+    quantity: 1000,
+    to: "exchange-a",
+    createdAt: OLD,
+  });
+  const originalFee = ownLeg({
+    legId: "orig-fee",
+    actionId: "a1",
+    side: "fees",
+    trade: "fee",
+    quantity: 0.5,
+    createdAt: OLD,
+  });
+  // The copy a later import added "to unknown", with its fee
+  const copy = ownLeg({
+    legId: "copy",
+    actionId: "a2",
+    currency: "AAB",
+    quantity: 1000,
+    to: "unknown",
+    createdAt: LATER,
+  });
+  const copyFee = ownLeg({
+    legId: "copy-fee",
+    actionId: "a2",
+    side: "fees",
+    trade: "fee",
+    quantity: 0.5,
+    createdAt: LATER,
+  });
+  const legs = [original, originalFee, copy, copyFee];
+  const reports = copies(legs);
+  assert.deepEqual(
+    reports.map((r) => r.legIds),
+    [["copy", "copy-fee"]],
+  );
+  const lines = offered(reports[0].detail);
+  assert.deepEqual(
+    lines.map((l: { legId: string; reason: string }) => [l.legId, l.reason]),
+    [
+      ["copy", "copy of orig"],
+      ["copy-fee", "copy of orig-fee"],
+    ],
+  );
+  // The lines plan, and once named the copy is no longer reported
+  const named = plan({ rows: [], legs, config: { ...CONFIG, ignoreImportLegs: lines } }).plan;
+  assert.deepEqual(named.ignore?.[0].changes.map((c) => c.legId).sort(), ["copy", "copy-fee"]);
+  assert.equal(named.report.filter((r) => r.kind === "import-copy").length, 0);
+  // Without float noise
+  const noisy = copies([
+    ownLeg({ legId: "o", actionId: "a1", side: "fees", trade: "fee", quantity: 0.00031, createdAt: OLD }),
+    ownLeg({
+      legId: "c",
+      actionId: "a2",
+      side: "fees",
+      trade: "fee",
+      quantity: 0.00030999999999999995,
+      createdAt: LATER,
+    }),
+  ]);
+  assert.equal(offered(noisy[0].detail)[0].quantity, 0.00031);
+});
+
+test("import-copy: legs imported together, made up, ignored, of a managed source, or of another account are not copies", () => {
+  const count = (copy: Partial<Leg>, original: Partial<Leg> = {}) =>
+    copies([
+      ownLeg({ legId: "orig", actionId: "a1", createdAt: OLD, ...original }),
+      ownLeg({ legId: "copy", actionId: "a2", createdAt: LATER, ...copy }),
+    ]).length;
+  assert.equal(count({}), 1);
+  assert.equal(count({ createdAt: "2021-01-10T05:00:00.000Z" }), 0);
+  assert.equal(count({ importType: "soft-transfer" }), 0);
+  assert.equal(count({ trade: "ignoreOut" }), 0);
+  assert.equal(count({}, { trade: "ignoreOut" }), 0);
+  assert.equal(count({ source: "other-wallet" }), 0);
+  assert.equal(count({ side: "incoming", trade: "deposit" }), 0);
+  assert.equal(count({ quantity: 0.02 }), 0);
+  assert.equal(count({ id: "f".repeat(64) }), 0);
+  assert.equal(count({ source: "csv-source", importType: "csv" }, { source: "csv-source", importType: "csv" }), 0);
+  // The time a leg's id holds stands in for createdAt
+  assert.equal(
+    copies([
+      ownLeg({ legId: "5ff00000000000000000000a", actionId: "a1" }),
+      ownLeg({ legId: "66400000000000000000000b", actionId: "a2" }),
+    ]).length,
+    1,
+  );
+});
+
+test("import-copy: offers the side that stands alone; nothing when both are paired or a manual entry is on it", () => {
+  // The original deposit, paired with a leg Summ made up; the copy, paired with the exchange's real withdrawal
+  const original = ownLeg({ legId: "orig", actionId: "a1", side: "incoming", trade: "deposit", createdAt: OLD });
+  const madeUp = ownLeg({
+    legId: "made",
+    actionId: "a1",
+    trade: "withdrawal",
+    importType: "soft-transfer",
+    source: "manual",
+    createdAt: LATER,
+  });
+  const copy = ownLeg({ legId: "copy", actionId: "a2", side: "incoming", trade: "deposit", createdAt: LATER });
+  const exchange = ownLeg({
+    legId: "cex",
+    actionId: "a2",
+    trade: "withdrawal",
+    source: "exchange",
+    importType: "manual-csv",
+    createdAt: OLD,
+  });
+  const legs = [original, madeUp, copy, exchange];
+  const [entry] = copies(legs);
+  assert.match(entry.detail, /The copy cannot be ignored \(it is paired in its action\)/);
+  const lines = offered(entry.detail);
+  assert.deepEqual(
+    lines.map((l: { legId: string; reason: string }) => [l.legId, l.reason]),
+    [
+      ["orig", "copied by copy"],
+      ["made", "made up to pair a leg imported twice"],
+    ],
+  );
+  // The offered lines plan: both sides of the original's action are ignored together
+  const named = plan({ rows: [], legs, config: { ...CONFIG, ignoreImportLegs: lines } }).plan;
+  assert.deepEqual(named.ignore?.[0].changes.map((c) => c.legId).sort(), ["made", "orig"]);
+  // Both sides paired with a real leg
+  const paired = { ...madeUp, importType: "csv", source: "exchange" };
+  assert.match(
+    copies([original, paired, copy, exchange])[0].detail,
+    /Neither side can simply be ignored .*it is paired in its action/,
+  );
+  // A manual entry beside the copy, or naming its tx elsewhere
+  const manual = { ...exchange, importType: "manual", source: "manual" };
+  assert.match(copies([original, paired, copy, manual])[0].detail, /the copy: a manual entry is in its action/);
+  const naming = ownLeg({
+    legId: "note",
+    actionId: "a9",
+    importType: "manual",
+    source: "manual",
+    id: "hand",
+    description: `see ${TX1}`,
+    quantity: 3,
+  });
+  assert.match(
+    copies([
+      ownLeg({ legId: "o", actionId: "a1", createdAt: OLD }),
+      ownLeg({ legId: "c", actionId: "a2", createdAt: LATER }),
+      naming,
+    ])[0].detail,
+    /a manual entry names its tx/,
+  );
+});
+
+test("import-copy: a leg a run row stands on is not offered; a scoped plan keeps the report when its rows hold the tx", () => {
+  const r = btcRow({ type: "bridge-trade-out", baseAmount: "0.0101", feeAmount: "" });
+  // The user renamed the original's currency, so only the copy fits the row
+  const original = ownLeg({ legId: "orig", actionId: "a1", quantity: 0.0101, currency: "XBT", createdAt: OLD });
+  const copy = ownLeg({ legId: "copy", actionId: "a2", quantity: 0.0101, createdAt: LATER, trade: "out" });
+  const [entry] = copies([original, copy], {}, [r]);
+  assert.match(entry.detail, /The copy cannot be ignored \(run row .* stands on leg copy\)/);
+  assert.deepEqual(
+    offered(entry.detail).map((l: { legId: string }) => l.legId),
+    ["orig"],
+  );
+  const scoped = plan({ rows: [r], legs: [original, copy], scope: [r.id] }).plan;
+  assert.ok(scoped.report.some((e) => e.kind === "import-copy"));
+});
