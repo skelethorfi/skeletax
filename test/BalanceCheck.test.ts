@@ -12,7 +12,8 @@ import {
   parseDecimal,
 } from "../src/pipeline/balances.ts";
 import { type SummRow, SummRowType } from "../src/export/summ/csv/index.ts";
-import { readCaseExpected } from "../src/fixtures/GoldenCase.ts";
+import { readCaseExpected, readCaseInput, toBundle } from "../src/fixtures/GoldenCase.ts";
+import { runBundle } from "../src/pipeline/run.ts";
 import { bankCurrency, BankBalanceService } from "../src/sources/thorchain/BankBalanceService.ts";
 import { MAYA, THORCHAIN, withAssetNames } from "../src/domain/Protocol.ts";
 import { RecordStore, StoreMissError } from "../src/sources/store/RecordStore.ts";
@@ -101,6 +102,20 @@ describe("balance check: holdings from rows", () => {
   });
 });
 
+describe("balance check: trade accounts", () => {
+  test("a trade account holding is kept apart, and not compared with the bank balance", () => {
+    const rowsOf = (name: string) => runBundle(toBundle(readCaseInput(`test/cases/${name}`)), THORCHAIN).rows;
+    const deposit = rowsOf("trade/bch-deposit");
+    const thor = deposit.find((r) => r.type === SummRowType.BridgeIn)!.wallet!;
+    const holdings = computeHoldings(deposit);
+    assert.deepEqual(Object.keys(held(holdings, thor)), ["BCH (trade account)"]);
+    const report = balanceReport(holdings, [
+      { address: thor, name: "main", native: true, source: "THORNode", onChain: new Map() },
+    ]);
+    assert.deepEqual(report.lines, []);
+  });
+});
+
 describe("balance check: report", () => {
   const holdings: Holdings = new Map([
     [
@@ -142,7 +157,7 @@ describe("balance check: report", () => {
       "main (thor1w) RUNE: rows give 100, THORNode balance 98.5 (difference -1.5)",
       "main (thor1w) TCY: rows give -5, THORNode balance 0 (difference +5)",
       // BTC below zero is expected of an L1 wallet: it is funded outside THORChain. A savers position is not.
-      "btc (bc1w) ThorSavers.BTC.BTC: rows give -0.5, below zero (a row with the wrong sign, or a missing acquisition)",
+      "btc (bc1w) ThorSavers.BTC.BTC: rows give -0.5, below zero (a row with the wrong sign, or a missing acquisition; or a position added from another wallet)",
     ]);
     assert.deepEqual([report.checked, report.differences, report.negatives], [1, 3, 2]);
   });

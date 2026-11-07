@@ -12,6 +12,10 @@ export const SCALE = 18;
 // A difference smaller than this (0.000001 of the asset) is not reported
 export const DUST = 10n ** BigInt(SCALE - 6);
 
+// A trade account holding is named like its L1 asset (assets.md) but is not in the bank balance, and must not be added
+// to a secured asset of the same name: it is kept as '<currency> (trade account)'
+export const TRADE_ACCOUNT = " (trade account)";
+
 // Wallet (addressKey) → currency → amount (SCALE decimals)
 export type Holdings = Map<string, Map<string, bigint>>;
 
@@ -78,25 +82,27 @@ export function computeHoldings(rows: SummRow[]): Holdings {
         held.set(currency, (held.get(currency) ?? 0n) + sign * parseDecimal(amount));
       }
     };
+    // The base amount of a row whose asset is a trade asset (BTC~BTC)
+    const base = row.trace?.asset?.includes("~") ? `${row.baseCurrency}${TRADE_ACCOUNT}` : row.baseCurrency;
     const isWallet = (address?: string) => !!address && addressKey(address) === wallet;
 
     if (OUTGOING.has(row.type)) {
-      add(row.baseCurrency, row.baseAmount, -1n);
+      add(base, row.baseAmount, -1n);
     } else if (INCOMING.has(row.type)) {
-      add(row.baseCurrency, row.baseAmount, 1n);
+      add(base, row.baseAmount, 1n);
     } else if (row.type === SummRowType.Sell) {
-      add(row.baseCurrency, row.baseAmount, -1n);
+      add(base, row.baseAmount, -1n);
       add(row.quoteCurrency, row.quoteAmount, 1n);
     } else if (row.type === SummRowType.Buy) {
-      add(row.baseCurrency, row.baseAmount, 1n);
+      add(base, row.baseAmount, 1n);
       add(row.quoteCurrency, row.quoteAmount, -1n);
     } else if (row.type !== SummRowType.FailedIn && row.type !== SummRowType.FailedOut) {
       if (isWallet(row.from)) {
-        add(row.baseCurrency, row.baseAmount, -1n);
+        add(base, row.baseAmount, -1n);
       }
 
       if (isWallet(row.to)) {
-        add(row.baseCurrency, row.baseAmount, 1n);
+        add(base, row.baseAmount, 1n);
       }
     }
 
@@ -104,6 +110,11 @@ export function computeHoldings(rows: SummRow[]): Holdings {
   }
 
   return holdings;
+}
+
+// Not in the wallet's bank balance: a position token, or a trade account holding
+function offBank(currency: string): boolean {
+  return isPositionToken(currency) || currency.endsWith(TRADE_ACCOUNT);
 }
 
 // A pool position (LP units, a savers position, RUNEPool units, a Rujira merge share): held in the protocol, not in
@@ -138,7 +149,7 @@ export interface BalanceReport {
 }
 
 // For each wallet, the holdings below zero, then each currency whose bank balance differs from the rows' by more
-// than dust (position tokens are not in the bank balance, so they are not compared)
+// than dust (position tokens and trade account holdings are not in the bank balance, so they are not compared)
 export function balanceReport(holdings: Holdings, wallets: WalletBalances[]): BalanceReport {
   const report: BalanceReport = { lines: [], checked: 0, differences: 0, negatives: 0 };
   const byName = (a: string, b: string) => a.localeCompare(b);
@@ -153,7 +164,7 @@ export function balanceReport(holdings: Holdings, wallets: WalletBalances[]): Ba
       if (amount <= -DUST && (wallet.native || isPositionToken(currency))) {
         report.negatives++;
         report.lines.push(
-          `${label} ${currency}: rows give ${formatDecimal(amount)}, below zero (a row with the wrong sign, or a missing acquisition)`,
+          `${label} ${currency}: rows give ${formatDecimal(amount)}, below zero (a row with the wrong sign, or a missing acquisition${isPositionToken(currency) ? "; or a position added from another wallet" : ""})`,
         );
       }
     }
@@ -168,10 +179,7 @@ export function balanceReport(holdings: Holdings, wallets: WalletBalances[]): Ba
 
     report.checked++;
     const onChain = wallet.onChain;
-    const currencies = new Set([
-      ...[...held.keys()].filter((currency) => !isPositionToken(currency)),
-      ...onChain.keys(),
-    ]);
+    const currencies = new Set([...[...held.keys()].filter((currency) => !offBank(currency)), ...onChain.keys()]);
 
     for (const currency of [...currencies].sort(byName)) {
       const rows = held.get(currency) ?? 0n;

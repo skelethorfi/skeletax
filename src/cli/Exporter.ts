@@ -48,6 +48,9 @@ import { midgardActionKey } from "../sources/store/Sources.ts";
 import { PriceSource } from "../sources/Prices.ts";
 import type { IWallet } from "../config/IWallet.ts";
 import { addressKey } from "../utils/Address.ts";
+import { BankBalanceService, bankCurrency } from "../sources/thorchain/BankBalanceService.ts";
+import { balanceReport, computeHoldings, fromBase, type WalletBalances } from "../pipeline/balances.ts";
+import { API_URLS } from "../config/apiUrls.ts";
 
 // Written to the run's folder when a wallet could not be fetched: summ-sync refuses such a run, since the wallet's
 // files are missing and a plan would delete its rows in Summ (docs/specs/run-summary.md, Not fetched)
@@ -59,9 +62,6 @@ export interface NotFetched {
   source: string;
   error: string;
 }
-import { BankBalanceService, bankCurrency } from "../sources/thorchain/BankBalanceService.ts";
-import { balanceReport, computeHoldings, fromBase, type WalletBalances } from "../pipeline/balances.ts";
-import { API_URLS } from "../config/apiUrls.ts";
 
 export interface ExportOptions {
   // Only read cached snapshots; fail on anything not cached

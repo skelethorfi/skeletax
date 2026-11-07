@@ -89,11 +89,11 @@ What the rows say, for each wallet and currency, over every row of the run
 
 What it reports, each finding only when it is 0.000001 or more of the asset:
 
-| Finding                                | For                                                                                                                                                                  | Likely cause                                                                                                                                                                                                                                         |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| a holding below zero                   | every currency of a THORChain (`thor1`) or Maya (`maya1`) wallet; position tokens (`ThorLP.`, `ThorSavers.`, `MayaLP.`, `MayaSavers.`, `RujiraMerge.`) of any wallet | a row exported with the wrong sign, or a missing acquisition                                                                                                                                                                                         |
-| the bank balance differs from the rows | each `thor1` wallet (THORNode, when `thorchain` is among the protocols) and `maya1` wallet (Mayanode, when `maya` is), every currency but position tokens            | a missing or wrong row; or activity the export does not cover: rows not supported yet (README), unsupported or failed actions, sends before April 2022 when the period starts later, IBC transfers, trade account holdings (not in the bank balance) |
-| bank balance not checked               | a `thor1` or `maya1` wallet whose balance could not be read                                                                                                          | offline with no balance stored, a replayed run that read none, or a failed fetch                                                                                                                                                                     |
+| Finding                                | For                                                                                                                                                                  | Likely cause                                                                                                                                                                                       |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a holding below zero                   | every currency of a THORChain (`thor1`) or Maya (`maya1`) wallet; position tokens (`ThorLP.`, `ThorSavers.`, `MayaLP.`, `MayaSavers.`, `RujiraMerge.`) of any wallet | a row exported with the wrong sign, or a missing acquisition                                                                                                                                       |
+| the bank balance differs from the rows | each `thor1` wallet (THORNode, when `thorchain` is among the protocols) and `maya1` wallet (Mayanode, when `maya` is), every currency but position tokens            | a missing or wrong row; or activity the export does not cover: rows not supported yet (README), unsupported or failed actions, sends before April 2022 when the period starts later, IBC transfers |
+| bank balance not checked               | a `thor1` or `maya1` wallet whose balance could not be read                                                                                                          | offline with no balance stored, a replayed run that read none, or a failed fetch                                                                                                                   |
 
 An L1 wallet (BTC, ETH, ...) also moves funds outside THORChain, which no row
 shows, so its L1 holdings are not flagged below zero and have no balance to
@@ -103,7 +103,19 @@ The difference is the bank balance minus what the rows give, e.g.
 `main (thor1…) RUNE: rows give 100, THORNode balance 98.5 (difference -1.5)`.
 A position token is not compared with the bank balance: LP units, savers
 positions, RUNEPool units and merge shares are held by the protocol, not in
-the wallet.
+the wallet. A position added from one wallet and withdrawn from another (a
+symmetric add from the L1 address, withdrawn from the THORChain one) leaves
+the first above zero and the second below. A trade account holding is named
+like its L1 asset (`assets.md`) but is not in the bank balance either: the
+rows' total of it is kept as `<currency> (trade account)`, apart from a
+secured asset of the same name, checked for going below zero and not
+compared.
+
+The balance is read after the wallet's Midgard list, and Midgard can lag
+THORNode by a few blocks: activity in between gives a one-off difference.
+With `--offline` the stored balance may come from another fetch than the
+stored lists. A changed balance is not listed among the records the run
+found changed.
 
 The bank balance is `/cosmos/bank/v1beta1/balances/<address>` now, each denom
 named as the rows name its asset (`assets.md`): `rune` is `RUNE`, `btc/btc`
@@ -114,12 +126,12 @@ keeps its denom: an IBC denom (`ibc/<hash>`), and a receipt token
 are never added together. Amounts have 8 decimals, CACAO 10 and MAYA 4.
 It is stored like any record (`snapshots.md`, sources `thornode-balance` and
 `mayanode-balance`, keyed by the address): every run that fetches asks again,
-and stores a new copy only when the balance changed, so a changed balance is
-listed among the records the run found changed. `--offline` compares with the
+and stores a new copy only when the balance changed. `--offline` compares with the
 latest stored balance; `--replay` with the one the replayed run read. The
 Counts section says how many wallets were compared and what was found.
 
 A wallet the run skipped (Not fetched) has no rows and is not checked.
 
 Not checked yet: LP, savers and RUNEPool positions against Midgard's member
-endpoints, trade account balances, and L1 balances.
+endpoints, trade account balances (THORNode's trade account endpoint), and L1
+balances.
