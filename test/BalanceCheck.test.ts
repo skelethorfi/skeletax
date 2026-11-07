@@ -9,7 +9,7 @@ import {
   formatDecimal,
   fromBase,
   type Holdings,
-  parseDecimal,
+  parseScaled,
 } from "../src/pipeline/balances.ts";
 import { type SummRow, SummRowType } from "../src/export/summ/csv/index.ts";
 import { readCaseExpected, readCaseInput, toBundle } from "../src/fixtures/GoldenCase.ts";
@@ -32,12 +32,12 @@ const row = (fields: Partial<SummRow>): SummRow =>
 
 describe("balance check: amounts", () => {
   test("decimal strings are summed exactly", () => {
-    assert.equal(parseDecimal("0.02"), 2n * 10n ** 16n);
-    assert.equal(formatDecimal(parseDecimal("13.5713431") + parseDecimal("0.02")), "13.5913431");
-    assert.equal(formatDecimal(parseDecimal("-1")), "-1");
+    assert.equal(parseScaled("0.02"), 2n * 10n ** 16n);
+    assert.equal(formatDecimal(parseScaled("13.5713431") + parseScaled("0.02")), "13.5913431");
+    assert.equal(formatDecimal(parseScaled("-1")), "-1");
     assert.equal(formatDecimal(fromBase("44199202190031", 10)), "4419.9202190031");
-    assert.throws(() => parseDecimal(""), /Invalid amount/);
-    assert.throws(() => parseDecimal("1e5"), /Invalid amount/);
+    assert.throws(() => parseScaled(""), /Invalid amount/);
+    assert.throws(() => parseScaled("1e5"), /Invalid amount/);
   });
 });
 
@@ -121,17 +121,17 @@ describe("balance check: report", () => {
     [
       "thor1w",
       new Map([
-        ["RUNE", parseDecimal("100")],
-        ["TCY", parseDecimal("-5")],
-        ["ThorLP.BTC.BTC", parseDecimal("9")],
-        ["ThorSynth.BTC.BTC", parseDecimal("0.0000000001")],
+        ["RUNE", parseScaled("100")],
+        ["TCY", parseScaled("-5")],
+        ["ThorLP.BTC.BTC", parseScaled("9")],
+        ["ThorSynth.BTC.BTC", parseScaled("0.0000000001")],
       ]),
     ],
     [
       "bc1w",
       new Map([
-        ["BTC", parseDecimal("-1")],
-        ["ThorSavers.BTC.BTC", parseDecimal("-0.5")],
+        ["BTC", parseScaled("-1")],
+        ["ThorSavers.BTC.BTC", parseScaled("-0.5")],
       ]),
     ],
   ]);
@@ -144,8 +144,8 @@ describe("balance check: report", () => {
         native: true,
         source: "THORNode",
         onChain: new Map([
-          ["RUNE", parseDecimal("98.5")],
-          ["RUJI", parseDecimal("3")],
+          ["RUNE", parseScaled("98.5")],
+          ["RUJI", parseScaled("3")],
         ]),
       },
       { address: "bc1w", name: "btc", native: false },
