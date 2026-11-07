@@ -202,7 +202,7 @@ reset, a timeout, a DNS failure), waiting 5 s, 20 s and then 60 s
 Viewblock, the EVM RPCs, the TCY API) goes through one client
 (`src/sources/http.ts`): at most one a second to each host, each host on its
 own budget (Liquify serves THORChain's Midgard and THORNode from one host, so
-they share one), and one that hangs fails after 60 s. The wait for a slot is
+they share one; Viewblock, whose quota is small, gets one every 2 s), and one that hangs fails after 60 s. The wait for a slot is
 not part of the timeout. A run that still fails keeps what it stored so far,
 and can be run again.
 

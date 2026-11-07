@@ -15,12 +15,17 @@ type CjsAxiosInstance = import("axios", { with: { "resolution-mode": "require" }
 // Requests a second to each host
 export const REQUESTS_PER_SECOND = 1;
 
+// Hosts given more time between requests: Viewblock's quota is small, and a 429 locks it out for days
+// (docs/specs/sends.md, Viewblock is best-effort), so it gets one request every 2 s
+export const HOST_INTERVAL_MS: Record<string, number> = { "api.viewblock.io": 2000 };
+
 // Spaces the requests to each host (e.g. gateway.liquify.com, eth.drpc.org) by 1/requestsPerSecond, each host on
 // its own budget: a request to one host does not wait for another's. A request starts once its slot comes; it does
 // not wait for the one before it to finish. The wait is before the request is sent, so it does not count towards
 // the timeout. now and sleep are for tests.
 export class HostThrottle {
   private readonly intervalMs: number;
+  private readonly hostIntervalMs: Record<string, number>;
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
   // The time each host's next request may start
@@ -30,8 +35,10 @@ export class HostThrottle {
     requestsPerSecond: number,
     now: () => number = Date.now,
     sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    hostIntervalMs: Record<string, number> = {},
   ) {
     this.intervalMs = 1000 / requestsPerSecond;
+    this.hostIntervalMs = hostIntervalMs;
     this.now = now;
     this.sleep = sleep;
   }
@@ -41,7 +48,7 @@ export class HostThrottle {
     const host = hostOf(url);
     const now = this.now();
     const slot = Math.max(now, this.next.get(host) ?? now);
-    this.next.set(host, slot + this.intervalMs);
+    this.next.set(host, slot + (this.hostIntervalMs[host] ?? this.intervalMs));
 
     if (slot > now) {
       await this.sleep(slot - now);
@@ -58,7 +65,7 @@ export function hostOf(url: string): string {
   }
 }
 
-const throttle = new HostThrottle(REQUESTS_PER_SECOND);
+const throttle = new HostThrottle(REQUESTS_PER_SECOND, undefined, undefined, HOST_INTERVAL_MS);
 
 http.interceptors.request.use(async (config) => {
   await throttle.wait(http.getUri(config));

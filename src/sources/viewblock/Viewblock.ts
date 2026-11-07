@@ -93,6 +93,11 @@ export class Viewblock {
         throw error;
       }
 
+      // A second caller that waited on the same failed fetch (bundles are built several at a time)
+      if (this.skippedHashes.has(hash)) {
+        return undefined;
+      }
+
       this.store.recordSkipped("viewblock-tx", hash);
       this.skippedHashes.add(hash);
       this.gasSkipped.push(`${hash} (${reason(error)})`);
@@ -112,12 +117,12 @@ export class Viewblock {
       ...this.listWarnings,
       ...(this.gasSkipped.length
         ? [
-            `Viewblock: could not fetch the gas of ${this.gasSkipped.length} inbound(s) THORNode has pruned; their fee is left out (docs/specs/fees.md): ${this.gasSkipped.join(", ")}`,
+            `Viewblock: could not fetch the gas of ${this.gasSkipped.length} inbound(s) THORNode has pruned; their fee is left out (docs/specs/fees.md): ${[...this.gasSkipped].sort().join(", ")}`,
           ]
         : []),
       ...(this.gasStale.length
         ? [
-            `Viewblock: could not fetch again the gas of ${this.gasStale.length} inbound(s); using the copy stored by an earlier run (docs/specs/fees.md): ${this.gasStale.join(", ")}`,
+            `Viewblock: could not fetch again the gas of ${this.gasStale.length} inbound(s); using the copy stored by an earlier run (docs/specs/fees.md): ${[...this.gasStale].sort().join(", ")}`,
           ]
         : []),
     ];

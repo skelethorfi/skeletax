@@ -26,6 +26,20 @@ describe("HostThrottle", () => {
     assert.deepEqual(clock.sleeps, [1000, 2000]);
   });
 
+  test("a host given its own interval is spaced by it", async () => {
+    const { clock, now, sleep } = fakeClock();
+    const throttle = new HostThrottle(1, now, sleep, { "api.viewblock.io": 2000 });
+
+    await Promise.all([
+      throttle.wait("https://api.viewblock.io/thorchain/txs/A"),
+      throttle.wait("https://api.viewblock.io/thorchain/txs/B"),
+      throttle.wait("https://gateway.liquify.com/chain/thorchain_api/x"),
+      throttle.wait("https://gateway.liquify.com/chain/thorchain_api/y"),
+    ]);
+
+    assert.deepEqual(clock.sleeps, [2000, 1000]);
+  });
+
   test("gives each host its own budget", async () => {
     const { clock, now, sleep } = fakeClock();
     const throttle = new HostThrottle(1, now, sleep);
