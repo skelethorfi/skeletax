@@ -12,7 +12,7 @@ import { join, resolve } from "node:path";
 import { nextDay, startOfDay } from "./dates.ts";
 import { isWriteLine, readLogLines } from "./journal.ts";
 import { McpClient } from "./mcp.ts";
-import { MISIDENTIFIED_IDS, matchesOwnLegs } from "./plan.ts";
+import { CORRECTED_IDS, MISIDENTIFIED_IDS, matchesOwnLegs } from "./plan.ts";
 import { isLegAbsent, type ListedAction, parseActions, parseDetail, parsePage, parsePageHeader } from "./parse.ts";
 import { readLeftLegs } from "./state.ts";
 import { type Config, extraDirsOf, loadConfig } from "./config.ts";
@@ -214,15 +214,17 @@ export async function pull(
       }
     }
     if (txids) for (const id of actionsWithTxids(actions, txids)) needed.add(id);
-    // Every leg on a token Summ's import got wrong is put right together, run or not: plan must see them all
+    // Every leg on a token Summ's import got wrong is put right together, run or not: plan must see them all, and the
+    // legs already put right (now on the right token), so verify sees them land and a later plan sees them right
+    const currencyIds = [...MISIDENTIFIED_IDS, ...CORRECTED_IDS];
     for (const a of (
       await queryAll(
         client,
         inRange(range, {
           type: "or",
           rules: [
-            { type: "txCurrency", value: MISIDENTIFIED_IDS },
-            { type: "feeCurrency", value: MISIDENTIFIED_IDS },
+            { type: "txCurrency", value: currencyIds },
+            { type: "feeCurrency", value: currencyIds },
           ],
         }),
       )

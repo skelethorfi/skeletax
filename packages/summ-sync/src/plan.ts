@@ -296,6 +296,9 @@ const MISIDENTIFIED: Record<string, { currency: string; id: string; chain: strin
 };
 /** Summ's ids of the wrong tokens: pull reads every action that holds one. */
 export const MISIDENTIFIED_IDS = Object.keys(MISIDENTIFIED);
+/** The ids they are put right to: pull reads those actions too, so a leg already put right stays in view (verify sees
+ * it land, and a later plan sees it is right). */
+export const CORRECTED_IDS = [...new Set(Object.values(MISIDENTIFIED).map((wrong) => wrong.id))];
 /** The run's currency a leg of Summ's import holds once its currency is put right: its own when Summ has it right. */
 // Only the import that gets it wrong: the token itself, held on its own chain, is right as it is
 const misidentified = (leg: Leg) => {
@@ -1709,8 +1712,8 @@ export function makePlan(input: PlanInput): PlanResult {
       plan.notes.push(`scope: the legs in ignoreImportLegs (${ignore.length} entries) are ignored whatever the scope`);
   }
 
-  // ---- Legs on a wrong token that no row takes (a fee, a send outside the run): put right with the rest, whatever
-  // the scope, so all of the token's legs keep one cost base. A leg to be ignored, or ignored, needs none
+  // ---- Legs on a wrong token that no row takes (a fee, a send outside the run): put right with the rest, so all of
+  // the token's legs keep one cost base (a scope leaves it for a full plan, below).
   // Legs a categorise entry puts right are done; legs no row takes that the plan already names (a made-up leg it
   // ignores), ignored or to be ignored, and legs Summ issues itself (a new id on every rebuild) need none
   const putRight = new Set(
@@ -1718,7 +1721,8 @@ export function makePlan(input: PlanInput): PlanResult {
   );
   const currency: EditEntry[] = [];
   // A leg of the token the plan cannot put right (a held row's, one beside a manual entry, one a row takes with no
-  // entry putting it right: a kept override, or two rows on it) would keep a cost-base pool of its own
+  // entry putting it right: a kept override, or two rows on it; one with no chain) would keep a cost-base pool of
+  // its own
   const keptWrong: Leg[] = [];
   for (const leg of input.legs) {
     const wrong = misidentified(leg);
