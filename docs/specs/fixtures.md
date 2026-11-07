@@ -38,6 +38,44 @@ both after review. A case without
 `expected.yaml` is reported as a todo: its input is in, but its mapper or review is
 not.
 
+### End-to-end export
+
+`test/OfflineExport.test.ts` runs the whole export on the cases, from the store
+to the CSV files, with no network:
+
+1. It builds a store (`snapshots.md`) from the reviewed THORChain cases
+   (`test/helpers/caseStore.ts`). It writes a config with yearly files over
+   the years of the cases' rows and a wallet for each case wallet and each
+   wallet their rows name, then runs the exporter's sources and prices
+   through a store whose fetches answer from the cases, so every record is
+   stored under the key its service gives it. A record a case does not hold
+   gets a stand-in that adds nothing to its rows: a THORNode status with
+   nothing observed, a Viewblock lookup that found nothing, a Cosmos tx with
+   no events, a claim list without the address, no price. An anonymised
+   Viewblock send's placeholder hash (all zeros) is shared by every such case
+   and by the anonymised Midgard cases' placeholder txids, so each gets a
+   hash of its own, made from the case's name; its expected rows name that
+   hash and take the row IDs it gives. A case is left out when it would
+   clash with one already in the store: the same record of the same wallet
+   (a case and its copy with prices: the one with prices is kept), another
+   record under the same key with other data (anonymised Midgard cases'
+   placeholder txids), or a Viewblock send whose hash a Midgard case also
+   has, which the exporter drops as that action's inbound (`sends.md`). The
+   test checks that Midgard, Viewblock and TCY cases are all in the store,
+   and that no Viewblock case is left out. Maya cases are not in it, nor is a
+   withdrawn pending add's case: it gives its add as found, and its anonymised
+   add and withdrawal share a time, so the store's pairing could not find it.
+2. It runs `src/full-export.ts --offline` on that config and checks that
+   `all.csv` holds every case's `expected.yaml` rows and nothing else; that
+   each row is in its period's `all-<period>` file and its wallet's file, and
+   no other file is written; that `summary.md` reports the run with no
+   warnings and no failed or unsupported actions; and that `snapshots.json`
+   names every list and record in the store and nothing else (the store
+   holds what the sources read, and the offline run reads it all).
+3. It replays the run (`--replay`) and checks that it writes the same files.
+4. It removes one record from a copy of the store and checks that an offline
+   run fails, naming it.
+
 ## Required behaviour
 
 ### Source of a case
