@@ -7,6 +7,15 @@ function isIsoDateString(date: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(date);
 }
 
+// A YYYY-MM-DD date that is on the calendar: "2023-02-30" is not (Date would roll it to 2 March)
+export function isCalendarDate(date: unknown): date is string {
+  if (typeof date !== "string" || !isIsoDateString(date)) {
+    return false;
+  }
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  return isValid(parsed) && parsed.toISOString().slice(0, 10) === date;
+}
+
 function isValid(date: Date): boolean {
   return !isNaN(date.getTime());
 }
@@ -73,11 +82,11 @@ export function generateDateRanges(
   const startDate = new Date(fromDate);
   const endDate = new Date(toDate);
 
-  if (!isIsoDateString(fromDate) || !isValid(startDate)) {
+  if (!isCalendarDate(fromDate)) {
     throw new Error("Invalid fromDate");
   }
 
-  if (!isIsoDateString(toDate) || !isValid(endDate)) {
+  if (!isCalendarDate(toDate)) {
     throw new Error("Invalid toDate");
   }
 
@@ -100,9 +109,10 @@ export function generateDateRanges(
   while (!periodStart.isAfter(end)) {
     if (frequency === "monthly") {
       periodEnd = periodStart.lastDayOfMonth();
-    } else {
-      // yearly
+    } else if (frequency === "yearly") {
       periodEnd = periodStart.addYears(1).addDays(-1);
+    } else {
+      throw new Error(`Unknown frequency: ${frequency}`);
     }
 
     if (periodEnd.isAfter(end)) {

@@ -1,9 +1,31 @@
-import { type ITaxConfig, MAYA_LIQUIDITY_AUCTION, MAYA_LIQUIDITY_AUCTION_OLD_NAMES } from "./ITaxConfig.ts";
+import {
+  FREQUENCIES,
+  type Frequency,
+  type ITaxConfig,
+  MAYA_LIQUIDITY_AUCTION,
+  MAYA_LIQUIDITY_AUCTION_OLD_NAMES,
+} from "./ITaxConfig.ts";
 import path from "path";
 import fs from "fs-extra";
 import { load as loadToml } from "js-toml";
-import { checkTimeZone, dateIn } from "../utils/DateRange.ts";
+import { checkTimeZone, dateIn, isCalendarDate } from "../utils/DateRange.ts";
 import { REFERENCE_PRICES } from "../export/summ/prices.ts";
+import { PROTOCOLS } from "../domain/Protocol.ts";
+
+// A config date as YYYY-MM-DD. An unquoted TOML date (fromDate = 2020-01-01) loads as a Date at UTC midnight;
+// any other Date is a date-time, whose calendar day is not clear, so it is refused. A date-time at exactly UTC midnight
+// loads as the same Date as a date, so it is read as that date.
+function configDate(value: unknown, key: string): string {
+  const date =
+    value instanceof Date && !isNaN(value.getTime()) && value.getTime() % (24 * 60 * 60 * 1000) === 0
+      ? value.toISOString().slice(0, 10)
+      : value;
+
+  if (!isCalendarDate(date)) {
+    throw new Error(`Config: ${key} must be a date such as "2025-07-01" (got ${JSON.stringify(value)})`);
+  }
+  return date;
+}
 
 export class TaxConfig {
   // today: the default toDate (its date in the config's timezone)
@@ -86,6 +108,15 @@ export class TaxConfig {
       throw new Error(`Config: incomeFrom must be a list of addresses (got ${JSON.stringify(config.incomeFrom)})`);
     }
 
+    this.checkWallets(config.wallets);
+    this.checkProtocols(config.protocols);
+
+    if (!FREQUENCIES.includes(config.frequency as Frequency)) {
+      throw new Error(
+        `Config: frequency must be ${FREQUENCIES.map((value) => `"${value}"`).join(", ")} (got ${JSON.stringify(config.frequency)})`,
+      );
+    }
+
     for (const key of ["pendingStuckDays", "pendingGraceDays"] as const) {
       const days = config[key];
 
@@ -96,30 +127,32 @@ export class TaxConfig {
 
     // A wallet file's name holds the chain (<from>_<to>_<CHAIN>_...), which summ-sync reads back to tell managed rows
     // from categorised ones: written in upper case, letters and digits only (anything else is dropped)
-    if (config.wallets !== undefined) {
-      config = {
-        ...config,
-        wallets: config.wallets.map((wallet) => {
-          const blockchain =
-            typeof wallet.blockchain === "string" ? wallet.blockchain.toUpperCase().replace(/[^A-Z0-9]/g, "") : "";
-          if (!blockchain) {
-            throw new Error(
-              `Config: wallet ${wallet.name}: blockchain must hold letters or digits, e.g. "THOR" (got ${JSON.stringify(wallet.blockchain)})`,
-            );
-          }
-          return { ...wallet, blockchain };
-        }),
-      };
+    config = {
+      ...config,
+      wallets: (config.wallets ?? []).map((wallet) => {
+        const blockchain =
+          typeof wallet.blockchain === "string" ? wallet.blockchain.toUpperCase().replace(/[^A-Z0-9]/g, "") : "";
+        if (!blockchain) {
+          throw new Error(
+            `Config: wallet ${wallet.name}: blockchain must hold letters or digits, e.g. "THOR" (got ${JSON.stringify(wallet.blockchain)})`,
+          );
+        }
+        return { ...wallet, blockchain };
+      }),
+    };
+
+    const fromDate = configDate(config.fromDate, "fromDate");
+    const toDate = config.toDate === undefined ? dateIn(today, config.timezone) : configDate(config.toDate, "toDate");
+    if (toDate < fromDate) {
+      throw new Error(`Config: toDate (${toDate}) is before fromDate (${fromDate})`);
     }
 
-    const dateToday = dateIn(today, config.timezone);
     const defaults = {
       outputPath: "output",
       // The record store (docs/specs/snapshots.md); can be shared by several configs
       storePath: "store",
       pendingStuckDays: 30,
       pendingGraceDays: 3,
-      toDate: dateToday,
       // Reference prices on every row (docs/specs/prices.md)
       referencePrices: "all" as const,
     };
@@ -127,6 +160,51 @@ export class TaxConfig {
     return {
       ...defaults,
       ...config,
+      fromDate,
+      toDate,
     } as ITaxConfig;
+  }
+
+  // Each wallet has a name, an address no other wallet has, and a blockchain for its file names
+  private static checkWallets(wallets: unknown): void {
+    if (!Array.isArray(wallets)) {
+      throw new Error(`Config: wallets must be a list of [[wallets]] entries (got ${JSON.stringify(wallets)})`);
+    }
+
+    const addresses = new Set<string>();
+    wallets.forEach((wallet, i) => {
+      const where = `wallets[${i}]`;
+      if (wallet === null || typeof wallet !== "object") {
+        throw new Error(`Config: ${where} must be a [[wallets]] entry (got ${JSON.stringify(wallet)})`);
+      }
+      for (const key of ["name", "address"]) {
+        if (typeof wallet[key] !== "string" || wallet[key].trim() === "") {
+          throw new Error(`Config: ${where}.${key} must be set (got ${JSON.stringify(wallet[key])})`);
+        }
+      }
+      // Bech32 and EVM addresses are the same address in any case (a base58 clash by case alone is not a real risk)
+      const address = wallet.address.toLowerCase();
+      if (addresses.has(address)) {
+        throw new Error(`Config: ${where}.address ${wallet.address} is already another wallet's address`);
+      }
+      addresses.add(address);
+    });
+  }
+
+  private static checkProtocols(protocols: unknown): void {
+    const ids = Object.keys(PROTOCOLS);
+
+    if (
+      protocols !== undefined &&
+      !(
+        Array.isArray(protocols) &&
+        protocols.every((id) => ids.includes(id)) &&
+        new Set(protocols).size === protocols.length
+      )
+    ) {
+      throw new Error(
+        `Config: protocols must be a list of ${ids.map((id) => `"${id}"`).join(", ")}, each once (got ${JSON.stringify(protocols)})`,
+      );
+    }
   }
 }
