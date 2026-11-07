@@ -29,8 +29,8 @@ Kinds `trade.deposit` and `trade.withdraw` (`src/interpret/midgard/trade.ts`).
 The direction comes from the asset sent: a trade asset is a withdrawal,
 anything else a deposit. An action that is neither (no trade asset on
 either side, or one on both), that does not have exactly one coin in and
-one out, or that pays out more than it was sent, fails rather than export
-a guess.
+one out, a deposit not credited in full, or a withdrawal that pays out
+more than it was sent, fails rather than export a guess.
 
 The gas is the inbound fee (`fees.md`):
 
@@ -71,12 +71,14 @@ RUNE).
 
 **With `prefixTradeAssets`** the trade asset side is `ThorTrade.BCH.BCH`,
 so the bridge joins two currencies; the row IDs are the same either way
-(`periods.md`).
+(`periods.md`). Whether Summ carries the cost base across a bridge between
+two currencies is not checked: confirm it in Summ before relying on it.
 
 **Only one side configured.** Each row goes in its wallet's file. When
 only one of the two addresses is in the config, its file still holds its
 side of the bridge, and the other side's rows land in a file for an
-address the config does not name (with the usual warning).
+address the config does not name (with the usual warning). summ-sync refuses a
+run with such a file (`summ-sync.md`): add the other address to the config.
 
 Swaps into or out of a trade asset (a `swap` whose memo names `BTC~BTC`)
 are swaps, not trade account actions, and are unchanged (`fees.md`).

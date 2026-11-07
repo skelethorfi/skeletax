@@ -17,14 +17,28 @@ export function interpretTrade(bundle: RawBundle, protocol: Protocol): Activity 
   const sent = input?.coins[0];
   const received = output?.coins[0];
 
-  if (!sent || !received || action.in.length !== 1 || action.out.length !== 1) {
-    throw new Error(`trade: expected one coin in and one out, got ${action.in.length} in, ${action.out.length} out`);
+  if (
+    !sent ||
+    !received ||
+    action.in.length !== 1 ||
+    action.out.length !== 1 ||
+    input.coins.length !== 1 ||
+    output.coins.length !== 1
+  ) {
+    throw new Error(
+      `trade: expected one coin in and one out, got ${action.in.flatMap((i) => i.coins).length} in, ${action.out.flatMap((o) => o.coins).length} out`,
+    );
   }
 
   const isWithdraw = toAsset(sent.asset).kind === "trade";
 
   if (isWithdraw === (toAsset(received.asset).kind === "trade")) {
     throw new Error(`trade: ${sent.asset} to ${received.asset} is neither a deposit nor a withdrawal`);
+  }
+
+  // A deposit is credited in full (docs/specs/trade.md)
+  if (!isWithdraw && received.amount !== sent.amount) {
+    throw new Error(`trade: deposit of ${sent.amount} ${sent.asset} credited ${received.amount} ${received.asset}`);
   }
 
   // The outbound fee is kept from what was sent, so nothing pays out more (docs/specs/trade.md)

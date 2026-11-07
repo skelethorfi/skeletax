@@ -84,6 +84,17 @@ describe("trade account deposits and withdrawals (docs/specs/trade.md)", () => {
     assert.match(issues[0]?.message ?? "", /more than the .* sent/);
   });
 
+  test("a deposit not credited in full, or an action with a second coin, fails", () => {
+    const short = withAction(caseInput("bch-deposit"), (action) => {
+      action.out[0].coins[0].amount = String(BigInt(action.out[0].coins[0].amount) - 1n);
+    });
+    assert.match(runBundle(short, THORCHAIN).issues[0]?.message ?? "", /deposit of .* credited/);
+    const two = withAction(caseInput("btc-withdraw"), (action) => {
+      action.in[0].coins.push({ ...action.in[0].coins[0] });
+    });
+    assert.match(runBundle(two, THORCHAIN).issues[0]?.message ?? "", /expected one coin in and one out, got 2 in/);
+  });
+
   test("the L1 inbound of a deposit is looked up for its gas; a withdrawal, sent on THORChain, is not", () => {
     assert.deepEqual(getInboundTxs(caseInput("bch-deposit").data as Action), [
       { txId: "313FEF87E25E1D14E7CE35EC13B8D6AE2D2654158FF59B317768769883D67A54", asset: "BCH.BCH" },
