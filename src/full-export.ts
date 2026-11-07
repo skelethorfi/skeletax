@@ -4,6 +4,7 @@ import { Exporter, NOT_FETCHED_FILE } from "./cli/Exporter.ts";
 import { oldCacheHint } from "./cli/store.ts";
 import { SUMMARY_FILE } from "./cli/RunSummary.ts";
 import { parseExportArgs, printError, USAGE } from "./cli/args.ts";
+import { writeRunInfo } from "./cli/RunInfo.ts";
 
 async function main(argv: string[]): Promise<number> {
   const { help, configFile, offline, fetch, replay } = parseExportArgs(argv);
@@ -64,6 +65,9 @@ async function main(argv: string[]): Promise<number> {
 
   // Before the snapshot is written, so it lists the balances the check read
   await exporter.checkBalances(rows);
+
+  // The timezone the periods were cut in, which summ-sync checks against its own
+  writeRunInfo(outputPath, exporter.config.timezone);
 
   // Which snapshot of each source this run used, for --replay
   exporter.snapshots.write(outputPath).forEach((line) => report.info(line));

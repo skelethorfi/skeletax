@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseCsvLine, parseWalletFile, readRun, readUnmapped, txidsOf } from "../src/run.ts";
+import { checkRunTimezone, parseCsvLine, parseWalletFile, readRun, readUnmapped, txidsOf } from "../src/run.ts";
 import { inPeriod, before, startOfDay } from "../src/dates.ts";
 
 const HEADER =
@@ -153,4 +153,17 @@ test("readUnmapped reads the run's unmapped.json, or null when the run has none"
   assert.deepEqual(readUnmapped(run), [{ ...record, times, txids: [TXID.toLowerCase()] }]);
   writeFileSync(join(run, "unmapped.json"), JSON.stringify({ records: [] }));
   assert.throws(() => readUnmapped(run), /not version 1/);
+});
+
+test("checkRunTimezone refuses a run cut in another timezone and notes a run that does not say", () => {
+  const run = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
+  assert.match(checkRunTimezone(run, "Europe/London") ?? "", /no run\.json.*Europe\/London/);
+  writeFileSync(join(run, "run.json"), JSON.stringify({ version: 1, timezone: "Europe/London" }));
+  assert.equal(checkRunTimezone(run, "Europe/London"), null);
+  assert.throws(
+    () => checkRunTimezone(run, "UTC"),
+    /periods are in Europe\/London .* summ-sync\.json's timezone is UTC/,
+  );
+  writeFileSync(join(run, "run.json"), JSON.stringify({ version: 1 }));
+  assert.throws(() => checkRunTimezone(run, "UTC"), /no timezone/);
 });

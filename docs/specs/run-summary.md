@@ -1,6 +1,6 @@
 # Run summary
 
-Each run writes `summary.md` to its folder, next to `csv/`, `snapshots.json`,
+Each run writes `summary.md` to its folder, next to `csv/`, `snapshots.json`, `run.json`,
 `unsupported/`, `failures/` and `unmapped.json`. It keeps what the run printed that is worth
 reading later, so a run (and a filed year) still shows what was flagged
 after the terminal is gone. The run prints the same lines as before.

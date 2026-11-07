@@ -1,6 +1,6 @@
 import { mock, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { configSha, DEFAULTS, type Config } from "../src/config.ts";
@@ -2416,6 +2416,47 @@ test("plan refuses a snapshot whose unique actions are not Summ's total, unless 
     /1 unique actions of the 2 Summ reported: pull again, or plan with --accept-incomplete/,
   );
   assert.ok(existsSync(writePlan(state, run, undefined, { acceptIncomplete: true })));
+});
+
+test("plan refuses a run cut in another timezone, and notes a run that does not say which", () => {
+  const state = mkdtempSync(join(tmpdir(), "summ-sync-"));
+  writeFileSync(join(state, "summ-sync.json"), JSON.stringify({ managedSources: ["csv-source"] }));
+  const run = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
+  mkdirSync(join(run, "csv"));
+  const header =
+    "Timestamp (UTC),Type,Base Currency,Base Amount,Quote Currency (Optional),Quote Amount (Optional),Fee Currency (Optional),Fee Amount (Optional),From (Optional),To (Optional),Blockchain (Optional),ID (Optional),Description (Optional)";
+  writeFileSync(join(run, "csv", "2023-07-01_2024-06-30_THOR_abc_Wallet.csv"), `${header}\n`);
+  const file = join(state, "snapshots", "2026-01-01T00-00-00.json");
+  writeSnapshot(file, {
+    version: 2,
+    takenAt: "",
+    total: 0,
+    run: resolve(run),
+    range: null,
+    managedSources: ["csv-source"],
+    managedChains: DEFAULTS.managedChains,
+    actions: [],
+  });
+  writeFileSync(file.replace(".json", ".details.jsonl"), "{}\n");
+  const log = mock.method(console, "log", () => {});
+  try {
+    writeFileSync(join(run, "run.json"), JSON.stringify({ version: 1, timezone: "Australia/Sydney" }));
+    assert.throws(() => writePlan(state, run), /periods are in Australia\/Sydney .* timezone is UTC/);
+    assert.equal(existsSync(join(state, "plans")), false);
+
+    writeFileSync(join(run, "run.json"), JSON.stringify({ version: 1, timezone: "UTC" }));
+    const same = JSON.parse(readFileSync(join(writePlan(state, run), "plan.json"), "utf8"));
+    assert.equal(
+      same.notes.some((n: string) => n.startsWith("timezone:")),
+      false,
+    );
+
+    rmSync(join(run, "run.json"));
+    const older = writePlan(state, run);
+    assert.match(readFileSync(join(older, "plan.md"), "utf8"), /Note: timezone: the run has no run\.json/);
+  } finally {
+    log.mock.restore();
+  }
 });
 
 test("plan refuses wider changes from a snapshot of part of the history", () => {

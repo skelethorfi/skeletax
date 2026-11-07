@@ -64,7 +64,8 @@ environment variables before running:
 ### What a run writes
 
 Each run writes a folder under `outputPath` named by its start time, holding `csv/`,
-`snapshots.json`, `summary.md` (how it ran, counts, and every warning it printed;
+`snapshots.json`, `run.json` (the timezone of its periods, which summ-sync checks),
+`summary.md` (how it ran, counts, and every warning it printed;
 `docs/specs/run-summary.md`) and, when there are any, `unsupported/` and `failures/`. Actions the
 exporter can't map yet are saved in `unsupported/`, one file per action, named like its
 store record: `<type>/<type>.<txid>[.<contract type>].json` (another protocol's under its

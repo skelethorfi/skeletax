@@ -23,7 +23,7 @@ import {
   type UploadedFile,
   type ValueMatch,
 } from "./plan.ts";
-import { parseCsvLine, readRun, readUnmapped, type Row, type RunFile } from "./run.ts";
+import { checkRunTimezone, parseCsvLine, readRun, readUnmapped, type Row, type RunFile } from "./run.ts";
 import { latestSnapshot, type PullRange, readSnapshot, readSnapshotFile } from "./snapshot.ts";
 import { readAdopted, readApplyLog, readLeftLegs, readOverrides } from "./state.ts";
 
@@ -351,6 +351,7 @@ export function writePlan(
   const snapshotDir = latestSnapshot(stateDir);
   const snapshot = readSnapshot(snapshotDir);
   const { files, rows } = readRun(runDir, extraDirsOf(stateDir, config));
+  const timezoneNote = checkRunTimezone(runDir, config.timezone);
   const pulled = readSnapshotFile(snapshotDir);
   // pull writes no such snapshot; one from elsewhere, or a parse that lost actions, would plan on part of Summ
   if (typeof pulled.unique === "number" && pulled.unique !== pulled.total && !acceptIncomplete)
@@ -406,6 +407,8 @@ export function writePlan(
       `The snapshot covers only ${(pulled.range as PullRange).from} to ${(pulled.range as PullRange).to}: reports can miss or misstate a tx with legs outside it`,
     );
   }
+
+  if (timezoneNote) plan.notes.unshift(timezoneNote);
 
   const dir = planDir(stateDir, now);
   mkdirSync(join(dir, "upload"));

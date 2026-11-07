@@ -11,6 +11,8 @@
 //
 // The chain in a file's name is read in any case. Any other .csv in csv/ is refused: its rows would be missing
 // from the run, and the plan would delete them from Summ.
+//
+//   <run dir>/run.json   { "version": 1, "timezone": "<IANA name>" }: the timezone the exporter cut the periods in
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -232,4 +234,22 @@ export function readUnmapped(runDir: string): Unmapped[] | null {
     times: r.times ?? [r.time],
     txids: r.txids.map((t) => t.toLowerCase()),
   }));
+}
+
+/**
+ * Checks the run was cut in summ-sync's timezone: scope and filedBefore are judged in it, so a run cut in another
+ * would put legs near a period's edge in or out of scope unlike the files that hold their rows. Throws when the
+ * run's run.json names another timezone; returns a note when the run has none (written before run.json was).
+ */
+export function checkRunTimezone(runDir: string, timezone: string): string | null {
+  const file = join(runDir, "run.json");
+  if (!existsSync(file))
+    return `timezone: the run has no run.json (an older exporter), so its timezone is not known; summ-sync judges scope in ${timezone}: check the exporter config's timezone is the same`;
+  const info = JSON.parse(readFileSync(file, "utf8")) as { timezone?: unknown };
+  if (typeof info.timezone !== "string") throw new Error(`${file}: no timezone`);
+  if (info.timezone !== timezone)
+    throw new Error(
+      `The run's periods are in ${info.timezone} (${file}), summ-sync.json's timezone is ${timezone}: set both to your Summ account's timezone and export again`,
+    );
+  return null;
 }

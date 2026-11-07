@@ -181,7 +181,9 @@ optional:
 - `filedBefore`: rows before this date are in filed years; changing them is
   an amendment.
 - `timezone`: your Summ account's timezone (default `UTC`), for the days of
-  the run's periods and of `filedBefore`.
+  the run's periods and of `filedBefore`. Set the exporter config's
+  `timezone` to the same: `pull` and `plan` refuse a run cut in another
+  (the run's `run.json` says which).
 - `extraDirs`: folders (relative to the state dir, searched recursively) of
   CSV files you made by hand in the run's file shape, e.g. rows the exporter
   cannot produce. A file counts only when its period is one of the run's, and
