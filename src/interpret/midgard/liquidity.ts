@@ -3,7 +3,7 @@ import type { Activity, Leg } from "../../domain/Activity.ts";
 import { formatAmount, parseAmount } from "../../domain/Amount.ts";
 import { toAsset, toPositionAsset } from "../../domain/Asset.ts";
 import type { Issue } from "../../domain/Issue.ts";
-import { getActionDate, parseMidgardAsset } from "../../sources/thorchain/MidgardUtils.ts";
+import { getActionDate, onlyCoin, parseMidgardAsset } from "../../sources/thorchain/MidgardUtils.ts";
 import { type Protocol, THORCHAIN } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { isDonateAdd, midgardActionKey } from "../../sources/store/Sources.ts";
@@ -236,15 +236,23 @@ export function interpretWithdraw(bundle: RawBundle, protocol: Protocol): { acti
   const gas = inboundGas(requestTxid, bundle, request.address, requestAsset, protocol);
 
   const legs: Leg[] = [
-    ...action.out.map((out): Leg => ({
-      direction: "in",
-      wallet: out.address,
-      asset: toAsset(out.coins[0].asset),
-      amount: parseAmount(out.coins[0].amount, protocol.decimals(out.coins[0].asset)),
-      role: "principal",
-      basis: "observed",
-      txid: out.txID ?? "",
-    })),
+    ...action.out.map((out): Leg => {
+      const coin = onlyCoin(out, "liquidity withdrawal");
+
+      if (!coin) {
+        throw new Error("liquidity withdrawal: an output with no coin");
+      }
+
+      return {
+        direction: "in",
+        wallet: out.address,
+        asset: toAsset(coin.asset),
+        amount: parseAmount(coin.amount, protocol.decimals(coin.asset)),
+        role: "principal",
+        basis: "observed",
+        txid: out.txID ?? "",
+      };
+    }),
     {
       direction: "out",
       wallet: request.address,

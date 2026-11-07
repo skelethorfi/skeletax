@@ -29,6 +29,17 @@ export function memoRefundAddress(memo: string, field: number): string | undefin
   return memo.split(":")[field]?.split("/")[1] || undefined;
 }
 
+// The one coin of a Midgard tx whose coin is read as a leg, or undefined when it has none. A tx can list several
+// coins (a Cosmos MsgSend can carry several denoms); the interpreters map one, so a second would be dropped
+// without notice. It throws instead, and the action is reported as failed (docs/specs/activity.md).
+export function onlyCoin<C>(tx: { coins: C[] } | undefined, what: string): C | undefined {
+  if (tx && tx.coins.length > 1) {
+    throw new Error(`${what}: expected 1 coin but there were ${tx.coins.length}`);
+  }
+
+  return tx?.coins[0];
+}
+
 export function toMidgardNanoTimestamp(date: Date): string {
   return (date.getTime() * 1000000).toString();
 }

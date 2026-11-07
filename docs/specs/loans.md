@@ -14,6 +14,10 @@ or `loanRepayment`. The exporter normally skips actions that are not
 
 Pending loan opens with no output are skipped.
 
+A loan's collateral, payout, repayment and returned collateral are each one
+coin; a tx with none, or with several, fails the action (`activity.md`, One
+coin per tx).
+
 ## Why a pending loan open with an output counts as success
 
 Midgard adds an output when it records the payout. For loans paid out on

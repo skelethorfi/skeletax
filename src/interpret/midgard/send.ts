@@ -4,7 +4,7 @@ import { parseAmount } from "../../domain/Amount.ts";
 import { toAsset } from "../../domain/Asset.ts";
 import type { Issue } from "../../domain/Issue.ts";
 import { failedTxPaidFee, type Protocol } from "../../domain/Protocol.ts";
-import { getActionDate } from "../../sources/thorchain/MidgardUtils.ts";
+import { getActionDate, onlyCoin } from "../../sources/thorchain/MidgardUtils.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { nativeGas } from "./bond.ts";
 
@@ -129,7 +129,8 @@ export function failedSend(
       };
 }
 
-// A Midgard send, on THORChain or Maya. A send with no coins (e.g. a TCY unstake request's memo) moves nothing.
+// A Midgard send, on THORChain or Maya. A send with no coins (e.g. a TCY unstake request's memo) moves nothing;
+// one with several coins fails the action (onlyCoin), as its send row would carry only the first.
 export function interpretSend(bundle: RawBundle, protocol: Protocol): { activities: Activity[]; issues: Issue[] } {
   const action = bundle.data as Action;
   const input = action.in[0];
@@ -150,7 +151,7 @@ export function interpretSend(bundle: RawBundle, protocol: Protocol): { activiti
     return failedSend(send, Number(action.height), bundle.wallet, protocol);
   }
 
-  if (!coin) {
+  if (!onlyCoin(input, "send")) {
     return { activities: [], issues: [{ kind: "ignored", message: "Midgard send with no coins" }] };
   }
 
