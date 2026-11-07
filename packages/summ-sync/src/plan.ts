@@ -296,6 +296,9 @@ const MISIDENTIFIED: Record<string, { currency: string; id: string; chain: strin
 };
 /** Summ's ids of the wrong tokens: pull reads every action that holds one. */
 export const MISIDENTIFIED_IDS = Object.keys(MISIDENTIFIED);
+/** The ids they are put right to: pull reads those actions too, so a leg already put right stays in view (verify sees
+ * it land, and a later plan sees it is right). */
+export const CORRECTED_IDS = [...new Set(Object.values(MISIDENTIFIED).map((wrong) => wrong.id))];
 /** The run's currency a leg of Summ's import holds once its currency is put right: its own when Summ has it right. */
 // Only the import that gets it wrong: the token itself, held on its own chain, is right as it is
 const misidentified = (leg: Leg) => {

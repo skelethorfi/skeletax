@@ -434,7 +434,7 @@ test("an import leg the config names to ignore has its action read, though nothi
     assert.ok(readSnapshot(file).legs.some((l) => l.legId === "dup"));
   }));
 
-test("an action holding a token Summ's import got wrong has its action read, though nothing else needs it", () =>
+test("an action holding a token Summ's import got wrong, or the token it is put right to, has its action read, though nothing else needs it", () =>
   quiet(async () => {
     const stateDir = stateDirOf();
     const { client, state, inspected, filters } = fakeSumm(["a", "b", "c"]);
@@ -449,8 +449,8 @@ test("an action holding a token Summ's import got wrong has its action read, tho
           JSON.stringify({
             type: "or",
             rules: [
-              { type: "txCurrency", value: ["terrausd-wormhole"] },
-              { type: "feeCurrency", value: ["terrausd-wormhole"] },
+              { type: "txCurrency", value: ["terrausd-wormhole", "terrausd"] },
+              { type: "feeCurrency", value: ["terrausd-wormhole", "terrausd"] },
             ],
           }),
       ),
