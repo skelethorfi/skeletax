@@ -205,3 +205,5 @@ optional:
 ## Tests
 
     cd packages/summ-sync && npm run typecheck && npm test
+
+CI runs `npm run test:coverage`, which also fails below its coverage floor.

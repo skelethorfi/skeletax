@@ -9,6 +9,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.ts",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude='test/**' --test-coverage-lines=95 --test-coverage-branches=92 --test-coverage-functions=94 test/*.test.ts",
     "typecheck": "tsc -p ."
   },
   "engines": {

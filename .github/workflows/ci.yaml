@@ -6,16 +6,23 @@ on:
   pull_request:
     branches: [main]
 
+# The token only needs to read the repository.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
+      # Actions are pinned to a full commit SHA (the tag it was, in the comment): a tag can be moved.
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version-file: .nvmrc
 
@@ -28,8 +35,26 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
-      - name: Run tests
-        run: npm test
+      - name: Run tests with coverage
+        run: npm run test:coverage
 
-      - name: Run summ-sync tests
-        run: cd packages/summ-sync && npm run typecheck && npm test
+      - name: Run summ-sync tests with coverage
+        run: cd packages/summ-sync && npm run typecheck && npm run test:coverage
+
+  # Its own job: a new advisory or a registry hiccup shows here without hiding the test results
+  audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
