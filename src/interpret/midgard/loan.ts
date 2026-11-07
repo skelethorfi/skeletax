@@ -74,7 +74,7 @@ export function interpretLoanRepay(bundle: RawBundle, protocol: Protocol): Inter
   const others = action.out.filter((out) => !isCollateral(out));
   const issues: Issue[] = others.map((out) => ({
     kind: "warning",
-    message: `loan repayment: output of ${out.coins.map((coin) => `${formatAmount(parseAmount(coin.amount, 8))} ${coin.asset}`).join(", ")} to ${out.address} is not the ${collateral} collateral paid to the memo's destination; not exported`,
+    message: `loan repayment: output of ${out.coins.map((coin) => `${formatAmount(parseAmount(coin.amount, 8))} ${coin.asset}`).join(", ")} to ${out.address} is not the ${collateral} collateral paid to the memo's destination${returned.length === 0 && isMemoName(dest) ? ` ("${dest}" is a name, which loans do not resolve)` : ""}; not exported`,
   }));
 
   const txid = input.txID ?? "";

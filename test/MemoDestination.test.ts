@@ -201,12 +201,24 @@ describe("a swap whose memo names a THORName as its destination", () => {
 describe("a loan whose memo names a THORName as its destination", () => {
   test("fails, saying the destination is a name", () => {
     const input: GoldenCaseInput = JSON.parse(
+      fs.readFileSync("test/cases/loan/open-btc-borrow-rune/input.json", "utf8"),
+    );
+    const named = structuredClone(input);
+    const swap = (named.data as any).metadata.swap;
+    swap.memo = swap.memo.replace("thor1-user-wallet-11111", "myname");
+
+    assert.throws(() => runCaseLayers(named), /loan: no matching out tx: the memo's destination "myname" is a name/);
+  });
+
+  test("a repayment to a name exports no collateral and its warning says why", () => {
+    const input: GoldenCaseInput = JSON.parse(
       fs.readFileSync("test/cases/loan/repay-btc-loan-with-rune-closed/input.json", "utf8"),
     );
     const named = structuredClone(input);
     const swap = (named.data as any).metadata.swap;
     swap.memo = swap.memo.replace("bc1-user-wallet-aaaaa", "myname");
 
-    assert.throws(() => runCaseLayers(named), /loan: no matching out tx: the memo's destination "myname" is a name/);
+    const { issues } = runCaseLayers(named);
+    assert.match(issues.map((i) => i.message).join("\n"), /"myname" is a name, which loans do not resolve/);
   });
 });
