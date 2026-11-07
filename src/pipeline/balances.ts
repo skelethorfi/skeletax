@@ -21,7 +21,7 @@ export type Holdings = Map<string, Map<string, bigint>>;
 
 // A decimal string as written in a row ('0.02', '-1', '5000') as an integer with SCALE decimals; digits beyond SCALE
 // are dropped
-export function parseDecimal(text: string): bigint {
+export function parseScaled(text: string): bigint {
   const match = text.trim().match(/^(-?)(\d*)(?:\.(\d*))?$/);
 
   if (!match || (!match[2] && !match[3])) {
@@ -79,7 +79,7 @@ export function computeHoldings(rows: SummRow[]): Holdings {
     holdings.set(wallet, held);
     const add = (currency: string | undefined, amount: string | undefined, sign: 1n | -1n) => {
       if (currency && amount) {
-        held.set(currency, (held.get(currency) ?? 0n) + sign * parseDecimal(amount));
+        held.set(currency, (held.get(currency) ?? 0n) + sign * parseScaled(amount));
       }
     };
     // The base amount of a row whose asset is a trade asset (BTC~BTC)

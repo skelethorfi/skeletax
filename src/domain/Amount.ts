@@ -23,3 +23,15 @@ export function formatAmount({ base, decimals }: Amount): string {
 
   return sign + whole + (fraction ? `.${fraction}` : "");
 }
+
+// A decimal string, e.g. formatAmount's '0.02', back to an exact amount with as many decimals as it has
+export function parseDecimal(text: string): Amount {
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text);
+
+  if (!match) {
+    throw new Error(`Invalid decimal amount: ${text}`);
+  }
+
+  const [, sign, whole, fraction = ""] = match;
+  return { base: BigInt(sign + whole + fraction), decimals: fraction.length };
+}

@@ -1,5 +1,5 @@
 import type { Activity, Leg } from "../../domain/Activity.ts";
-import { formatAmount } from "../../domain/Amount.ts";
+import { type Amount, formatAmount, parseDecimal } from "../../domain/Amount.ts";
 import { type SummRow, SummRowType } from "./csv/index.ts";
 import { parseMidgardAsset } from "../../sources/thorchain/MidgardUtils.ts";
 import { toPositionAsset } from "../../domain/Asset.ts";
@@ -12,9 +12,14 @@ import type { MayaLiquidityAuction } from "../../config/ITaxConfig.ts";
 const MISSING_ADDRESS = "MISSING-DEPOSIT-ADDRESS";
 
 // Summ does not price the position token, so a spam row carries the value of what went in or came out, to
-// copy onto the token row by hand (docs/specs/liquidity.md): the first asset's amount times the number of assets.
-function priceHelper(first: SummRow, count: number): { currency: string; amount: string } {
-  return { currency: first.baseCurrency, amount: (parseFloat(first.baseAmount) * count).toString() };
+// copy onto the token row by hand (docs/specs/liquidity.md): the first asset's amount times the number of assets,
+// exact, in the same format as every other amount.
+function priceHelper(first: SummRow, amount: Amount, count: number): { currency: string; amount: string } {
+  return { currency: first.baseCurrency, amount: times(amount, count) };
+}
+
+function times({ base, decimals }: Amount, count: number): string {
+  return formatAmount({ base: base * BigInt(count), decimals });
 }
 
 // The fee columns of a principal leg: the gas leg that follows it, blank when none (docs/specs/fees.md)
@@ -70,7 +75,7 @@ export function addLiquidityRows(activity: Activity, protocol: Protocol): SummRo
       description: `${i + 1}/${total} - Add liquidity ${currency} to ${lpToken} (${symmetry}); ${txId}${sentNote(deposit, txId)}`,
     };
   });
-  const quote = priceHelper(rows[0], deposits.length);
+  const quote = priceHelper(rows[0], deposits[0].amount, deposits.length);
 
   rows.push(
     {
@@ -132,7 +137,7 @@ export function withdrawRows(activity: Activity, protocol: Protocol): SummRow[] 
       description: `${total - i}/${total} - Remove liquidity ${currency} from ${lpToken} (${symmetry}); ${txId}${paidOutNote(out)}`,
     };
   });
-  const quote = priceHelper(removals[0], paidOut.length);
+  const quote = priceHelper(removals[0], ordered[0].amount, paidOut.length);
 
   // Listed request first, then reversed: the rows come out removals first, as they always have
   return [
@@ -279,7 +284,7 @@ export function auctionPositionRows(
       timestamp: plusSeconds(activity.time, 20),
       type: SummRowType.Spam,
       baseCurrency: side,
-      baseAmount: (parseFloat(activity.details.side) * 2).toString(),
+      baseAmount: times(parseDecimal(activity.details.side), 2),
       from: protocol.counterparty,
       to: position.wallet,
       trace: { role: "price-helper" },
