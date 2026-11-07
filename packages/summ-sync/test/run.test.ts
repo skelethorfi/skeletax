@@ -50,6 +50,23 @@ test("readRun reads only the period wallet files and refuses an ID in two files"
   assert.throws(() => readRun(run), /is in .* and /);
 });
 
+test("readRun refuses a run that could not fetch every wallet", () => {
+  const run = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
+  mkdirSync(join(run, "csv"));
+  writeFileSync(join(run, "csv", "2023-07-01_2024-06-30_THOR_abcde_Example.csv"), `${HEADER}\n${LINE}`);
+  assert.equal(readRun(run).rows.length, 1);
+  writeFileSync(
+    join(run, "not-fetched.json"),
+    JSON.stringify({
+      version: 1,
+      wallets: [{ name: "Other", address: "thor1other", source: "midgard", error: "503" }],
+    }),
+  );
+  assert.throws(() => readRun(run), /could not fetch every wallet \(Other\).*delete its rows/);
+  writeFileSync(join(run, "not-fetched.json"), "not json");
+  assert.throws(() => readRun(run), /could not fetch every wallet and wrote no file/);
+});
+
 test("readRun adds extra files of the run's periods only, marking their rows", () => {
   const run = mkdtempSync(join(tmpdir(), "summ-sync-run-"));
   mkdirSync(join(run, "csv"));

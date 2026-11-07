@@ -188,7 +188,10 @@ an `ID` back to its action for the user; plan does not need it.
 failed, or no rows with a warning, `run-summary.md`), each with its times and txids: plan holds back
 the deletes their rows would otherwise get (Held). A run made before it
 has none; plan then notes that its deletes of legs with no row could not
-be checked.
+be checked. A run folder with `not-fetched.json` (the
+exporter skipped a wallet a source failed for, `run-summary.md`, Not fetched)
+is refused: that wallet has no file, so its rows in Summ would be planned for
+deletion.
 **Extra folders** (`extraDirs` in `summ-sync.json`): files made by hand in
 the same shape and naming, e.g. rows the exporter cannot produce, uploaded
 like the run's. Their rows are part of the desired state; without them, plan

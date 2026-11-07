@@ -17,6 +17,8 @@ import type { NotFinal } from "./Pending.ts";
 
 // Lists the raw bundles of one wallet from one API
 export interface Source {
+  // Named in the run summary when the source fails for a wallet (docs/specs/run-summary.md, Not fetched)
+  readonly name: string;
   bundlesFor(wallet: string): Promise<RawBundle[]>;
 }
 
@@ -185,6 +187,10 @@ export class MidgardSource implements Source {
     this.tcyClaims = tcyClaims;
   }
 
+  get name(): string {
+    return this.protocol.id === THORCHAIN.id ? "midgard" : `${this.protocol.id}-midgard`;
+  }
+
   async bundlesFor(wallet: string): Promise<RawBundle[]> {
     const actions = await this.midgard.getActions(wallet);
     const keyOf = (action: Action) =>
@@ -338,6 +344,7 @@ export class MidgardSource implements Source {
 // Viewblock's txs of a THORChain wallet, for the sends Midgard does not list (docs/specs/sends.md);
 // selectSends keeps those
 export class ViewblockSource implements Source {
+  readonly name = "viewblock";
   private viewblock: Viewblock;
   constructor(viewblock: Viewblock) {
     this.viewblock = viewblock;
@@ -362,6 +369,7 @@ export class ViewblockSource implements Source {
 
 // TCY distributions, for THORChain wallets only
 export class TcySource implements Source {
+  readonly name = "tcy";
   private tcyDistribution: TcyDistributionService;
   constructor(tcyDistribution: TcyDistributionService) {
     this.tcyDistribution = tcyDistribution;
@@ -387,6 +395,7 @@ export class TcySource implements Source {
 // CACAO payouts to MAYA holders, for Maya wallets that have received MAYA: from the first payout after the first receipt
 // (docs/specs/maya.md, CACAO to MAYA holders)
 export class MayaDistributionSource implements Source {
+  readonly name = "maya-distribution";
   private midgard: MidgardService;
   private distribution: MayaDistributionService;
   constructor(midgard: MidgardService, distribution: MayaDistributionService) {
