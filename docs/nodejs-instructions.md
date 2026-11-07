@@ -74,8 +74,9 @@ own folder, e.g. `maya/`). So the folder lists exactly what that run could not m
 If a source fails for a wallet (an API down or rate limiting after its retries, a record
 missing in `--offline`), that wallet is skipped and the others are exported. The skipped
 wallet gets no rows and no CSV file; `summary.md` names it under Not fetched with the
-error, the run writes `not-fetched.json` (summ-sync refuses such a run) and exits 1. Run
-it again once the source answers.
+error, the run writes `not-fetched.json` (summ-sync refuses such a run, and `--replay` of it
+is refused) and exits 1. Run it again once the source answers (with `--offline`: without it,
+to fetch what the store lacks).
 
 ### Re-running from the cache
 

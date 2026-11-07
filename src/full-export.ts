@@ -97,7 +97,7 @@ async function main(): Promise<number> {
     console.error(
       `\n${count} wallet${count === 1 ? "" : "s"} not fetched: ${exporter.notFetched.map(({ wallet }) => wallet.name).join(", ")}. ` +
         `Their rows are not in this run's CSV files, and summ-sync refuses the run (${NOT_FETCHED_FILE}). ` +
-        `See summary.md, Not fetched; run again once the source answers.`,
+        `See summary.md, Not fetched; ${offline ? "run again without --offline to fetch what the store lacks" : "run again once the source answers"}.`,
     );
     return 1;
   }

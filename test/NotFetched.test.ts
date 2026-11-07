@@ -141,4 +141,14 @@ describe("a wallet a source fails for", () => {
     assert.equal(fs.existsSync(path.join(dir, "run", NOT_FETCHED_FILE)), false);
     assert.doesNotMatch(renderSummary(target.report), /Not fetched/);
   });
+
+  test("a run that skipped a wallet cannot be replayed", () => {
+    const { dir } = exporter();
+    const run = path.join(dir, "run");
+    fs.outputJsonSync(path.join(run, NOT_FETCHED_FILE), { version: 1, wallets: [] });
+    assert.throws(
+      () => new Exporter(path.join(dir, "config.toml"), { replay: run, today: new Date("2026-11-01") }),
+      /that run skipped a wallet \(not-fetched\.json\), so it cannot be replayed/,
+    );
+  });
 });

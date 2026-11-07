@@ -112,6 +112,14 @@ export class Exporter {
       this.report.warn(`Config: addReferencePrices is no longer supported and is ignored (wallet ${wallet.name})`);
     }
 
+    // A run that skipped a wallet read none, or only part, of that wallet's sources, and its manifest cannot tell a
+    // source it never reached from one added since: a replay could export the wallet with rows missing
+    if (options.replay && fs.existsSync(path.join(options.replay, NOT_FETCHED_FILE))) {
+      throw new Error(
+        `--replay ${options.replay}: that run skipped a wallet (${NOT_FETCHED_FILE}), so it cannot be replayed; replay a run that fetched every wallet`,
+      );
+    }
+
     const store = new RecordStore(storePath, {
       offline: options.offline,
       fetch: options.fetch,
