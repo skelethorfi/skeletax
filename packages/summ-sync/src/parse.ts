@@ -47,6 +47,33 @@ export function parseActions(markdown: string): ListedAction[] {
     .filter((a) => a["Action ID"]);
 }
 
+/** An answer of Summ's that no longer reads as the sync expects: its wording changed, and summ-sync needs an update. */
+export class FormatChanged extends Error {
+  constructor(tool: string, what: string, markdown: string) {
+    super(
+      `${tool}: Summ's answer no longer reads as summ-sync expects (${what}). Its wording may have changed, so ` +
+        `summ-sync stops rather than read part of it; it needs an update. The answer began: ${JSON.stringify(markdown.slice(0, 200))}`,
+    );
+  }
+}
+
+/**
+ * A query_summ_transactions page, checked whole: every "## n." block an action with an id, and as many as the header
+ * says it returned. A page that parses to fewer actions than Summ sent stops here, instead of shrinking the snapshot.
+ */
+export function parsePage(markdown: string): { header: PageHeader; actions: ListedAction[] } {
+  const header = parsePageHeader(markdown);
+  const blocks = markdown.split(/^## \d+\. /m).length - 1;
+  const actions = parseActions(markdown);
+  if (blocks !== header.returned || actions.length !== blocks)
+    throw new FormatChanged(
+      "query_summ_transactions",
+      `page ${header.page} says ${header.returned} returned; ${blocks} action blocks found, ${actions.length} with an Action ID`,
+      markdown,
+    );
+  return { header, actions };
+}
+
 /** query_summ_transactions page header: "(Page 2 of 5, 250 returned, 1100 total)". */
 export function parsePageHeader(markdown: string): PageHeader {
   const m = markdown.match(/Page (\d+) of (\d+), (\d+) returned, (\d+) total/);
@@ -67,10 +94,24 @@ export const isLegAbsent = (message: string, legId: string): boolean =>
 export function parseDetail(markdown: string): ActionDetail {
   const json = markdown.match(/```json\n([\s\S]*?)\n```/);
   if (!json) throw new Error(`No action JSON in: ${markdown.slice(0, 200)}`);
-  const history = (markdown.split(/^## Change History\s*$/m)[1] ?? "")
+  const action = JSON.parse(json[1]);
+  if (typeof action?._id !== "string")
+    throw new FormatChanged("inspect_transaction", "no _id in the action JSON", markdown);
+  const section = markdown.split(/^## Change History\s*$/m)[1];
+  // A renamed heading would read as an action nobody edited, hiding the user's edits from plan
+  if (section === undefined && /^#+ .*\bhistory\b/im.test(markdown))
+    throw new FormatChanged("inspect_transaction", 'a history heading other than "## Change History"', markdown);
+  const history = (section ?? "")
     .split(/^(?:---|## )/m)[0]
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
-  return { action: JSON.parse(json[1]), history };
+  // Checked on the first line only: a later line can be the rest of a value that holds a line break
+  if (history.length && !history[0].includes(" · "))
+    throw new FormatChanged(
+      "inspect_transaction",
+      `a change history line without " · ": ${JSON.stringify(history[0])}`,
+      markdown,
+    );
+  return { action, history };
 }

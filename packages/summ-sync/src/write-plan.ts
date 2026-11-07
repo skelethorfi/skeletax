@@ -337,8 +337,14 @@ export function uploadFiles(plan: Plan, files: RunFile[], rows: Row[]): { name: 
   });
 }
 
-/** `only`: a scope file (plan --only), one entry per line (parseScope). */
-export function writePlan(stateDir: string, runDir: string, only?: string): string {
+/** `only`: a scope file (plan --only), one entry per line (parseScope). `acceptIncomplete`: plan from a snapshot
+ * whose list held fewer or more unique actions than Summ reported (plan --accept-incomplete). */
+export function writePlan(
+  stateDir: string,
+  runDir: string,
+  only?: string,
+  { acceptIncomplete = false }: { acceptIncomplete?: boolean } = {},
+): string {
   const config = loadConfig(stateDir);
   const scope = only === undefined ? undefined : parseScope(readFileSync(only, "utf8"));
   if (scope && scope.length === 0) throw new Error(`${only}: no scope entries`);
@@ -346,6 +352,11 @@ export function writePlan(stateDir: string, runDir: string, only?: string): stri
   const snapshot = readSnapshot(snapshotDir);
   const { files, rows } = readRun(runDir, extraDirsOf(stateDir, config));
   const pulled = readSnapshotFile(snapshotDir);
+  // pull writes no such snapshot; one from elsewhere, or a parse that lost actions, would plan on part of Summ
+  if (typeof pulled.unique === "number" && pulled.unique !== pulled.total && !acceptIncomplete)
+    throw new Error(
+      `The latest snapshot lists ${pulled.unique} unique actions of the ${pulled.total} Summ reported: pull again, or plan with --accept-incomplete to plan on it anyway`,
+    );
   if (pulled.version === 2 && pulled.run !== resolve(runDir))
     throw new Error(`The latest snapshot was pulled for ${pulled.run ?? "no run"}, not ${resolve(runDir)}: pull again`);
   if (

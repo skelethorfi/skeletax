@@ -189,6 +189,26 @@ test("a list that keeps changing writes no snapshot, and says so", () =>
     assert.deepEqual(snapshotNames(stateDir), []);
   }));
 
+test("a list page Summ worded differently stops the pull at once, with no snapshot", () =>
+  quiet(async () => {
+    const stateDir = stateDirOf();
+    const summ = fakeSumm(["a1", "a2"]);
+    const callTool = summ.client.callTool;
+    let lists = 0;
+    summ.client.callTool = async (name, args) => {
+      const text = await callTool(name, args);
+      if (name !== "query_summ_transactions") return text;
+      lists++;
+      return text.replace("**Action ID**: `a2`", "**Action**: `a2`");
+    };
+    await assert.rejects(
+      pull(stateDir, undefined, { client: summ.client, now: T0 }),
+      /no longer reads as summ-sync expects/,
+    );
+    assert.equal(lists, 1);
+    assert.deepEqual(snapshotNames(stateDir), []);
+  }));
+
 test("an action only the source query lists never settles into a snapshot", () =>
   quiet(async () => {
     const stateDir = stateDirOf();
