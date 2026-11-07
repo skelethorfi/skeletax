@@ -40,7 +40,8 @@ which values are observed on-chain and which are assumed.
   with stable row IDs: [periods.md](docs/specs/periods.md)
 - **Actions that are not final** (pending, stuck refunds):
   [pending.md](docs/specs/pending.md)
-- **Run summaries** and comparing two runs:
+- **Run summaries**, with a balance check of THORChain and Maya wallets
+  against their bank balance, and comparing two runs:
   [run-summary.md](docs/specs/run-summary.md), [run-diff.md](docs/specs/run-diff.md)
 - **Snapshots and offline replay**: every downloaded record is stored, so a
   run can be replayed without network access:

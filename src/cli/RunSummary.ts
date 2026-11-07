@@ -21,6 +21,8 @@ export class RunSummary {
   readonly counts: string[] = [];
   readonly warnings: string[] = [];
   readonly notFetched: string[] = [];
+  // The balance check's findings (docs/specs/run-summary.md, Balance check)
+  readonly balances: string[] = [];
   readonly issues: { [section in IssueSection]: string[] } = {
     manual: [],
     warning: [],
@@ -52,6 +54,12 @@ export class RunSummary {
     this.notFetched.push(line);
   }
 
+  // A difference the balance check found, or a wallet it could not check
+  balance(line: string) {
+    console.warn(line);
+    this.balances.push(line);
+  }
+
   // One action's issue: printed as before, and kept with the action's record key (e.g. midgard/swap.<txid>), so
   // the file says which action it was
   issue(section: IssueSection, line: string, key: string) {
@@ -76,6 +84,7 @@ export function renderSummary(summary: RunSummary): string {
     ...section("Not fetched (no rows or CSV files for these wallets)", summary.notFetched),
     ...section("Counts", summary.counts, false),
     ...section("Warnings", summary.warnings),
+    ...section("Balance check", summary.balances),
     ...(Object.keys(ISSUE_HEADINGS) as IssueSection[]).flatMap((key) =>
       section(ISSUE_HEADINGS[key], summary.issues[key]),
     ),

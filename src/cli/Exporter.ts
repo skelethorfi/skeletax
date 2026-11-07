@@ -48,6 +48,9 @@ import { midgardActionKey } from "../sources/store/Sources.ts";
 import { PriceSource } from "../sources/Prices.ts";
 import type { IWallet } from "../config/IWallet.ts";
 import { addressKey } from "../utils/Address.ts";
+import { BankBalanceService, bankCurrency } from "../sources/thorchain/BankBalanceService.ts";
+import { balanceReport, computeHoldings, fromBase, type WalletBalances } from "../pipeline/balances.ts";
+import { API_URLS } from "../config/apiUrls.ts";
 
 // Written to the run's folder when a wallet could not be fetched: summ-sync refuses such a run, since the wallet's
 // files are missing and a plan would delete its rows in Summ (docs/specs/run-summary.md, Not fetched)
@@ -99,6 +102,7 @@ export class Exporter {
   // Wallets skipped because a source failed for them, filled by collectBundles
   notFetched: NotFetched[] = [];
   private readonly today: Date;
+  private readonly store: RecordStore;
 
   constructor(filename: string, options: ExportOptions = {}) {
     this.today = options.today ?? new Date();
@@ -132,14 +136,14 @@ export class Exporter {
       );
     }
 
-    const store = new RecordStore(storePath, {
+    const store = (this.store = new RecordStore(storePath, {
       offline: options.offline,
       fetch: options.fetch,
       replay: options.replay ? SnapshotManifest.load(options.replay) : undefined,
       manifest: this.snapshots,
       pendingStuckDays: this.config.pendingStuckDays,
       today: options.today,
-    });
+    }));
     this.viewblock = new Viewblock(store);
     this.midgard = new MidgardService(store);
     this.thornode = new ThornodeService(store);
@@ -351,6 +355,72 @@ export class Exporter {
     this.endWarnings.push(...this.viewblock.warnings());
 
     return rows;
+  }
+
+  // Compares what the rows say each wallet holds with its bank balance on THORChain or Maya now, and flags holdings
+  // below zero; the findings go to summary.md (docs/specs/run-summary.md, Balance check). rows: every row of the run,
+  // in and outside its periods.
+  async checkBalances(rows: SummRow[]) {
+    let holdings;
+
+    // The CSV files are written by now: a row the check can't read must not stop the run before its summary
+    try {
+      holdings = computeHoldings(rows);
+    } catch (error: any) {
+      this.report.warn(`Balance check skipped: ${error?.message}`);
+      return;
+    }
+
+    const enabled = this.config.protocols ?? ["thorchain"];
+    const nodes = [
+      ...(enabled.includes(THORCHAIN.id)
+        ? [{ protocol: this.thorchain, name: "THORNode", url: API_URLS.thornode, source: "thornode-balance" }]
+        : []),
+      ...this.otherMidgards.flatMap(({ protocol }) =>
+        protocol.nodeUrl
+          ? [{ protocol, name: "Mayanode", url: protocol.nodeUrl, source: `${protocol.id}node-balance` }]
+          : [],
+      ),
+    ];
+    const wallets: WalletBalances[] = [];
+
+    // A wallet the run skipped has no rows, so there is nothing to check (Not fetched names it)
+    const skipped = new Set(this.notFetched.map(({ wallet }) => addressKey(wallet.address)));
+
+    for (const wallet of this.config.wallets.filter((w) => !skipped.has(addressKey(w.address)))) {
+      const node = nodes.find(({ protocol }) => wallet.address.startsWith(protocol.nativeAddressPrefix));
+      const entry: WalletBalances = { address: wallet.address, name: wallet.name, native: !!node, source: node?.name };
+      wallets.push(entry);
+
+      if (!node) {
+        continue;
+      }
+
+      if (this.store.addedSinceReplay(node.source)) {
+        entry.notChecked = "the replayed run fetched no balances";
+        continue;
+      }
+
+      try {
+        const { balances } = await new BankBalanceService(this.store, node.url, node.source).balances(wallet.address);
+        entry.onChain = new Map();
+
+        for (const { denom, amount } of balances) {
+          const { currency, decimals } = bankCurrency(denom, node.protocol);
+          entry.onChain.set(currency, (entry.onChain.get(currency) ?? 0n) + fromBase(amount, decimals));
+        }
+      } catch (error: any) {
+        // Offline with no balance stored, or a replayed run that fetched none for this wallet
+        const hint = error instanceof StoreMissError && !error.message.endsWith("in the replayed run");
+        entry.notChecked = `${error?.message}${hint ? " (run without --offline to fetch it)" : ""}`;
+      }
+    }
+
+    const report = balanceReport(holdings, wallets);
+    this.report.info(
+      `Balance check: ${report.checked} THORChain and Maya wallets compared with their bank balance; ${report.differences} differences, ${report.negatives} holdings below zero`,
+    );
+    report.lines.forEach((line) => this.report.balance(line));
   }
 
   // An action still pending from before this date is stuck

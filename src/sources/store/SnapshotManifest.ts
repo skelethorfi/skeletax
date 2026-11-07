@@ -138,8 +138,9 @@ export class SnapshotManifest {
         `${count((e) => e.choice === "kept-over-pruned")} kept over a pruned copy, ${count((e) => !!e.missing)} missing from the source`,
     ];
 
-    // Changes this run found, and records the sources no longer return; earlier choices are in the manifest
-    const notable = records.filter((e) => e.fetched === "changed" || e.missing);
+    // Changes this run found, and records the sources no longer return; earlier choices are in the manifest. A bank
+    // balance (the balance check's) changes with any activity, so it is no news
+    const notable = records.filter((e) => (e.fetched === "changed" || e.missing) && !e.source.endsWith("-balance"));
     notable
       .slice(0, 20)
       .forEach((entry) =>
