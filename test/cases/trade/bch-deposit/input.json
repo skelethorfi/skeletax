@@ -1,0 +1,80 @@
+{
+  "description": "trade success: [BCH.BCH] -> [BCH~BCH]",
+  "source": "midgard",
+  "wallet": "qqrf6me079vxmh30yu5p07nckl2a4qs4gcn2jdwyms",
+  "data": {
+    "date": "1792646808393009442",
+    "height": "28346840",
+    "in": [
+      {
+        "address": "qqrf6me079vxmh30yu5p07nckl2a4qs4gcn2jdwyms",
+        "coins": [
+          {
+            "amount": "3811880243",
+            "asset": "BCH.BCH"
+          }
+        ],
+        "txID": "313FEF87E25E1D14E7CE35EC13B8D6AE2D2654158FF59B317768769883D67A54"
+      }
+    ],
+    "metadata": {},
+    "out": [
+      {
+        "address": "thor1kqsy8kqhyld04gerhry2z2tw04gwf655zw3uk2",
+        "coins": [
+          {
+            "amount": "3811880243",
+            "asset": "BCH~BCH"
+          }
+        ],
+        "txID": "313FEF87E25E1D14E7CE35EC13B8D6AE2D2654158FF59B317768769883D67A54"
+      }
+    ],
+    "pools": [],
+    "status": "success",
+    "type": "trade"
+  },
+  "thornodeTxs": [
+    {
+      "tx": {
+        "id": "313FEF87E25E1D14E7CE35EC13B8D6AE2D2654158FF59B317768769883D67A54",
+        "chain": "BCH",
+        "from_address": "qqrf6me079vxmh30yu5p07nckl2a4qs4gcn2jdwyms",
+        "to_address": "qqvq099cf3dj3uwjyk70mn03xg74rdgcc53rdqreag",
+        "coins": [
+          {
+            "asset": "BCH.BCH",
+            "amount": "3811880243"
+          }
+        ],
+        "gas": [
+          {
+            "asset": "BCH.BCH",
+            "amount": "1308"
+          }
+        ],
+        "memo": "TRADE+:thor1kqsy8kqhyld04gerhry2z2tw04gwf655zw3uk2"
+      },
+      "stages": {
+        "inbound_observed": {
+          "pre_confirmation_count": 111,
+          "final_count": 111,
+          "completed": true
+        },
+        "inbound_confirmation_counted": {
+          "remaining_confirmation_seconds": 0,
+          "completed": true
+        },
+        "inbound_finalised": {
+          "completed": true
+        },
+        "swap_status": {
+          "pending": false
+        }
+      }
+    }
+  ],
+  "usdPrices": {
+    "BCH.BCH": "280.5123267136775"
+  }
+}

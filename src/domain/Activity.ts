@@ -19,6 +19,8 @@ export type ActivityKind =
   | "lp.auction.deposit"
   | "lp.auction.position"
   | "switch"
+  | "trade.deposit"
+  | "trade.withdraw"
   | "runepool.deposit"
   | "runepool.withdraw"
   | "loan.open"

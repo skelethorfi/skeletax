@@ -12,6 +12,7 @@ import { interpretTcyClaim, interpretTcyDistribution, interpretTcyStake, interpr
 import type { Activity, Leg } from "../domain/Activity.ts";
 import { interpretRujira, RUJIRA_CONTRACT_TYPES } from "./midgard/rujira.ts";
 import { interpretSend } from "./midgard/send.ts";
+import { interpretTrade } from "./midgard/trade.ts";
 import { interpretFailedDeposit } from "./midgard/failed.ts";
 import { interpretViewblockSend } from "./viewblock/send.ts";
 import { interpretPendingWithdraw } from "./viewblock/pending.ts";
@@ -49,6 +50,7 @@ const REGISTRY: Record<string, Interpreter> = {
   "midgard/tcy_stake": activity(interpretTcyStake),
   "midgard/tcy_unstake": activity(interpretTcyStake),
   [`midgard/${ActionType.Send}`]: interpretSend,
+  "midgard/trade": activity(interpretTrade),
   "midgard/failed": interpretFailedDeposit,
   ...Object.fromEntries(RUJIRA_CONTRACT_TYPES.map((type) => [`midgard/contract/${type}`, interpretRujira])),
   // Viewblock gives only sends from before 2022-04 that Midgard does not list (docs/specs/sends.md), and the

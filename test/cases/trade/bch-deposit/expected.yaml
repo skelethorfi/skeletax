@@ -1,0 +1,27 @@
+wallet: qqrf6me079vxmh30yu5p07nckl2a4qs4gcn2jdwyms
+timestamp: 2026-10-22T05:26:48.393Z
+type: bridge-out
+baseCurrency: BCH
+baseAmount: "38.11880243"
+feeCurrency: BCH
+feeAmount: "0.00001308"
+from: qqrf6me079vxmh30yu5p07nckl2a4qs4gcn2jdwyms
+to: thor1kqsy8kqhyld04gerhry2z2tw04gwf655zw3uk2
+blockchain: BCH
+description: "1/2 - Trade account deposit: send 38.11880243 BCH.BCH; 313FEF87E25E1D14E7CE35EC13B8D6AE2D2654158FF59B317768769883D67A54"
+referencePricePerUnit: "280.5123267136775"
+referencePriceCurrency: USD
+id: 2026-10-22T05:26:48.393Z.out.8a2fea4c41d4
+---
+wallet: thor1kqsy8kqhyld04gerhry2z2tw04gwf655zw3uk2
+timestamp: 2026-10-22T05:26:58.393Z
+type: bridge-in
+baseCurrency: BCH
+baseAmount: "38.11880243"
+from: qqrf6me079vxmh30yu5p07nckl2a4qs4gcn2jdwyms
+to: thor1kqsy8kqhyld04gerhry2z2tw04gwf655zw3uk2
+blockchain: THORChain
+description: "2/2 - Trade account deposit: receive 38.11880243 BCH~BCH; 313FEF87E25E1D14E7CE35EC13B8D6AE2D2654158FF59B317768769883D67A54"
+referencePricePerUnit: "280.5123267136775"
+referencePriceCurrency: USD
+id: 2026-10-22T05:26:48.393Z.in.32d082ed70c2

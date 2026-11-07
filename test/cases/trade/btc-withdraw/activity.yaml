@@ -1,0 +1,53 @@
+id: midgard/trade.BA517DAFC40EEC2B17E8C2804DF8634D960EFA8EFC7746D9ED9538D5548FE83E
+protocol: thorchain
+kind: trade.withdraw
+status: success
+time: 2026-10-29T23:17:15.641Z
+legs:
+  - direction: out
+    wallet: thor1kqsy8kqhyld04gerhry2z2tw04gwf655zw3uk2
+    asset:
+      notation: BTC~BTC
+      kind: trade
+    role: principal
+    basis: observed
+    txid: BA517DAFC40EEC2B17E8C2804DF8634D960EFA8EFC7746D9ED9538D5548FE83E
+    amount: "0.81589059"
+    decimals: 8
+  - direction: out
+    wallet: thor1kqsy8kqhyld04gerhry2z2tw04gwf655zw3uk2
+    asset:
+      notation: THOR.RUNE
+      kind: native
+    role: gas
+    basis: default
+    txid: BA517DAFC40EEC2B17E8C2804DF8634D960EFA8EFC7746D9ED9538D5548FE83E
+    amount: "0.02"
+    decimals: 8
+  - direction: in
+    wallet: 199JVFuJgimybw4RXBmftLAVufPeyP2GwG
+    asset:
+      notation: BTC.BTC
+      kind: native
+    role: principal
+    basis: observed
+    txid: 03611C3FF8A09C9F59CF369D489C507BC2E6D5C90DB322DF669FF83EC9C82411
+    amount: "0.81586418"
+    decimals: 8
+prices:
+  - asset:
+      notation: BTC~BTC
+      kind: trade
+    usd: "79017.55114660703"
+    source: midgard:history.depths
+  - asset:
+      notation: THOR.RUNE
+      kind: native
+    usd: "0.6401308647725699"
+    source: midgard:history.rune
+  - asset:
+      notation: BTC.BTC
+      kind: native
+    usd: "79017.55114660703"
+    source: midgard:history.depths
+details: {}
