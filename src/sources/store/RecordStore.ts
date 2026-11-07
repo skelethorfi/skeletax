@@ -268,14 +268,7 @@ export class RecordStore {
 
         return (
           fetched &&
-          this.store(
-          source,
-          key,
-          fetched.data,
-          rules,
-          { fetchedAt: new Date().toISOString(), url: fetched.url },
-          date,
-          )
+          this.store(source, key, fetched.data, rules, { fetchedAt: new Date().toISOString(), url: fetched.url }, date)
         );
       });
     }
