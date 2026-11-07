@@ -244,7 +244,7 @@ wallet. On THORChain the outbound has no txid of its own.
 The outbound goes to the sender, or to the refund address the memo gives after
 its destination (`activity.md`, The memo's destination). The failed-out and fee
 rows below are on the sending wallet either way, and the return's `failed-in`
-on the wallet paid; nothing moves the amount returned from the sender to
+(on an L1) on the wallet paid; nothing moves the amount returned from the sender to
 another address, so a return paid to one carries a warning to record that
 transfer by hand.
 

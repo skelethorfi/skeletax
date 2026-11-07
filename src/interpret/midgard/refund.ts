@@ -41,9 +41,10 @@ export function interpretRefund(bundle: RawBundle, protocol: Protocol): { activi
   const decimals = protocol.decimals(inputCoin.asset);
   const returned = returnedCoins.reduce((sum, coin) => sum + BigInt(coin.amount), 0n);
   const txid = input.txID ?? "";
-  const returnTxid = action.out.find((out) => out.txID)?.txID;
   // Each address paid, in its own spelling, once whatever its case
-  const returnAddresses = [...new Map(action.out.map((out) => [out.address.toLowerCase(), out.address])).values()];
+  const returnAddresses = [
+    ...new Map(action.out.filter((out) => out.address).map((out) => [out.address.toLowerCase(), out.address])).values(),
+  ];
   // The return is in the wallet it was paid to: the sender, or the refund address the memo gives after its
   // destination (docs/specs/activity.md, The memo's destination). Paid to several addresses, it stays with the sender.
   const returnWallet =
@@ -51,6 +52,11 @@ export function interpretRefund(bundle: RawBundle, protocol: Protocol): { activi
       ? returnAddresses[0]
       : input.address;
   const returnedAmount = parseAmount(returned.toString(), decimals);
+  // The payout to that wallet, else the first
+  const returnTxid = (
+    action.out.find((out) => out.txID && out.address?.toLowerCase() === returnWallet.toLowerCase()) ??
+    action.out.find((out) => out.txID)
+  )?.txID;
   const legs: Leg[] = [
     {
       direction: "out",
