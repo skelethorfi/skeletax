@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { actionsWithTxids, pull, rangeOf } from "../src/pull.ts";
+import { actionsSharingTxAcrossImports, actionsWithTxids, pull, rangeOf } from "../src/pull.ts";
 import {
   latestSnapshot,
   legsOf,
@@ -469,3 +469,20 @@ test("a made-up leg an apply left in place has its action read, so plan can see 
     const file = await pull(stateDir, undefined, { client, now: T0 });
     assert.ok(readSnapshot(file).legs.some((l) => l.legId === "made"));
   }));
+
+test("actionsSharingTxAcrossImports: actions sharing a tx hash whose legs were created more than a day apart", () => {
+  const listed = (id: string, tx: string, legs: string[]) => ({
+    tags: [],
+    "Action ID": id,
+    "Tx Hash": tx,
+    "Transaction IDs": legs.map((l) => `\`${l}\``).join(", "),
+  });
+  const actions = [
+    listed("a1", "0xAB", ["5ff000000000000000000001"]),
+    listed("a2", "ab", ["664000000000000000000002", "664000000000000000000003"]),
+    listed("b1", "cd", ["664000000000000000000004"]),
+    listed("b2", "cd", ["664000010000000000000005"]),
+    listed("c1", "ef", ["5ff000000000000000000006", "664000000000000000000007"]),
+  ];
+  assert.deepEqual(actionsSharingTxAcrossImports(actions).sort(), ["a1", "a2"]);
+});
