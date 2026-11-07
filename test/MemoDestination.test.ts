@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import { memoDestination, memoRefundAddress } from "../src/sources/thorchain/MidgardUtils.ts";
 import { runCaseLayers, type GoldenCaseInput } from "../src/fixtures/GoldenCase.ts";
+import type { SummRow } from "../src/export/summ/csv/index.ts";
 
 describe("memoDestination", () => {
   test("the destination alone", () => {
@@ -91,8 +92,17 @@ describe("a refund paid to the memo's refund address", () => {
     assert.equal(warnings(upper).length, 0);
   });
 
-  test("gives the same rows as a return to the sender, with a warning to record the transfer", () => {
-    assert.deepEqual(runCaseLayers(toRefund).rows, runCaseLayers(CASE).rows);
+  test("gives the sender's rows unchanged and the return's failed-in on the wallet paid, with a warning", () => {
+    const rows = runCaseLayers(toRefund).rows as SummRow[];
+    const sender = runCaseLayers(CASE).rows as SummRow[];
+    assert.deepEqual(
+      rows.filter((row) => row.type !== "failed-in"),
+      sender.filter((row) => row.type !== "failed-in"),
+    );
+    assert.deepEqual(
+      rows.filter((row) => row.type === "failed-in").map((row) => [row.wallet, row.to]),
+      [[REFUND, REFUND]],
+    );
     assert.equal(warnings(CASE).length, 0);
     assert.equal(warnings(toRefund).length, 1);
     assert.match(warnings(toRefund)[0].message, new RegExp(`went to ${REFUND}, not the sender`));

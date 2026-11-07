@@ -242,9 +242,11 @@ On an L1 the outbound is a real transaction on the original chain back to the
 wallet. On THORChain the outbound has no txid of its own.
 
 The outbound goes to the sender, or to the refund address the memo gives after
-its destination (`activity.md`, The memo's destination). The rows below are on
-the sending wallet either way; a return paid to another address carries a
-warning to record that transfer by hand.
+its destination (`activity.md`, The memo's destination). The failed-out and fee
+rows below are on the sending wallet either way, and the return's `failed-in`
+on the wallet paid; nothing moves the amount returned from the sender to
+another address, so a return paid to one carries a warning to record that
+transfer by hand.
 
 **What the wallet loses.** The gas to send the inbound, plus whatever the
 protocol kept: the amount sent minus the amount returned. A modern THORChain
