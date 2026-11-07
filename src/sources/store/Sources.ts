@@ -8,6 +8,7 @@ import type { TcyDistributionItem } from "../tcy/TcyDistributionService.ts";
 import { getPayoutDate, type MayaDistributionPayout } from "../maya/MayaDistributionService.ts";
 import type { CosmosTx } from "../thorchain/CosmosTxService.ts";
 import type { TcyClaimData } from "../tcy/TcyClaimService.ts";
+import type { NativeFee } from "../maya/MayanodeService.ts";
 
 // How each source's records are keyed, filed and compared in the store (docs/specs/snapshots.md). The
 // services and the importer of old caches both use these.
@@ -230,6 +231,10 @@ export interface ListSource {
 // no savers or loan event followed the collapse. It has no date of its own: it is filed by the claim's.
 export const TCY_CLAIM_RULES: RecordRules<TcyClaimData> = {};
 
+// Maya's native fee at a height (docs/specs/maya.md, Fees): final once fetched, since a past height's setting
+// does not change. It has no date of its own: it is filed by the action's.
+export const MAYANODE_FEE_RULES: RecordRules<NativeFee> = {};
+
 // The sources in a store: wallet lists, and records looked up one at a time (a THORNode tx status has no
 // date of its own: it is filed by the date of the action it was fetched for)
 export const SOURCES: { [source: string]: ListSource | { kind: "record"; rules: RecordRules<any> } } = {
@@ -255,4 +260,5 @@ export const SOURCES: { [source: string]: ListSource | { kind: "record"; rules: 
   "evm-receipt": { kind: "record", rules: EVM_RECEIPT_RULES },
   "evm-payout": { kind: "record", rules: EVM_PAYOUT_RULES },
   "tcy-claim": { kind: "record", rules: TCY_CLAIM_RULES },
+  "mayanode-fee": { kind: "record", rules: MAYANODE_FEE_RULES },
 };

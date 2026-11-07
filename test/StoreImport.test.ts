@@ -7,6 +7,9 @@ import { RecordStore } from "../src/sources/store/RecordStore.ts";
 import { importCache } from "../src/cli/store.ts";
 import { MidgardService } from "../src/sources/thorchain/MidgardService.ts";
 import { ThornodeService } from "../src/sources/thorchain/ThornodeService.ts";
+import { MayanodeService } from "../src/sources/maya/MayanodeService.ts";
+import { http } from "../src/sources/http.ts";
+import { SOURCES } from "../src/sources/store/Sources.ts";
 
 const action = (txID: string, extra: any = {}) => ({
   type: "addLiquidity",
@@ -158,6 +161,51 @@ describe("store import from the folder-per-record layout", () => {
     assert.deepEqual(
       (await new MidgardService(offline).getActions("w")).map((a) => a.type),
       ["swap"],
+    );
+  });
+});
+
+describe("store import of every source", () => {
+  test("copies Maya native fees, so an offline run on the copy has them", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-import-fee-"));
+    const get = mock.method(http, "get", async () => ({ data: { NATIVETRANSACTIONFEE: 2000000000 } }) as any);
+    await new MayanodeService(new RecordStore(path.join(dir, "a")), "https://node").nativeFee(1000);
+    get.mock.restore();
+
+    const counts = importCache(new RecordStore(path.join(dir, "b")), path.join(dir, "a"));
+
+    assert.equal(counts["mayanode-fee"]?.copies, 1);
+    const offline = new RecordStore(path.join(dir, "b"), { offline: true });
+    assert.deepEqual(await new MayanodeService(offline, "https://node").nativeFee(1000), {
+      height: 1000,
+      amount: "2000000000",
+      from: "mimir",
+    });
+  });
+
+  test("every source the services write to is in SOURCES", () => {
+    const srcDir = path.join(import.meta.dirname, "..", "src");
+    const code = fs
+      .readdirSync(srcDir, { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith(".ts"))
+      .map((file) => fs.readFileSync(path.join(srcDir, file), "utf8"))
+      .join("\n");
+    // A service's default source, and a source named where a record or list is stored
+    const named = [
+      ...code.matchAll(/source: string = "([a-z-]+)"/g),
+      ...code.matchAll(/\.(?:record|list|addedSinceReplay)(?:<[^>]*>)?\(\s*"([a-z-]+)"/g),
+    ].map((match) => match[1]);
+    // Sources derived from a Midgard's, e.g. `${this.source}-rune-price`
+    const suffixes = [...code.matchAll(/`\$\{this\.source\}(-[a-z-]+)`/g)].map((match) => match[1]);
+
+    assert.ok(named.includes("mayanode-fee") && named.includes("thornode") && suffixes.includes("-rune-price"));
+    assert.deepEqual(
+      named.filter((source) => !(source in SOURCES)),
+      [],
+    );
+    assert.deepEqual(
+      suffixes.filter((suffix) => !Object.keys(SOURCES).some((source) => source.endsWith(suffix))),
+      [],
     );
   });
 });
