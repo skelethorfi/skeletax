@@ -5,6 +5,7 @@ import { type Asset, toAsset } from "../../domain/Asset.ts";
 import type { Issue } from "../../domain/Issue.ts";
 import {
   getActionDate,
+  isMemoName,
   memoDestination,
   memoRefundAddress,
   parseMidgardAsset,
@@ -338,9 +339,19 @@ function getOutput(action: Action): Transaction {
     return out;
   }
 
-  // A partly filled swap to the sender's own address also pays it the unfilled part, in the input asset, listed before or
-  // after the swap's output
-  const toDest = action.out.filter((out) => out.address.toLowerCase() === destAddress.toLowerCase());
+  const paidTo = (address: string) => action.out.filter((out) => out.address.toLowerCase() === address.toLowerCase());
+  const toDest = paidTo(destAddress);
+
+  if (toDest.length === 0 && isMemoName(destAddress)) {
+    return pickOutput(action, paidTo(nameAddress(action, destAddress)));
+  }
+
+  return pickOutput(action, toDest);
+}
+
+// A partly filled swap to the sender's own address also pays it the unfilled part, in the input asset, listed before or
+// after the swap's output
+function pickOutput(action: Action, toDest: Transaction[]): Transaction {
   const out = toDest.find((out) => out.coins[0]?.asset !== action.in[0].coins[0]?.asset) ?? toDest[0];
 
   if (!out) {
@@ -348,4 +359,23 @@ function getOutput(action: Action): Transaction {
   }
 
   return out;
+}
+
+// The address a THORName in the memo's destination resolved to (docs/specs/activity.md, The memo's destination): the one
+// address paid in an asset other than the input, leaving out affiliate outputs. Returns are in the input asset.
+function nameAddress(action: Action, name: string): string {
+  const inputAsset = action.in[0].coins[0]?.asset;
+  const addresses = new Set(
+    action.out
+      .filter((out) => !out.affiliate && out.coins[0] && out.coins[0].asset !== inputAsset)
+      .map((out) => out.address.toLowerCase()),
+  );
+
+  if (addresses.size !== 1) {
+    throw new Error(
+      `swap: no matching out tx: the memo's destination "${name}" is a name, not an address, and ${addresses.size} addresses were paid that it could stand for`,
+    );
+  }
+
+  return [...addresses][0];
 }

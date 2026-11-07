@@ -3,7 +3,7 @@ import type { Activity, Leg } from "../../domain/Activity.ts";
 import type { Issue } from "../../domain/Issue.ts";
 import { formatAmount, parseAmount } from "../../domain/Amount.ts";
 import { toAsset } from "../../domain/Asset.ts";
-import { getActionDate, memoDestination, onlyCoin } from "../../sources/thorchain/MidgardUtils.ts";
+import { getActionDate, isMemoName, memoDestination, onlyCoin } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { inboundGas } from "./gas.ts";
@@ -74,7 +74,7 @@ export function interpretLoanRepay(bundle: RawBundle, protocol: Protocol): Inter
   const others = action.out.filter((out) => !isCollateral(out));
   const issues: Issue[] = others.map((out) => ({
     kind: "warning",
-    message: `loan repayment: output of ${out.coins.map((coin) => `${formatAmount(parseAmount(coin.amount, 8))} ${coin.asset}`).join(", ")} to ${out.address} is not the ${collateral} collateral paid to the memo's destination; not exported`,
+    message: `loan repayment: output of ${out.coins.map((coin) => `${formatAmount(parseAmount(coin.amount, 8))} ${coin.asset}`).join(", ")} to ${out.address} is not the ${collateral} collateral paid to the memo's destination${returned.length === 0 && isMemoName(dest) ? ` ("${dest}" is a name, which loans do not resolve)` : ""}; not exported`,
   }));
 
   const txid = input.txID ?? "";
@@ -152,7 +152,11 @@ function getOutput(action: Action, memo: string | undefined, destIndex: number):
   const out = action.out.find((out) => out.address.toLowerCase() === dest.toLowerCase());
 
   if (!out) {
-    throw new Error("loan: no matching out tx");
+    throw new Error(
+      dest && isMemoName(dest)
+        ? `loan: no matching out tx: the memo's destination "${dest}" is a name, not an address, which loans do not resolve`
+        : "loan: no matching out tx",
+    );
   }
 
   return out;
