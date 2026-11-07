@@ -1,0 +1,95 @@
+{
+  "description": "addLiquidity success: [BTC/BTC] -> []",
+  "source": "midgard",
+  "protocol": "maya",
+  "wallet": "bc1qw2kel623n947d0xagnaylswj20m2zgefdsxqm6",
+  "data": {
+    "date": "1740960102508644289",
+    "height": "10089898",
+    "in": [
+      {
+        "address": "bc1qw2kel623n947d0xagnaylswj20m2zgefdsxqm6",
+        "coins": [
+          {
+            "amount": "56929016",
+            "asset": "BTC/BTC"
+          }
+        ],
+        "txID": "C1E80FA20DCB21F12582A458F1EF7468227D5E8F3895B4CD24694E9799216B95"
+      }
+    ],
+    "metadata": {
+      "addLiquidity": {
+        "affiliateAddress": "",
+        "affiliateFee": "0",
+        "liquidityUnits": "56874615",
+        "memo": ""
+      }
+    },
+    "out": [],
+    "pools": [
+      "BTC/BTC"
+    ],
+    "status": "success",
+    "type": "addLiquidity"
+  },
+  "depositSwap": {
+    "date": "1740960102508644289",
+    "height": "10089898",
+    "in": [
+      {
+        "address": "bc1qw2kel623n947d0xagnaylswj20m2zgefdsxqm6",
+        "coins": [
+          {
+            "amount": "59020000",
+            "asset": "BTC.BTC"
+          }
+        ],
+        "txID": "C1E80FA20DCB21F12582A458F1EF7468227D5E8F3895B4CD24694E9799216B95"
+      }
+    ],
+    "metadata": {
+      "swap": {
+        "affiliateAddress": "",
+        "affiliateFee": "0",
+        "inPriceUSD": "92360.63928414331",
+        "isStreamingSwap": false,
+        "liquidityFee": "123984527920008",
+        "memo": "+:BTC/BTC:::0",
+        "networkFees": [],
+        "outPriceUSD": "92360.63928414331",
+        "streamingSwapMeta": {
+          "count": "1",
+          "depositedCoin": {
+            "amount": "0",
+            "asset": ""
+          },
+          "inCoin": {
+            "amount": "0",
+            "asset": ""
+          },
+          "interval": "0",
+          "lastHeight": "0",
+          "outCoin": {
+            "amount": "0",
+            "asset": ""
+          },
+          "outEstimation": "56929016",
+          "quantity": "1"
+        },
+        "swapSlip": "354",
+        "swapTarget": "0"
+      }
+    },
+    "out": [],
+    "pools": [
+      "BTC.BTC"
+    ],
+    "status": "pending",
+    "type": "swap"
+  },
+  "nativeFee": "2000000000",
+  "usdPrices": {
+    "BTC.BTC": "91169.55609915314"
+  }
+}

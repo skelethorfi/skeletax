@@ -111,7 +111,7 @@ async function fetchInput(txid: string, protocol: Protocol, index?: number): Pro
   if (protocol.id !== THORCHAIN.id) {
     midgards.set(protocol.id, new MidgardService(store, `${protocol.id}-midgard`, protocol.midgardUrl));
   }
-  const bundle = await new PriceSource(midgards).add(await source.bundle(action, action.in[0]?.address ?? ""));
+  const bundle = await new PriceSource(midgards).add(await source.bundle(action, action.in[0]?.address ?? "", actions));
 
   // A run carries on without what Viewblock could not give; a golden case must not
   if (viewblock.warnings().length) {

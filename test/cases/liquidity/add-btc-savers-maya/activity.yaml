@@ -1,0 +1,34 @@
+id: maya-midgard/addLiquidity.C1E80FA20DCB21F12582A458F1EF7468227D5E8F3895B4CD24694E9799216B95
+protocol: maya
+kind: savers.add
+status: success
+time: 2025-03-03T00:01:42.508Z
+legs:
+  - direction: out
+    wallet: bc1qw2kel623n947d0xagnaylswj20m2zgefdsxqm6
+    asset:
+      notation: BTC.BTC
+      kind: native
+    role: principal
+    basis: observed
+    txid: C1E80FA20DCB21F12582A458F1EF7468227D5E8F3895B4CD24694E9799216B95
+    amount: "0.5902"
+    decimals: 8
+  - direction: in
+    wallet: bc1qw2kel623n947d0xagnaylswj20m2zgefdsxqm6
+    asset:
+      notation: BTC/BTC
+      kind: position
+      position: savers
+    role: principal
+    basis: observed
+    amount: "0.56874615"
+    decimals: 8
+prices:
+  - asset:
+      notation: BTC.BTC
+      kind: native
+    usd: "91169.55609915314"
+    source: maya-midgard:history.depths
+details:
+  pool: BTC/BTC

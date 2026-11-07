@@ -152,6 +152,30 @@ export function getAggregatorOutbound(
   return isEvmChain(chain) ? { chain, txId: out.txID, to, tail } : undefined;
 }
 
+// A savers deposit's swap into the synth (docs/specs/savers.md): a swap of the same inbound txid and sender, with
+// the add's memo ('+:BTC/BTC…', THORChain's 'txType: add'), whose coin is what the wallet sent. Midgard leaves it
+// pending, with no output.
+export function findDepositSwap(action: Action, listed: Action[]): Action | undefined {
+  const deposit = action.in?.[0];
+  const txid = deposit?.txID?.toUpperCase();
+
+  if (action.type !== ActionTypeEnum.AddLiquidity || !action.pools?.[0]?.includes("/") || !txid) {
+    return undefined;
+  }
+
+  return listed.find((other) => {
+    const swap = other.metadata?.swap as any;
+    const memo: string = swap?.memo ?? "";
+    return (
+      other !== action &&
+      other.type === ActionTypeEnum.Swap &&
+      other.in?.[0]?.txID?.toUpperCase() === txid &&
+      other.in[0].address?.toLowerCase() === deposit.address?.toLowerCase() &&
+      (swap?.txType === "add" || /^(\+|a|add):/i.test(memo.trim()))
+    );
+  });
+}
+
 // Where the gas of an L1 inbound comes from when it is not THORNode (docs/specs/fees.md)
 export interface InboundGasSources {
   viewblock: Viewblock;
@@ -243,7 +267,7 @@ export class MidgardSource implements Source {
 
     const progress = new Progress(`[${this.protocol.blockchain}] ${wallet}: actions`, included.length);
     return mapConcurrent(included, BUNDLE_CONCURRENCY, async (action) => {
-      const bundle = await this.bundle(action, wallet);
+      const bundle = await this.bundle(action, wallet, actions);
       progress.done();
       return bundle;
     });
@@ -269,8 +293,9 @@ export class MidgardSource implements Source {
     );
   }
 
-  // The bundle of one action; the fixture tool uses this for an action it looked up by txid
-  async bundle(action: Action, wallet: string): Promise<RawBundle> {
+  // The bundle of one action; the fixture tool uses this for an action it looked up by txid. listed: the other
+  // actions listed with it (the wallet's, or the txid's), where a savers deposit's swap is found
+  async bundle(action: Action, wallet: string, listed: Action[] = []): Promise<RawBundle> {
     const isThorchain = this.protocol.id === THORCHAIN.id;
     const thornodeTxs = [];
     const cosmosTxs = [];
@@ -335,6 +360,8 @@ export class MidgardSource implements Source {
         ? await this.tcyClaims.getClaim(action.in[0].address, Number(action.height), getActionDate(action))
         : undefined;
 
+    const depositSwap = findDepositSwap(action, listed);
+
     return {
       source: "midgard",
       protocol: this.protocol.id,
@@ -342,6 +369,7 @@ export class MidgardSource implements Source {
       data: action,
       thornodeTxs,
       cosmosTxs,
+      ...(depositSwap ? { depositSwap } : {}),
       ...(viewblockInbounds.length ? { viewblockInbounds } : {}),
       ...(evmReceipts.length ? { evmReceipts } : {}),
       ...(tokenPayout ? { tokenPayout } : {}),

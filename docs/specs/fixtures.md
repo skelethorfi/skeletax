@@ -27,6 +27,7 @@ test/cases/<group>/<name>/
 | `thornodeTxs` | Optional related THORNode `tx/status` responses (swaps and switches)                                                        |
 | `cosmosTxs`   | Optional Cosmos txs of a contract action                                                                                    |
 | `tokenPayout` | Optional, what an aggregator outbound delivered (`activity.md`, Aggregator payouts)                                         |
+| `depositSwap` | Optional, a savers deposit's swap into the synth: what an L1 wallet sent (`savers.md`)                                      |
 | `usdPrices`   | Optional USD prices at the action's time, by `THOR.RUNE`, `MAYA.CACAO` or pool (`prices.md`); the fixture tool fetches them |
 | `treatment`   | Optional config choices the case is mapped with, e.g. `{"referencePrices": "all"}`                                          |
 
