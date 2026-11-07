@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test test/*.test.ts",
-    "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude='test/**' --test-coverage-lines=92 --test-coverage-branches=88 --test-coverage-functions=91 test/*.test.ts",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-exclude='test/**' --test-coverage-lines=95 --test-coverage-branches=89 --test-coverage-functions=93 test/*.test.ts",
     "typecheck": "tsc -p .",
     "export": "node src/full-export.ts wallets-config.toml",
     "fixture": "node src/cli/fixture.ts",
