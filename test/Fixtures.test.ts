@@ -5,7 +5,7 @@ import os from "os";
 import path from "path";
 import { Anonymiser, findSurvivors } from "../src/fixtures/Anonymise.ts";
 import { PrivateData } from "../src/fixtures/PrivateData.ts";
-import { getActionShape, sameShape } from "../src/fixtures/Shape.ts";
+import { describeShape, getActionIds, getActionShape, sameShape } from "../src/fixtures/Shape.ts";
 import { findCaseDirs, readCaseInput, runCase } from "../src/fixtures/GoldenCase.ts";
 
 const TXID = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF";
@@ -90,6 +90,38 @@ describe("Shape", () => {
 
     assert.equal(sameShape(getActionShape(swap() as any), getActionShape(eth as any)), false);
     assert.equal(sameShape(getActionShape(swap() as any), getActionShape(loan as any)), false);
+  });
+
+  test("a memo's refund address is part of the shape: to the sender or to another address", () => {
+    const withRefund = (refund: string) =>
+      swap({ metadata: { swap: { txType: "swap", memo: `=:THOR.RUNE:${THOR}/${refund}:0` } } });
+    const toSender = getActionShape(withRefund(BTC.toUpperCase()) as any);
+    const toOther = getActionShape(withRefund("bc1qotherwallet") as any);
+
+    assert.equal(getActionShape(swap() as any).refundAddress, undefined);
+    assert.equal(toSender.refundAddress, "sender");
+    assert.equal(toOther.refundAddress, "other");
+    assert.equal(sameShape(getActionShape(swap() as any), toSender), false);
+    assert.equal(sameShape(toSender, toOther), false);
+    assert.equal(sameShape(toOther, getActionShape(withRefund("bc1qanother") as any)), true);
+    assert.match(describeShape(toOther), /with a refund address \(another address\)$/);
+  });
+});
+
+describe("getActionIds", () => {
+  test("collects addresses and THORNames that appear only in a memo", () => {
+    const action = swap({
+      metadata: { swap: { txType: "swap", memo: `=:THOR.RUNE:${THOR}/bc1qrefundwallet:0/1/0:myname:15` } },
+    });
+    const ids = getActionIds(action as any);
+
+    assert.ok(ids.includes(BTC) && ids.includes(TXID) && ids.includes(THOR));
+    assert.ok(ids.includes("bc1qrefundwallet"));
+    assert.ok(ids.includes("myname"));
+    assert.equal(
+      ids.some((id) => new PrivateData(["BC1QREFUNDWALLET"]).isPrivate(id)),
+      true,
+    );
   });
 });
 
