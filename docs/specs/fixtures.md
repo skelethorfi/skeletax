@@ -62,7 +62,9 @@ to the CSV files, with no network:
    placeholder txids), or a Viewblock send whose hash a Midgard case also
    has, which the exporter drops as that action's inbound (`sends.md`). The
    test checks that Midgard, Viewblock and TCY cases are all in the store,
-   and that no Viewblock case is left out. Maya cases are not in it.
+   and that no Viewblock case is left out. Maya cases are not in it, nor is a
+   withdrawn pending add's case: it gives its add as found, and its anonymised
+   add and withdrawal share a time, so the store's pairing could not find it.
 2. It runs `src/full-export.ts --offline` on that config and checks that
    `all.csv` holds every case's `expected.yaml` rows and nothing else; that
    each row is in its period's `all-<period>` file and its wallet's file, and

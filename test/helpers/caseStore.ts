@@ -42,12 +42,15 @@ export interface Case {
 // a hash of its own first (withOwnHash). A case is left out when it would clash with one kept: the same record of
 // the same wallet (e.g. an anonymised placeholder txid), another record under the same key with other data, or a
 // Viewblock send whose hash a Midgard case has, which the exporter drops as that action's inbound (docs/specs/sends.md).
-// Cases with prices go first. Maya cases are left out (THORChain's sources only).
+// Cases with prices go first. Maya cases are left out (THORChain's sources only), and so are withdrawn pending adds.
 export function thorchainCases(root: string): { cases: Case[]; skipped: string[] } {
   const all = findCaseDirs(root)
     .map((dir) => ({ name: path.relative(root, dir), input: readCaseInput(dir), expected: readCaseExpected(dir) }))
     .filter((c): c is Case => c.expected !== undefined && (c.input.protocol ?? "thorchain") === "thorchain")
     .filter((c) => c.input.source !== "maya-distribution")
+    // A withdrawn pending add's case gives its add (pendingAdd) as found; in the store the withdrawal would have to
+    // find it in the Viewblock list, which the anonymised case cannot do (its add and withdrawal share a time)
+    .filter((c) => !c.input.pendingAdd)
     .map(withOwnHash);
   const midgardTxIds = new Set(
     all
