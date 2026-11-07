@@ -66,6 +66,33 @@ be attributed to one loan when the borrower has several.
 
 Fees follow `fees.md`.
 
+## The collateral paid back
+
+The repayment memo (`loan-:<collateral asset>:<destination>:…`) names the
+collateral asset and the address it is paid back to. A memo with no
+destination fails the action with an error that says so.
+
+The collateral paid back is every output to the memo's destination (in any
+case) in the collateral asset, however many outputs the action has:
+
+- **None**: the loan is not closed (`No closure`); only the `LoanRepayment`
+  row.
+- **One or more**: the loan is closed. A large outbound is split into several
+  outputs, each with its own txid; they are one `CollateralWithdrawal` row,
+  their total, whose description names each payout txid (`fees.md`).
+
+Any other output (another address, or another asset) is not exported, and
+raises a warning naming its amount, asset and address, so it can be entered by
+hand. An output to the destination with several coins fails the action (One
+coin per tx, above).
+
+Checked on 2026-11-02 against 150 public loan repayments from Midgard (via
+Liquify), the latest listed: 89 with no output, 60 with one (the collateral),
+and 1 with two, both ETH to the destination, together the collateral withdrawn
+(`3DE14894…`, the golden case `loan/repay-eth-loan-with-usdc-closed-split-outbound`:
+the borrower record shows 3,496.12 ETH collateral withdrawn; the two outputs
+add up to the swap's 3,444.45 ETH out less the two outbound fees).
+
 ## Loans open at the ThorFi collapse
 
 Lending was suspended in January 2025. A loan still open then was never

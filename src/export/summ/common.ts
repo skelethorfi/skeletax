@@ -34,13 +34,17 @@ export function legBlockchain(item: Leg, protocol: Protocol): string {
 }
 
 // A payout to an L1 wallet names its own txid, the one a wallet import of that chain lists (docs/specs/fees.md,
-// Txids in descriptions). THORChain and Maya wallets, and payouts with no txid yet, get nothing.
-export function paidOutNote(item: Leg): string {
-  const onProtocol = Object.values(PROTOCOLS).some((protocol) =>
-    item.wallet.toLowerCase().startsWith(protocol.nativeAddressPrefix),
-  );
-  const paid = item.direction === "in" && !!item.txid && !/^0+$/.test(item.txid);
-  return paid && !onProtocol ? `; paid out in ${item.txid}` : "";
+// Txids in descriptions). THORChain and Maya wallets, and payouts with no txid yet, get nothing. A row paid out
+// in several txs names each.
+export function paidOutNote(items: Leg | Leg[]): string {
+  const txids = [items].flat().filter((item) => {
+    const onProtocol = Object.values(PROTOCOLS).some((protocol) =>
+      item.wallet.toLowerCase().startsWith(protocol.nativeAddressPrefix),
+    );
+    const paid = item.direction === "in" && !!item.txid && !/^0+$/.test(item.txid);
+    return paid && !onProtocol;
+  });
+  return txids.length > 0 ? `; paid out in ${txids.map((item) => item.txid).join(", ")}` : "";
 }
 
 // The fee columns: the gas the wallet paid to send its transaction, blank when unknown (docs/specs/fees.md)

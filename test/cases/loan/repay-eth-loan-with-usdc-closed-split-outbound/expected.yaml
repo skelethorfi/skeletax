@@ -1,0 +1,27 @@
+wallet: "0x1309c007567a71b393094c21e70bd2647356a352"
+timestamp: 2025-01-23T06:25:20.765Z
+type: loan-repayment
+baseCurrency: USDC
+baseAmount: "7318.728415"
+feeCurrency: ETH
+feeAmount: "0.000310943492451552"
+from: "0x1309c007567a71b393094c21e70bd2647356a352"
+to: thorchain
+blockchain: ETH
+description: 1/2 - LoanRepayment deposit USDC to repay ETH loan. Closed loan; 3DE148948A91CAD4574E7EB0BE0CAA087088D853502F51834832BB87B507E9E6
+referencePricePerUnit: "1"
+referencePriceCurrency: USD
+id: 2025-01-23T06:25:20.765Z.out.a0aa10498e44
+---
+wallet: "0x1309c007567a71b393094c21e70bd2647356a352"
+timestamp: 2025-01-23T06:25:20.765Z
+type: collateral-withdrawal
+baseCurrency: ETH
+baseAmount: "3444.45233521"
+from: thorchain
+to: "0x1309c007567a71b393094c21e70bd2647356a352"
+blockchain: ETH
+description: 2/2 - LoanRepayment deposit USDC to repay ETH loan. Closed loan; 3DE148948A91CAD4574E7EB0BE0CAA087088D853502F51834832BB87B507E9E6; paid out in B6A75325A28431697E27BD008FE81E287DCF6A50F8ED5A33AAC3AF47FA59FBA7, 3AA59D30DCC27EC47661A300A3B8A4BEDE1AD77D3D704B0C76AACC528A786711
+referencePricePerUnit: "3249.548767866294"
+referencePriceCurrency: USD
+id: 2025-01-23T06:25:20.765Z.in.a1c7d773e3e0

@@ -5,6 +5,8 @@ import { parseAmount } from "../src/domain/Amount.ts";
 import { toAsset } from "../src/domain/Asset.ts";
 import { THORCHAIN } from "../src/domain/Protocol.ts";
 import { loanOpenRows, loanRepayRows } from "../src/export/summ/loan.ts";
+import { interpret } from "../src/interpret/registry.ts";
+import { readCaseInput, toBundle } from "../src/fixtures/GoldenCase.ts";
 
 describe("loan rows", () => {
   const IN = "a".repeat(64);
@@ -71,6 +73,76 @@ describe("loan rows", () => {
         `1/2 - LoanRepayment deposit RUNE to repay BTC loan. Closed loan; ${IN}`,
         `2/2 - LoanRepayment deposit RUNE to repay BTC loan. Closed loan; ${IN}; paid out in ${OUT}`,
       ],
+    );
+  });
+});
+
+describe("loan repayment interpretation", () => {
+  // A closed repayment: RUNE in, BTC collateral back to bc1-user-wallet-aaaaa
+  const closedCase = () => toBundle(readCaseInput("test/cases/loan/repay-btc-loan-with-rune-closed"));
+  const output = (address: string, asset: string, amount: string, txID: string) => ({
+    address,
+    coins: [{ asset, amount }],
+    height: "10000000",
+    txID,
+  });
+  const collateralLegs = (activity: Activity) =>
+    activity.legs
+      .filter((item) => item.direction === "in")
+      .map((item) => [item.wallet, item.asset.notation, item.amount.base, item.txid]);
+
+  test("an extra output does not hide the collateral; it is not exported and raises a warning", () => {
+    const bundle = closedCase();
+    const action = bundle.data as any;
+    action.out = [output("thor1-user-wallet-11111", "THOR.RUNE", "1000000", ""), ...action.out];
+
+    const { activities, issues } = interpret(bundle, THORCHAIN);
+
+    assert.deepEqual(collateralLegs(activities[0]), [["bc1-user-wallet-aaaaa", "BTC.BTC", 123000000n, undefined]]);
+    assert.deepEqual(issues, [
+      {
+        kind: "warning",
+        message:
+          "loan repayment: output of 0.01 THOR.RUNE to thor1-user-wallet-11111 is not the BTC.BTC collateral paid to the memo's destination; not exported",
+      },
+    ]);
+  });
+
+  test("an output to the destination in another asset is not the collateral", () => {
+    const bundle = closedCase();
+    (bundle.data as any).out = [output("bc1-user-wallet-aaaaa", "ETH.ETH", "5", "c".repeat(64))];
+
+    const { activities, issues } = interpret(bundle, THORCHAIN);
+
+    assert.deepEqual(collateralLegs(activities[0]), []);
+    assert.equal(issues.length, 1);
+    assert.equal(issues[0].kind, "warning");
+  });
+
+  test("collateral paid back in two outputs is two legs and one row, their total, naming both txids", () => {
+    const bundle = closedCase();
+    (bundle.data as any).out = [
+      output("bc1-user-wallet-aaaaa", "BTC.BTC", "100000000", "c".repeat(64)),
+      output("BC1-USER-WALLET-AAAAA", "BTC.BTC", "23000000", "d".repeat(64)),
+    ];
+
+    const { activities, issues } = interpret(bundle, THORCHAIN);
+    const rows = loanRepayRows(activities[0], THORCHAIN);
+
+    assert.deepEqual(issues, []);
+    assert.equal(collateralLegs(activities[0]).length, 2);
+    assert.equal(rows.length, 2);
+    assert.equal(rows[1].baseAmount, "1.23");
+    assert.match(rows[1].description ?? "", new RegExp(`; paid out in ${"c".repeat(64)}, ${"d".repeat(64)}$`));
+  });
+
+  test("a memo with no destination fails with a clear error", () => {
+    const bundle = closedCase();
+    (bundle.data as any).metadata.swap.memo = "loan-:BTC.BTC";
+
+    assert.deepEqual(
+      interpret(bundle, THORCHAIN).issues.map((issue) => [issue.kind, issue.message.split(". ")[0]]),
+      [["failed", "[Midgard] loan: the memo names no destination (loan-:BTC.BTC)"]],
     );
   });
 });
