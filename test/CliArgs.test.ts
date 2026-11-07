@@ -223,15 +223,15 @@ describe("full-export command", () => {
       assert.match(result.stderr, /^Error: Config: referencePrices must be .* \(got "some"\)\n$/);
 
       // Checked when the config is read, before anything is fetched or exported
-      fs.writeFileSync(path.join(dir, "dates.toml"), 'fromDate = "2025-02-30x"\nwallets = []\n');
+      fs.writeFileSync(path.join(dir, "dates.toml"), 'fromDate = "2025-02-30x"\nfrequency = "yearly"\nwallets = []\n');
       const dates = run(["--offline", "dates.toml"], dir);
       assert.equal(dates.status, 1);
-      assert.equal(dates.stderr, 'Error: Config: fromDate must be a date written YYYY-MM-DD (got "2025-02-30x")\n');
+      assert.equal(dates.stderr, 'Error: Config: fromDate must be a date such as "2025-07-01" (got "2025-02-30x")\n');
 
       fs.writeFileSync(path.join(dir, "nowallets.toml"), 'fromDate = "2025-01-01"\n');
       const noWallets = run(["--offline", "nowallets.toml"], dir);
       assert.equal(noWallets.status, 1);
-      assert.equal(noWallets.stderr, "Error: Config: wallets must be a list of wallets (got undefined)\n");
+      assert.equal(noWallets.stderr, "Error: Config: wallets must be a list of [[wallets]] entries (got undefined)\n");
 
       const missing = run(["--offline", "nope.toml"], dir);
       assert.equal(missing.status, 1);
