@@ -48,6 +48,8 @@ import { midgardActionKey } from "../sources/store/Sources.ts";
 import { PriceSource } from "../sources/Prices.ts";
 import type { IWallet } from "../config/IWallet.ts";
 import { addressKey } from "../utils/Address.ts";
+import { InputError } from "../utils/InputError.ts";
+import { knownErrorMessage } from "./args.ts";
 import { BankBalanceService, bankCurrency } from "../sources/thorchain/BankBalanceService.ts";
 import { balanceReport, computeHoldings, fromBase, type WalletBalances } from "../pipeline/balances.ts";
 import { API_URLS } from "../config/apiUrls.ts";
@@ -131,7 +133,7 @@ export class Exporter {
         ? path.dirname(options.replay)
         : options.replay;
     if (replayDir && fs.existsSync(path.join(replayDir, NOT_FETCHED_FILE))) {
-      throw new Error(
+      throw new InputError(
         `--replay ${options.replay}: that run skipped a wallet (${NOT_FETCHED_FILE}), so it cannot be replayed; replay a run that fetched every wallet`,
       );
     }
@@ -218,7 +220,7 @@ export class Exporter {
         this.report.notFetchedWallet(`${wallet.name} (${wallet.address}): ${current?.name ?? "unknown"}: ${message}`);
 
         // A known error needs no stack; another one keeps it, to debug
-        if (!(error instanceof StoreMissError) && error instanceof Error && error.stack) {
+        if (knownErrorMessage(error) === undefined && error instanceof Error && error.stack) {
           console.error(error.stack);
         }
 

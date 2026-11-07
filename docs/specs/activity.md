@@ -247,7 +247,7 @@ pool asset never reaches the wallet, though Midgard reports it as the output.
   with no logs, stops the run and stores nothing.
 - **Symbol:** read when the record is first fetched, in upper case as Midgard
   writes tokens, and kept. It is the contract's symbol then, not at the swap; a
-  refetch (`--fetch all`) after a rename changes the row's currency and ID. A
+  refetch (`--refetch-all`) after a rename changes the row's currency and ID. A
   symbol that would read as another currency (`UNI-V2`, `LUNA`) fails the action.
 - **Loans** are not looked up: the loan mappers keep the pool asset.
 - **Replaying a run from before this source:** no record, so the pool asset, as
