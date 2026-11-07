@@ -1,6 +1,6 @@
 import type { Action } from "@xchainjs/xchain-midgard";
 import type { Activity, Leg } from "../../domain/Activity.ts";
-import { parseAmount } from "../../domain/Amount.ts";
+import { formatAmount, parseAmount } from "../../domain/Amount.ts";
 import { toAsset } from "../../domain/Asset.ts";
 import type { Issue } from "../../domain/Issue.ts";
 import { getActionDate } from "../../sources/thorchain/MidgardUtils.ts";
@@ -41,7 +41,22 @@ export function interpretRefund(bundle: RawBundle, protocol: Protocol): { activi
   const decimals = protocol.decimals(inputCoin.asset);
   const returned = returnedCoins.reduce((sum, coin) => sum + BigInt(coin.amount), 0n);
   const txid = input.txID ?? "";
-  const returnTxid = action.out.find((out) => out.txID)?.txID;
+  // Each address paid, in its own spelling, once whatever its case
+  const returnAddresses = [
+    ...new Map(action.out.filter((out) => out.address).map((out) => [out.address.toLowerCase(), out.address])).values(),
+  ];
+  // The return is in the wallet it was paid to: the sender, or the refund address the memo gives after its
+  // destination (docs/specs/activity.md, The memo's destination). Paid to several addresses, it stays with the sender.
+  const returnWallet =
+    returnAddresses.length === 1 && returnAddresses[0].toLowerCase() !== input.address.toLowerCase()
+      ? returnAddresses[0]
+      : input.address;
+  const returnedAmount = parseAmount(returned.toString(), decimals);
+  // The payout to that wallet, else the first
+  const returnTxid = (
+    action.out.find((out) => out.txID && out.address?.toLowerCase() === returnWallet.toLowerCase()) ??
+    action.out.find((out) => out.txID)
+  )?.txID;
   const legs: Leg[] = [
     {
       direction: "out",
@@ -56,11 +71,9 @@ export function interpretRefund(bundle: RawBundle, protocol: Protocol): { activi
       ? [
           {
             direction: "in",
-            // Paid where the payout went: a memo can name a refund address other than the sender (the sender's
-            // spelling when it is the same address in another case, as for swaps)
-            wallet: returnWallet(action.out.find((out) => out.address)?.address, input.address),
+            wallet: returnWallet,
             asset: inputAsset,
-            amount: parseAmount(returned.toString(), decimals),
+            amount: returnedAmount,
             role: "returned",
             basis: "observed",
             ...(returnTxid ? { txid: returnTxid } : {}),
@@ -71,16 +84,33 @@ export function interpretRefund(bundle: RawBundle, protocol: Protocol): { activi
   const gas = inboundGas(txid, bundle, input.address, inputCoin.asset, protocol);
   const reason = ((action.metadata.refund as any)?.reason ?? "").replace(/[\n\t]/g, " ").trim();
   // The source exports a pending refund only once it is stuck (docs/specs/pending.md)
-  const issues: Issue[] =
-    action.status === "pending"
+  const issues: Issue[] = [
+    ...(action.status === "pending"
       ? [
           {
-            kind: "warning",
+            kind: "warning" as const,
             message:
               "refund still pending past the cut-off: what was not returned is exported as lost; check it never came back",
           },
         ]
-      : [];
+      : []),
+    ...(returned > 0n && returnAddresses.length > 1
+      ? [
+          {
+            kind: "warning" as const,
+            message: `the ${formatAmount(returnedAmount)} ${inputCoin.asset} returned was paid to several addresses (${returnAddresses.join(", ")}): its leg is on the sender; check where it went`,
+          },
+        ]
+      : []),
+    ...(returned > 0n && returnWallet !== input.address
+      ? [
+          {
+            kind: "warning" as const,
+            message: `the ${formatAmount(returnedAmount)} ${inputCoin.asset} returned went to ${returnWallet}, not the sender: no row moves it there, so record that transfer by hand`,
+          },
+        ]
+      : []),
+  ];
 
   return {
     activities: [
@@ -98,8 +128,4 @@ export function interpretRefund(bundle: RawBundle, protocol: Protocol): { activi
     ],
     issues,
   };
-}
-
-function returnWallet(paid: string | undefined, sender: string): string {
-  return !paid || paid.toLowerCase() === sender.toLowerCase() ? sender : paid;
 }

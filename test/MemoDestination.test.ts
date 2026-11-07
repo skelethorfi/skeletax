@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import { memoDestination, memoRefundAddress } from "../src/sources/thorchain/MidgardUtils.ts";
 import { runCaseLayers, type GoldenCaseInput } from "../src/fixtures/GoldenCase.ts";
+import type { SummRow } from "../src/export/summ/csv/index.ts";
 
 describe("memoDestination", () => {
   test("the destination alone", () => {
@@ -59,5 +60,66 @@ describe("a partly filled swap whose unfilled part goes to the memo's refund add
     assert.equal(warnings(CASE).length, 0);
     assert.equal(warnings(toRefund).length, 1);
     assert.match(warnings(toRefund)[0].message, new RegExp(`${REFUND}, not the sender`));
+  });
+});
+
+describe("a refund paid to the memo's refund address", () => {
+  const CASE: GoldenCaseInput = JSON.parse(fs.readFileSync("test/cases/refund/btc-price-limit/input.json", "utf8"));
+  const REFUND = "bc1qrefundaddressnotthesender";
+  const toRefund = structuredClone(CASE);
+  const action = toRefund.data as any;
+  action.metadata.refund.memo = action.metadata.refund.memo.replace(/^(=:[^:]*:[^:]*)/, `$1/${REFUND}`);
+  action.out[0].address = REFUND;
+  const legs = (input: GoldenCaseInput) =>
+    runCaseLayers(input).activities.flatMap((activity) =>
+      activity.legs.map((leg) => ({ role: leg.role, wallet: leg.wallet, amount: leg.amount })),
+    );
+  const warnings = (input: GoldenCaseInput) =>
+    runCaseLayers(input).issues.filter((issue) => issue.kind === "warning" && issue.message.includes("returned"));
+
+  test("puts the return in the wallet it was paid to", () => {
+    const expected = legs(CASE).map((leg) => (leg.role === "returned" ? { ...leg, wallet: REFUND } : leg));
+
+    assert.ok(expected.some((leg) => leg.role === "returned"));
+    assert.deepEqual(legs(toRefund), expected);
+  });
+
+  test("keeps the sender's spelling when the output's address differs only in case", () => {
+    const upper = structuredClone(CASE);
+    (upper.data as any).out[0].address = (upper.data as any).out[0].address.toUpperCase();
+
+    assert.deepEqual(legs(upper), legs(CASE));
+    assert.equal(warnings(upper).length, 0);
+  });
+
+  test("gives the sender's rows unchanged and the return's failed-in on the wallet paid, with a warning", () => {
+    const rows = runCaseLayers(toRefund).rows as SummRow[];
+    const sender = runCaseLayers(CASE).rows as SummRow[];
+    assert.deepEqual(
+      rows.filter((row) => row.type !== "failed-in"),
+      sender.filter((row) => row.type !== "failed-in"),
+    );
+    assert.deepEqual(
+      rows.filter((row) => row.type === "failed-in").map((row) => [row.wallet, row.to]),
+      [[REFUND, REFUND]],
+    );
+    assert.equal(warnings(CASE).length, 0);
+    assert.equal(warnings(toRefund).length, 1);
+    assert.match(warnings(toRefund)[0].message, new RegExp(`went to ${REFUND}, not the sender`));
+  });
+
+  test("paid to several addresses, stays with the sender and warns", () => {
+    const split = structuredClone(CASE);
+    const out = (split.data as any).out[0];
+    const half = (BigInt(out.coins[0].amount) / 2n).toString();
+    const rest = (BigInt(out.coins[0].amount) - BigInt(half)).toString();
+    (split.data as any).out = [
+      { ...out, coins: [{ ...out.coins[0], amount: half }] },
+      { ...out, address: REFUND, coins: [{ ...out.coins[0], amount: rest }] },
+    ];
+
+    assert.deepEqual(legs(split), legs(CASE));
+    assert.equal(warnings(split).length, 1);
+    assert.match(warnings(split)[0].message, /several addresses/);
   });
 });
