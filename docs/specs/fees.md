@@ -352,6 +352,20 @@ the protocol.
 | L1 side (an add of a BEP2 token) | `FailedOut` of the amount added with its L1 gas; `Fee` of sent − returned; `FailedIn` of the payout with its txid; `Fee` 0.02 RUNE on the THORChain wallet (the request) |
 | THORChain side (an add of RUNE)  | `FailedOut` of the RUNE added, fee 0.02 RUNE; `Fee` of sent − returned; `Fee` 0.02 RUNE (the request)                                                                    |
 
+**Limitation: pairs after 2022-04-01 are not exported.** Midgard lists
+neither tx of such a pair in any period, not only before the upgrade, and a
+run reads Viewblock only for sends before 2022-04-01. So a run has no record
+that a later pair exists, and exports nothing for it. The holdings come out the
+same (the send and its payback are both missing), but the fees are missing:
+the add's and the request's native fees and what the protocol kept, 0.06 RUNE
+per pair on the THORChain side. The balance check (`run-summary.md`, Balance check) shows the
+wallet that much above THORNode. THORNode's archive serves both txs by hash,
+so reading them is not the gap: listing them is (THORNode's tx search by the
+signing wallet could). Until a source lists them, enter the rows above by hand
+in an extra folder of summ-sync (`packages/summ-sync/README.md`, `extraDirs`),
+with the same txids, types and amounts, so a run that exports them later
+overtakes the hand-made rows.
+
 ### Refunds of an affiliate's cut
 
 When a swap has an affiliate, THORChain swaps the affiliate's cut to RUNE as a
