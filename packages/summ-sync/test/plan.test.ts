@@ -4003,4 +4003,18 @@ test("exchange-copy: a fee held on the leg counts like a fee leg, and a line tha
   // The same with the CSV's fee held on its leg
   const [onLeg] = xcopies([{ ...api, quantity: 3 }, csv]);
   assert.match(onLeg.detail, /to ignore manual-csv \([^)]*\) \(its fee goes with it/);
+  // A fee in another currency on the other side is still a fee there: no note
+  const otherFee = xleg({
+    legId: "api-fee",
+    actionId: "a1",
+    side: "fees",
+    trade: "fee",
+    from: "exchange-a",
+    currency: "ZZZ",
+    quantity: 1,
+    importType: "api",
+    createdAt: OLD,
+  });
+  const [both] = xcopies([{ ...api, quantity: 3 }, csv, otherFee]);
+  assert.doesNotMatch(both.detail, /count nowhere/);
 });

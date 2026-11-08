@@ -1484,10 +1484,12 @@ export function makePlan(input: PlanInput): PlanResult {
       const can = sideToIgnore(side, true);
       const what = `${side[0].importType} (${createdOf(side[0]).slice(0, 10)})`;
       if (!("legs" in can)) return `${what} cannot simply be ignored (${can.why})`;
-      // Its fees go with it: when the other side holds none, the fee would then count nowhere
-      const dropsFee =
-        can.legs.some((l) => l.side === "fees" || Number(l.feeQuantity) > 0) &&
-        other.every((l) => !feesBeside(input.legs, l).length);
+      // Its fees go with it: when the other side holds no fee (of any currency, as a fee leg or on the leg), the fee
+      // would then count nowhere
+      const holdsFee = (l: Leg) =>
+        Number(l.feeQuantity) > 0 ||
+        input.legs.some((f) => f.actionId === l.actionId && f.side === "fees" && !IGNORED.has(f.trade));
+      const dropsFee = can.legs.some((l) => l.side === "fees" || Number(l.feeQuantity) > 0) && !other.some(holdsFee);
       const note = dropsFee
         ? " (its fee goes with it and the other side holds none, so the fee would count nowhere)"
         : "";
