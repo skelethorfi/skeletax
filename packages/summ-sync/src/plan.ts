@@ -177,7 +177,8 @@ export interface ReportEntry {
     | "foreign-pair"
     | "price-blank"
     | "made-up-left"
-    | "import-copy";
+    | "import-copy"
+    | "exchange-copy";
   filed: boolean;
   id?: string;
   legIds?: string[];
@@ -355,6 +356,89 @@ export function importCopies(legs: Leg[], managedSources: Set<string>): { copies
       for (const o of earlier) if (!g.originals.includes(o)) g.originals.push(o);
       groups.set(copy.actionId, g);
     }
+  }
+  return [...groups.values()];
+}
+const HOUR_MS = 60 * 60 * 1000;
+/** A leg's tx hash when it is a chain's (64 hex digits, or a long base58 signature), not an exchange's own id. */
+export const chainTxid = (l: Pick<Leg, "id">) => {
+  const tx = normaliseTxid(l.id);
+  return /^[0-9a-f]{64}$/.test(tx) || /^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(l.id) ? tx : "";
+};
+/** The account of a leg's side: the receiver of an incoming leg, the sender of an outgoing one. */
+const accountOf = (l: Leg) => (l.side === "incoming" ? l.to : l.from).toLowerCase();
+/** The fees of a leg's currency in its action: its fee legs, and a fee Summ holds on the leg itself. */
+export function feesBeside(legs: Leg[], l: Leg): number[] {
+  const own =
+    Number(l.feeQuantity) > 0 && sameCurrency(l.feeCurrency ?? l.currency, l.currency) ? [Number(l.feeQuantity)] : [];
+  const fees = legs.filter(
+    (f) =>
+      f.actionId === l.actionId && f.side === "fees" && !IGNORED.has(f.trade) && sameCurrency(f.currency, l.currency),
+  );
+  return [...own, ...fees.map((f) => f.quantity)];
+}
+/**
+ * Pairs of legs one account holds twice from two imports (spec: One event from two imports): in different actions,
+ * same account, side and currency, within two hours, with no tx hash in common (a shared one is an import copy), the
+ * quantities equal or apart by exactly a fee of the same currency in one of the two actions (a fee leg or one held
+ * on the leg; an exchange's withdrawal amount may include its fee), and from different imports (import types differ, or created more than an
+ * hour apart: one import adds its legs together, so two real orders alike from one import are not paired). Grouped
+ * by the pair of actions.
+ */
+export function exchangeCopies(legs: Leg[], managedSources: Set<string>): { a: Leg[]; b: Leg[] }[] {
+  const imported = legs.filter(
+    (l) =>
+      l.side !== "fees" &&
+      !managedSources.has(l.source) &&
+      // A wallet's import is a chain's record, which a copy repeats under the same tx hash (an import copy)
+      !["manual", "assumed-fee", SOFT_TRANSFER, "wallet"].includes(l.importType) &&
+      !IGNORED.has(l.trade) &&
+      accountOf(l) !== "" &&
+      createdOf(l) !== "",
+  );
+  const apartByFee = (big: Leg, small: Leg) =>
+    [...feesBeside(legs, big), ...feesBeside(legs, small)].some((fee) =>
+      sameAmount(big.quantity, small.quantity + fee),
+    );
+  const byKey = new Map<string, Leg[]>();
+  for (const l of imported) {
+    const key = `${accountOf(l)}|${l.side}|${l.currency.toLowerCase()}`;
+    byKey.set(key, [...(byKey.get(key) ?? []), l]);
+  }
+  // Every pair that fits, then each leg with its nearest in time only (two alike legs on both sides pair one to one)
+  const fits: { x: Leg; y: Leg; gap: number }[] = [];
+  for (const same of byKey.values()) {
+    same.sort((x, y) => Date.parse(x.timestamp) - Date.parse(y.timestamp));
+    for (let i = 0; i < same.length; i++) {
+      for (let j = i + 1; j < same.length; j++) {
+        const [x, y] = [same[i], same[j]];
+        const gap = Date.parse(y.timestamp) - Date.parse(x.timestamp);
+        if (gap > 2 * HOUR_MS) break;
+        if (x.actionId === y.actionId) continue;
+        // One chain tx on both is an import copy (equal) or two events (different); an exchange's own id or none may
+        // be one event
+        const [tx, ty] = [chainTxid(x), chainTxid(y)];
+        if ((tx && ty) || (normaliseTxid(x.id) !== "" && normaliseTxid(x.id) === normaliseTxid(y.id))) continue;
+        const amounts =
+          sameAmount(x.quantity, y.quantity) || (x.quantity > y.quantity ? apartByFee(x, y) : apartByFee(y, x));
+        const imports =
+          x.importType !== y.importType || Math.abs(Date.parse(createdOf(x)) - Date.parse(createdOf(y))) > HOUR_MS;
+        if (amounts && imports) fits.push({ x, y, gap });
+      }
+    }
+  }
+  const paired = new Set<string>();
+  const groups = new Map<string, { a: Leg[]; b: Leg[] }>();
+  for (const { x, y } of fits.sort((p, q) => p.gap - q.gap)) {
+    if (paired.has(x.legId) || paired.has(y.legId)) continue;
+    paired.add(x.legId).add(y.legId);
+    // The earlier-created side first, so a pair reads the same whichever leg was found first
+    const [first, second] = createdOf(x) <= createdOf(y) ? [x, y] : [y, x];
+    const key = `${first.actionId}|${second.actionId}`;
+    const g = groups.get(key) ?? { a: [], b: [] };
+    g.a.push(first);
+    g.b.push(second);
+    groups.set(key, g);
   }
   return [...groups.values()];
 }
@@ -1327,44 +1411,44 @@ export function makePlan(input: PlanInput): PlanResult {
   // side, nothing is offered (ignoreImportLegs would refuse it, or it would unpair a real transfer)
   const amountOf = (l: Leg) => Number(l.quantity.toFixed(10));
   // A leg already named to ignore is decided: not reported again
+  const describe = (ls: Leg[]) =>
+    ls
+      .map((l) => `${amountOf(l)} ${l.currency} (${l.side}, ${l.trade}, leg ${l.legId}, ${createdOf(l).slice(0, 10)})`)
+      .join(", ");
+  // isCopy: every fee of the copy's action goes with it; beside an earlier leg only the fees Summ made up do
+  const sideToIgnore = (side: Leg[], isCopy: boolean): { legs: Leg[] } | { why: string } => {
+    const named = new Set(side.map((l) => l.legId));
+    // A manual entry beside it counts even when ignored, as ignoreImportLegs counts it
+    const mates = input.legs.filter((o) => side.some((l) => l.actionId === o.actionId) && !named.has(o.legId));
+    const others = side
+      .flatMap((l) =>
+        input.legs.filter((o) => o.actionId === l.actionId && !named.has(o.legId) && !IGNORED.has(o.trade)),
+      )
+      .filter((o, i, all) => all.findIndex((x) => x.legId === o.legId) === i);
+    // Legs made up to pair it go with it, and the fees that would count on their own without it
+    const madeUp = others.filter(
+      (o) =>
+        !namedToIgnore.has(o.legId) &&
+        (o.importType === SOFT_TRANSFER || (o.side === "fees" && (isCopy || o.importType === "assumed-fee"))),
+    );
+    if (mates.some((o) => o.importType === "manual")) return { why: "a manual entry is in its action" };
+    const txid = normaliseTxid(side[0].id);
+    if (TXID.test(txid) && input.legs.some((o) => o.importType === "manual" && txidsNamedBy(o).includes(txid)))
+      return { why: "a manual entry names its tx" };
+    if (others.some((o) => o.side !== "fees" && o.importType !== SOFT_TRANSFER))
+      return { why: "it is paired in its action" };
+    const legs = [...side, ...madeUp];
+    const claimed = legs.find((l) => legClaims.has(l.legId));
+    if (claimed) return { why: `run row ${legClaims.get(claimed.legId)?.[0]} stands on leg ${claimed.legId}` };
+    return { legs };
+  };
+  const line = (l: Leg, why: string) =>
+    JSON.stringify({ legId: l.legId, currency: l.currency, quantity: amountOf(l), reason: why });
   for (const { copies, originals } of importCopies(
     input.legs.filter((l) => !namedToIgnore.has(l.legId)),
     managedSources,
   )) {
     const filed = copies.some((l) => isFiled(l.timestamp));
-    const describe = (ls: Leg[]) =>
-      ls
-        .map(
-          (l) => `${amountOf(l)} ${l.currency} (${l.side}, ${l.trade}, leg ${l.legId}, ${createdOf(l).slice(0, 10)})`,
-        )
-        .join(", ");
-    // isCopy: every fee of the copy's action goes with it; beside an earlier leg only the fees Summ made up do
-    const sideToIgnore = (side: Leg[], isCopy: boolean): { legs: Leg[] } | { why: string } => {
-      const named = new Set(side.map((l) => l.legId));
-      // A manual entry beside it counts even when ignored, as ignoreImportLegs counts it
-      const mates = input.legs.filter((o) => side.some((l) => l.actionId === o.actionId) && !named.has(o.legId));
-      const others = side
-        .flatMap((l) =>
-          input.legs.filter((o) => o.actionId === l.actionId && !named.has(o.legId) && !IGNORED.has(o.trade)),
-        )
-        .filter((o, i, all) => all.findIndex((x) => x.legId === o.legId) === i);
-      // Legs made up to pair it go with it, and the fees that would count on their own without it
-      const madeUp = others.filter(
-        (o) =>
-          !namedToIgnore.has(o.legId) &&
-          (o.importType === SOFT_TRANSFER || (o.side === "fees" && (isCopy || o.importType === "assumed-fee"))),
-      );
-      if (mates.some((o) => o.importType === "manual")) return { why: "a manual entry is in its action" };
-      const txid = normaliseTxid(side[0].id);
-      if (TXID.test(txid) && input.legs.some((o) => o.importType === "manual" && txidsNamedBy(o).includes(txid)))
-        return { why: "a manual entry names its tx" };
-      if (others.some((o) => o.side !== "fees" && o.importType !== SOFT_TRANSFER))
-        return { why: "it is paired in its action" };
-      const legs = [...side, ...madeUp];
-      const claimed = legs.find((l) => legClaims.has(l.legId));
-      if (claimed) return { why: `run row ${legClaims.get(claimed.legId)?.[0]} stands on leg ${claimed.legId}` };
-      return { legs };
-    };
     const reasonOf = (l: Leg, twins: Leg[], how: string) => {
       const twin = twins.find((t) => sameCopy(t, l));
       if (twin) return `${how} ${twin.legId}`;
@@ -1372,8 +1456,6 @@ export function makePlan(input: PlanInput): PlanResult {
         ? "made up to pair a leg imported twice"
         : "fee beside a leg imported twice";
     };
-    const line = (l: Leg, why: string) =>
-      JSON.stringify({ legId: l.legId, currency: l.currency, quantity: amountOf(l), reason: why });
     const copy = sideToIgnore(copies, true);
     const original = "legs" in copy ? copy : sideToIgnore(originals, false);
     const advice =
@@ -1388,6 +1470,39 @@ export function makePlan(input: PlanInput): PlanResult {
       legIds: copies.map((l) => l.legId),
       txids: [normaliseTxid(copies[0].id)],
       detail: `a later import holds again ${describe(copies)} of legs it already had (${describe(originals)}): the tx may count twice. ${advice}`,
+    });
+  }
+
+  // One event two imports hold (spec: One event from two imports), e.g. an exchange's API and a CSV of it: reported
+  // with the lines that would ignore each side that stands alone. Which import to keep is the user's rule, so both are
+  // offered
+  for (const { a, b } of exchangeCopies(
+    input.legs.filter((l) => !namedToIgnore.has(l.legId)),
+    managedSources,
+  )) {
+    const option = (side: Leg[], other: Leg[]) => {
+      const can = sideToIgnore(side, true);
+      const what = `${side[0].importType} (${createdOf(side[0]).slice(0, 10)})`;
+      if (!("legs" in can)) return `${what} cannot simply be ignored (${can.why})`;
+      // Its fees go with it: when the other side holds no fee (of any currency, as a fee leg or on the leg), the fee
+      // would then count nowhere
+      const holdsFee = (l: Leg) =>
+        Number(l.feeQuantity) > 0 ||
+        input.legs.some(
+          (f) => f.actionId === l.actionId && f.side === "fees" && !IGNORED.has(f.trade) && !namedToIgnore.has(f.legId),
+        );
+      const dropsFee = can.legs.some((l) => l.side === "fees" || Number(l.feeQuantity) > 0) && !other.some(holdsFee);
+      const note = dropsFee
+        ? " (its fee goes with it and the other side holds none, so the fee would count nowhere)"
+        : "";
+      return `to ignore ${what}${note}, add to ignoreImportLegs: ${can.legs.map((l) => line(l, `${l.side === "fees" ? "fee beside a" : "a"} leg held twice by two imports (the other: ${other[0].legId})`)).join(", ")}`;
+    };
+    plan.report.push({
+      kind: "exchange-copy",
+      filed: [...a, ...b].some((l) => isFiled(l.timestamp)),
+      legIds: [...a, ...b].map((l) => l.legId),
+      txids: [...new Set([...a, ...b].map((l) => normaliseTxid(l.id)).filter((t) => t !== ""))],
+      detail: `two imports hold one event at ${accountOf(a[0])}: ${describe(a)} and ${describe(b)}, within two hours: it may count twice. Keep one: ${option(a, b)}; or ${option(b, a)}`,
     });
   }
 
@@ -2090,7 +2205,9 @@ function narrow(
     r.id !== undefined
       ? ids.has(r.id)
       : [...ids].some((id) => r.detail.includes(id)) ||
-        (r.kind === "import-copy" && !!r.txids?.some((t) => txids.has(t))),
+        (r.kind === "import-copy" && !!r.txids?.some((t) => txids.has(t))) ||
+        // An event two imports hold is the imports' matter, not a row's: every plan says so
+        r.kind === "exchange-copy",
   );
   plan.held = plan.held.filter((h) =>
     h.id !== null

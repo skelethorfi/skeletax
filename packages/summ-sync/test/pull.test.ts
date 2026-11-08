@@ -3,7 +3,13 @@ import assert from "node:assert/strict";
 import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { actionsSharingTxAcrossImports, actionsWithTxids, pull, rangeOf } from "../src/pull.ts";
+import {
+  actionsHeldTwiceAcrossImports,
+  actionsSharingTxAcrossImports,
+  actionsWithTxids,
+  pull,
+  rangeOf,
+} from "../src/pull.ts";
 import {
   latestSnapshot,
   legsOf,
@@ -485,4 +491,58 @@ test("actionsSharingTxAcrossImports: actions sharing a tx hash whose legs were c
     listed("c1", "ef", ["5ff000000000000000000006", "664000000000000000000007"]),
   ];
   assert.deepEqual(actionsSharingTxAcrossImports(actions).sort(), ["a1", "a2"]);
+});
+
+test("actionsHeldTwiceAcrossImports: same account, side and currency, close in time and amount, from two imports", () => {
+  const listed = (id: string, date: string, over: Record<string, string>, legs: string[]) => ({
+    tags: [],
+    "Action ID": id,
+    Date: date,
+    "Action Category": "deposit",
+    "Transaction IDs": legs.map((l) => `\`${l}\``).join(", "),
+    ...over,
+  });
+  const to = { To: "Exchange A | rawAddress: exchange-a" };
+  const from = { From: "Exchange A | rawAddress: exchange-a" };
+  const actions = [
+    // An API deposit and a CSV's copy an hour earlier, created years apart
+    listed("api", "2024-03-01T10:00:00.000Z", { ...to, Incoming: "0.25 BTC (1.00)", "Tx Hash": "4242" }, [
+      "5ff000000000000000000001",
+    ]),
+    listed("csv", "2024-03-01T09:00:00.000Z", { ...to, Incoming: "0.25 BTC (1.00)" }, ["664000000000000000000002"]),
+    // A withdrawal whose amount includes its fee, and the CSV's without it
+    listed("w-api", "2024-04-01T10:00:00.000Z", { ...from, Outgoing: "10.01 SOL (1.00)" }, [
+      "5ff000000000000000000003",
+    ]),
+    listed("w-csv", "2024-04-01T10:00:00.000Z", { ...from, Outgoing: "10 SOL (1.00)" }, ["664000000000000000000004"]),
+    // Two orders alike from one import
+    listed("o1", "2024-05-01T10:00:00.000Z", { ...to, Incoming: "5 ETH (1.00)" }, ["5ff000000000000000000005"]),
+    listed("o2", "2024-05-01T10:01:00.000Z", { ...to, Incoming: "5 ETH (1.00)" }, ["5ff000000000000000000006"]),
+    // Two chain txs
+    listed("c1", "2024-06-01T10:00:00.000Z", { ...to, Incoming: "7 LTC (1.00)", "Tx Hash": "a".repeat(64) }, [
+      "5ff000000000000000000007",
+    ]),
+    listed("c2", "2024-06-01T10:00:00.000Z", { ...to, Incoming: "7 LTC (1.00)", "Tx Hash": "b".repeat(64) }, [
+      "664000000000000000000008",
+    ]),
+    // A copy already set to ignore
+    listed("i1", "2024-07-01T10:00:00.000Z", { ...to, Incoming: "3 DOT (1.00)" }, ["5ff000000000000000000009"]),
+    {
+      ...listed("i2", "2024-07-01T10:00:00.000Z", { ...to, Incoming: "3 DOT (1.00)" }, ["66400000000000000000000a"]),
+      "Action Category": "ignoreIn",
+    },
+  ];
+  assert.deepEqual(actionsHeldTwiceAcrossImports(actions).sort(), ["api", "csv", "w-api", "w-csv"]);
+  // Two imports of one session (legs created minutes apart), and a small withdrawal whose fee is a fifth of it
+  const more = [
+    listed("s-api", "2024-08-01T10:00:00.000Z", { ...to, Incoming: "2 XMR (1.00)" }, ["664000000000000000000011"]),
+    listed("s-csv", "2024-08-01T10:00:00.000Z", { ...to, Incoming: "2 XMR (1.00)" }, ["664000780000000000000012"]),
+    listed("f-api", "2024-09-01T10:00:00.000Z", { ...from, Outgoing: "0.0012 ZEC (1.00)" }, [
+      "664000000000000000000013",
+    ]),
+    listed("f-csv", "2024-09-01T10:00:00.000Z", { ...from, Outgoing: "0.001 ZEC (1.00)" }, [
+      "664000780000000000000014",
+    ]),
+  ];
+  assert.deepEqual(actionsHeldTwiceAcrossImports(more).sort(), ["f-api", "f-csv", "s-api", "s-csv"]);
 });
