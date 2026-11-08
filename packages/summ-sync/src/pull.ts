@@ -12,7 +12,7 @@ import { join, resolve } from "node:path";
 import { nextDay, startOfDay } from "./dates.ts";
 import { isWriteLine, readLogLines } from "./journal.ts";
 import { McpClient } from "./mcp.ts";
-import { CORRECTED_IDS, MISIDENTIFIED_IDS, matchesOwnLegs } from "./plan.ts";
+import { chainTxid, CORRECTED_IDS, MISIDENTIFIED_IDS, matchesOwnLegs } from "./plan.ts";
 import { isLegAbsent, type ListedAction, parseActions, parseDetail, parsePage, parsePageHeader } from "./parse.ts";
 import { readLeftLegs } from "./state.ts";
 import { type Config, extraDirsOf, loadConfig } from "./config.ts";
@@ -78,6 +78,66 @@ export function actionsSharingTxAcrossImports(actions: ListedAction[]): string[]
       ids.push(...same.map((a) => a["Action ID"] as string));
   }
   return ids;
+}
+
+/**
+ * The listed actions that may hold one event another import holds too (spec: One event from two imports): pairs with
+ * the same account (raw address), side and currency, within two hours, quantities within 1% (an amount may include
+ * its fee; plan checks exactly), no tx hash in common, and legs created more than an hour apart (from two imports).
+ * The listing gives each action's first incoming and outgoing amount, its From and To, and its leg ids.
+ */
+export function actionsHeldTwiceAcrossImports(actions: ListedAction[]): string[] {
+  const HOUR = 3_600_000;
+  const raw = (v: unknown) => (/rawAddress:\s*([^|]*)/.exec(str(v as string))?.[1] ?? "").trim().toLowerCase();
+  const amount = (v: unknown) => {
+    const m = /^([\d.e+-]+) (\S+)/.exec(str(v as string));
+    return m ? { quantity: Number(m[1]), currency: m[2].toLowerCase() } : null;
+  };
+  const created = (a: ListedAction) =>
+    (String(a["Transaction IDs"] ?? "").match(/[0-9a-f]{24}/gi) ?? []).map((id) => parseInt(id.slice(0, 8), 16) * 1000);
+  type Entry = {
+    id: string;
+    key: string;
+    time: number;
+    quantity: number;
+    tx: string;
+    chain: boolean;
+    created: number[];
+  };
+  const byKey = new Map<string, Entry[]>();
+  for (const a of actions) {
+    const time = Date.parse(str(a.Date));
+    // An action set to ignore (or spam) counts nothing, so it is no copy that counts
+    if (Number.isNaN(time) || /^(ignore|spam)/i.test(str(a["Action Category"]))) continue;
+    const tx = typeof a["Tx Hash"] === "string" ? normaliseTxid(a["Tx Hash"]) : "";
+    for (const [side, account, value] of [
+      ["in", raw(a.To), a.Incoming],
+      ["out", raw(a.From), a.Outgoing],
+    ] as const) {
+      const v = amount(value);
+      if (!v || !account) continue;
+      const key = `${account}|${side}|${v.currency}`;
+      const chain = typeof a["Tx Hash"] === "string" && chainTxid({ id: a["Tx Hash"] }) !== "";
+      const entry = { id: a["Action ID"] as string, key, time, quantity: v.quantity, tx, chain, created: created(a) };
+      byKey.set(key, [...(byKey.get(key) ?? []), entry]);
+    }
+  }
+  const ids = new Set<string>();
+  for (const same of byKey.values()) {
+    same.sort((x, y) => x.time - y.time);
+    for (let i = 0; i < same.length; i++) {
+      for (let j = i + 1; j < same.length; j++) {
+        const [x, y] = [same[i], same[j]];
+        if (y.time - x.time > 2 * HOUR) break;
+        if (x.id === y.id || (x.tx !== "" && x.tx === y.tx) || (x.chain && y.chain)) continue;
+        if (Math.abs(x.quantity - y.quantity) > 0.01 * Math.max(x.quantity, y.quantity)) continue;
+        if (!x.created.length || !y.created.length) continue;
+        if (Math.abs(Math.min(...x.created) - Math.min(...y.created)) <= HOUR) continue;
+        ids.add(x.id).add(y.id);
+      }
+    }
+  }
+  return [...ids];
 }
 
 /** The txids of the run's rows plan matches to Summ's own imports: categorised rows, and protocol rows whose fee is
@@ -255,6 +315,8 @@ export async function pull(
       if (listed.has(a["Action ID"])) needed.add(a["Action ID"] as string);
     // A tx a later import added again (spec: Copies a later import made): plan reads both copies to report it
     for (const id of actionsSharingTxAcrossImports([...actions, ...late])) if (listed.has(id)) needed.add(id);
+    // An event two imports hold, under different tx hashes (spec: One event from two imports): plan reads both
+    for (const id of actionsHeldTwiceAcrossImports([...actions, ...late])) if (listed.has(id)) needed.add(id);
     // A made-up leg an apply left in place can be outside all of those: plan must see whether it is still there
     // and so can a manual entry the config names, alone in its action
     for (const legId of [

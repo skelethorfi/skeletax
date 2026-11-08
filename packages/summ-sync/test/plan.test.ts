@@ -3830,3 +3830,134 @@ test("import-copy: a leg a run row stands on is not offered; a scoped plan keeps
   const scoped = plan({ rows: [r], legs: [original, copy], scope: [r.id] }).plan;
   assert.ok(scoped.report.some((e) => e.kind === "import-copy"));
 });
+
+// exchange-copy: made-up values throughout (no real tx)
+const xcopies = (legs: Leg[], over: Partial<Config> = {}) =>
+  plan({ rows: [], legs, config: { ...CONFIG, ...over } }).plan.report.filter((r) => r.kind === "exchange-copy");
+/** Every ignoreImportLegs line an exchange-copy entry offers, by the side it would ignore. */
+const xoffered = (detail: string) =>
+  (detail.match(/\{"legId":[^}]*\}/g) ?? []).map((l) => JSON.parse(l) as { legId: string; reason: string });
+/** A leg of an exchange's own import: no chain txid. */
+const xleg = (over: Partial<Leg>) =>
+  ownLeg({ id: "", side: "incoming", trade: "deposit", to: "exchange-a", source: "exchange-a", ...over });
+
+test("exchange-copy: one deposit an exchange's API and a CSV of it both hold is reported, with a line for each side", () => {
+  const api = xleg({ legId: "api", actionId: "a1", quantity: 0.25, importType: "api", createdAt: OLD, id: "4242" });
+  const csv = xleg({
+    legId: "csv",
+    actionId: "a2",
+    quantity: 0.25,
+    importType: "manual-csv",
+    source: "exchange-a-manual",
+    timestamp: "2024-03-01T09:00:00.000Z",
+    createdAt: LATER,
+  });
+  const reports = xcopies([api, csv]);
+  assert.deepEqual(
+    reports.map((r) => r.legIds),
+    [["api", "csv"]],
+  );
+  assert.deepEqual(
+    xoffered(reports[0].detail).map((l) => l.legId),
+    ["api", "csv"],
+  );
+  // Once one side is named, the pair is decided
+  const lines = xoffered(reports[0].detail).filter((l) => l.legId === "api");
+  assert.equal(xcopies([api, csv], { ignoreImportLegs: lines as Config["ignoreImportLegs"] }).length, 0);
+});
+
+test("exchange-copy: a withdrawal whose amount includes the fee pairs the other import's amount plus its fee leg", () => {
+  const api = xleg({
+    legId: "api-out",
+    actionId: "a1",
+    side: "outgoing",
+    trade: "withdrawal",
+    from: "exchange-a",
+    to: "",
+    quantity: 10.01,
+    importType: "api",
+    createdAt: OLD,
+  });
+  // The CSV's withdrawal, its fee, and the wallet's receive Summ paired with it
+  const csv = xleg({
+    legId: "csv-out",
+    actionId: "a2",
+    side: "outgoing",
+    trade: "withdrawal",
+    from: "exchange-a",
+    to: "",
+    quantity: 10,
+    importType: "manual-csv",
+    createdAt: LATER,
+  });
+  const csvFee = xleg({
+    legId: "csv-fee",
+    actionId: "a2",
+    side: "fees",
+    trade: "fee",
+    from: "exchange-a",
+    quantity: 0.01,
+    importType: "manual-csv",
+    createdAt: LATER,
+  });
+  const wallet = ownLeg({ legId: "wallet-in", actionId: "a2", side: "incoming", trade: "deposit", quantity: 10 });
+  const reports = xcopies([api, csv, csvFee, wallet]);
+  assert.deepEqual(
+    reports.map((r) => r.legIds),
+    [["api-out", "csv-out"]],
+  );
+  // The CSV side is paired with the wallet's receive: only the API copy is offered
+  assert.deepEqual(
+    xoffered(reports[0].detail).map((l) => l.legId),
+    ["api-out"],
+  );
+  assert.match(reports[0].detail, /cannot simply be ignored \(it is paired in its action\)/);
+  // A difference that is no fee is no pair
+  assert.equal(xcopies([{ ...api, quantity: 10.015 }, csv, csvFee, wallet]).length, 0);
+});
+
+test("exchange-copy: real repeats, chain txs, far times and wallet imports are not reported", () => {
+  const a = xleg({ legId: "a", actionId: "a1", quantity: 100, importType: "api", createdAt: OLD });
+  const b = xleg({ legId: "b", actionId: "a2", quantity: 100, importType: "api", createdAt: OLD });
+  // Two orders alike from one import (created together)
+  assert.equal(xcopies([a, b]).length, 0);
+  // Created apart, but more than two hours apart in time
+  assert.equal(xcopies([a, { ...b, createdAt: LATER, timestamp: "2024-03-01T12:00:01.000Z" }]).length, 0);
+  // Two different chain txs, however alike
+  assert.equal(
+    xcopies([
+      { ...a, id: "a".repeat(64) },
+      { ...b, id: "b".repeat(64), createdAt: LATER },
+    ]).length,
+    0,
+  );
+  // Wallet imports are compared by tx hash (import-copy), not here
+  assert.equal(
+    xcopies([
+      { ...a, importType: "wallet" },
+      { ...b, importType: "wallet", createdAt: LATER },
+    ]).length,
+    0,
+  );
+  // Created apart and within two hours: reported
+  assert.equal(xcopies([a, { ...b, createdAt: LATER }]).length, 1);
+});
+
+test("exchange-copy: two alike events held twice pair each with its nearest, one to one", () => {
+  const at = (minute: number) => `2024-03-01T10:${String(minute).padStart(2, "0")}:00.000Z`;
+  const legs = [
+    xleg({ legId: "api-1", actionId: "a1", quantity: 1, importType: "api", createdAt: OLD, timestamp: at(0) }),
+    xleg({ legId: "api-2", actionId: "a2", quantity: 1, importType: "api", createdAt: OLD, timestamp: at(5) }),
+    xleg({ legId: "csv-1", actionId: "a3", quantity: 1, importType: "manual-csv", createdAt: LATER, timestamp: at(1) }),
+    xleg({ legId: "csv-2", actionId: "a4", quantity: 1, importType: "manual-csv", createdAt: LATER, timestamp: at(6) }),
+  ];
+  assert.deepEqual(
+    xcopies(legs)
+      .map((r) => r.legIds)
+      .sort(),
+    [
+      ["api-1", "csv-1"],
+      ["api-2", "csv-2"],
+    ],
+  );
+});
