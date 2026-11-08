@@ -885,7 +885,7 @@ export async function applyPlan(
     ...(plan.report ?? []).flatMap((r) => r.legIds ?? []),
     ...[...plan.edit, ...plan.categorise, ...(plan.ignore ?? []), ...(plan.currency ?? [])].flatMap((e) => [
       ...e.changes.map((c) => c.legId),
-      ...(e.match ? [e.match.legId] : []),
+      ...(e.match ? [e.match.legId, e.match.baseLegId] : []),
       ...(e.ignore ?? []),
     ]),
   ]);

@@ -346,6 +346,22 @@ test("a leg the plan holds for the user, joining the action, still stops the del
   assert.deepEqual(writesOf(summ), []);
 });
 
+test("a leg the plan reports for the user, joining the action, still stops the delete", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [leg("d")]);
+  summ.add("b", [leg("r")]);
+  const plan = named(
+    summ,
+    planOf({ delete: [del()], report: [{ kind: "import-copy", filed: false, legIds: ["r"], detail: "x" }] }),
+  );
+  const { dir, planDir } = stateFor(summ, plan);
+  summ.actions.delete("b");
+  summ.add("a", [leg("d"), leg("r")]);
+  const { stop } = await apply(summ, dir, planDir);
+  assert.match(String(stop?.message), /leg r .* the plan does not name it/);
+  assert.deepEqual(writesOf(summ), []);
+});
+
 test("a dry run says which leg joined and would stay behind the split", async () => {
   const summ = new FakeSumm();
   summ.add("a", [leg("d")]);

@@ -124,9 +124,11 @@ the cost bases of later disposals, in later years and the current one.
   on from where it stopped, or refuses, and then you pull and plan. Every write's
   result is checked and read back. Ctrl-C finishes the current entry and exits 130.
   A delete compares a fresh read with the values in `plan.md`, and stops on any
-  difference, on a leg in the action the plan does not name, or on a manual entry
-  in the action or naming the row's txid (`plan.md` marks a delete with no txid to
-  look for). A plan from an older version, whose
+  difference (read once more first), on a made-up leg or a leg the plan names
+  elsewhere joining the action, or on a manual entry in the action or naming the
+  row's txid (`plan.md` marks a delete with no txid to look for). Any other leg
+  that joined the action since the pull is split away from: it stays, and apply
+  prints it. A plan from an older version, whose
   deletes hold no values, is refused: pull and plan again.
   Apply lists no upload while any delete this apply selects is not made: a row uploaded
   beside an old version would count twice. It says what to do instead.
