@@ -194,7 +194,7 @@ test("a partner the plan edits elsewhere, paired in after the pull, still stops 
   summ.actions.delete("b");
   summ.add("a", [leg("d"), leg("e")]);
   const { stop } = await apply(summ, dir, planDir);
-  assert.match(String(stop?.message), /leg e .* the plan names it in another entry/);
+  assert.match(String(stop?.message), /leg e .* the plan names it elsewhere \(another entry/);
   assert.deepEqual(writesOf(summ), []);
 });
 
@@ -300,7 +300,7 @@ test("a leg the plan names in an entry this run does not apply still stops a del
   summ.actions.delete("b");
   summ.add("a", [leg("d"), leg("e")]);
   const { stop } = await apply(summ, dir, planDir);
-  assert.match(String(stop?.message), /leg e .* the plan names it in another entry/);
+  assert.match(String(stop?.message), /leg e .* the plan names it elsewhere \(another entry/);
   assert.deepEqual(writesOf(summ), []);
 });
 
@@ -342,7 +342,7 @@ test("a leg the plan holds for the user, joining the action, still stops the del
   summ.actions.delete("b");
   summ.add("a", [leg("d"), leg("h")]);
   const { stop } = await apply(summ, dir, planDir);
-  assert.match(String(stop?.message), /leg h .* the plan names it in another entry/);
+  assert.match(String(stop?.message), /leg h .* the plan names it elsewhere \(another entry/);
   assert.deepEqual(writesOf(summ), []);
 });
 
@@ -358,7 +358,7 @@ test("a leg the plan reports for the user, joining the action, still stops the d
   summ.actions.delete("b");
   summ.add("a", [leg("d"), leg("r")]);
   const { stop } = await apply(summ, dir, planDir);
-  assert.match(String(stop?.message), /leg r .* the plan names it in another entry/);
+  assert.match(String(stop?.message), /leg r .* the plan names it elsewhere \(another entry/);
   assert.deepEqual(writesOf(summ), []);
 });
 
