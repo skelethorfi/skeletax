@@ -517,7 +517,9 @@ export async function applyPlan(
         const what = `leg ${leg.legId} (${leg.quantity} ${leg.currency}, ${leg.importType}) is in the action`;
         if (!deleting.has(leg.legId) && leg.importType !== "assumed-fee") {
           if (planned.has(leg.legId))
-            problems.push(`${what}, and the plan names it elsewhere (an edit, a hold or a report), not in this delete`);
+            problems.push(
+              `${what}, and the plan names it in another entry (its own entry checks it), not in this delete`,
+            );
           else if (leg.importType === "soft-transfer") problems.push(`${what}, and the plan does not name it`);
         }
         continue;
