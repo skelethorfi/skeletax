@@ -364,23 +364,26 @@ search by the signing wallet could). What is missing:
   those fees the holdings come out the same, as the send and its payback are
   both missing; the balance check (`run-summary.md`, Balance check) shows the
   wallet that much above THORNode.
-- L1 side: Summ's own import of the L1 wallet holds the send and the return.
-  With no rows the send counts as a plain send of the amount (not a failed
-  one), and the return as a receive with no cost base (above); the request's
-  fee on the THORChain wallet is missing.
+- L1 side: Summ's own import of the L1 wallet holds the send and the return,
+  and treats them as its pairing decides (it may pair each with a receive or
+  send it makes up, `summ-sync.md`); what the protocol kept and the request's
+  fee on the THORChain wallet are missing either way.
 
 Until a source lists them, enter the rows above by hand in an extra folder of
 summ-sync (`packages/summ-sync/README.md`, `extraDirs`), with the times,
-wallets, txids, types, currencies and amounts a run would give: the add's time
-on the `FailedOut` and the kept `Fee`, the payout's on a `FailedIn`, the
-request's on its `Fee`. summ-sync reads a row's txids from its Description,
-so write it as a run does (`refund (<add txid>): …`, and on the request's
-`Fee` `fee of the withdrawal request <txid>`): a hand-made row naming a txid
-the run's row does not is held as an overlap. Amounts and txids are observed
-(THORNode by hash);
-the 0.02 RUNE fees are the default. A run that exports the pair later
-overtakes rows that match it exactly; one that differs (even by a second)
-is reported as an overlap and neither is uploaded.
+wallets, types, currencies and amounts a run would give: the add's time on the
+`FailedOut` and the kept `Fee`, the payout's on a `FailedIn`, the request's on
+its `Fee`. summ-sync reads a row's txids from its Description, so word it as a
+run does: `refund (<add txid>): pending add withdrawn (<withdrawal txid>)` on
+the `FailedOut`, `refund (<add txid>): kept by thorchain, …` on the kept
+`Fee`, `refund (<add txid>): returned in <payout txid>` on a `FailedIn`, and
+`refund (<add txid>): fee of the withdrawal request <withdrawal txid>` on the
+request's `Fee`. Amounts and txids are observed (THORNode by hash); the 0.02
+RUNE fees are the default. A run that exports the pair later overtakes rows
+that match it exactly. A row that shares a txid, side and currency with a run
+row but differs otherwise (even by a second) is held as an overlap, and
+neither is uploaded; one that shares none of those is uploaded beside the
+run's rows and counts twice.
 
 ### Refunds of an affiliate's cut
 
