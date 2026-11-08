@@ -57,6 +57,29 @@ async function queryAll(client: Client, filter?: Record<string, unknown>): Promi
   return pages;
 }
 
+/**
+ * The listed actions that share a tx hash with another listed action whose legs were created more than a day apart:
+ * where a later import may have added a tx again. The listing gives each action's leg ids, which hold their
+ * creation time.
+ */
+export function actionsSharingTxAcrossImports(actions: ListedAction[]): string[] {
+  const created = (a: ListedAction) =>
+    (String(a["Transaction IDs"] ?? "").match(/[0-9a-f]{24}/gi) ?? []).map((id) => parseInt(id.slice(0, 8), 16));
+  const byTx = new Map<string, ListedAction[]>();
+  for (const a of actions) {
+    const tx = typeof a["Tx Hash"] === "string" ? normaliseTxid(a["Tx Hash"]) : "";
+    if (tx) byTx.set(tx, [...(byTx.get(tx) ?? []), a]);
+  }
+  const ids: string[] = [];
+  for (const same of byTx.values()) {
+    if (new Set(same.map((a) => a["Action ID"])).size < 2) continue;
+    const times = same.flatMap(created);
+    if (times.length && Math.max(...times) - Math.min(...times) > 24 * 60 * 60)
+      ids.push(...same.map((a) => a["Action ID"] as string));
+  }
+  return ids;
+}
+
 /** The txids of the run's rows plan matches to Summ's own imports: categorised rows, and protocol rows whose fee is
  * the gas of a request. */
 export function categorisedTxids(rows: Row[], config: Config): Set<string> {
@@ -230,6 +253,8 @@ export async function pull(
       )
     ).flatMap(parseActions))
       if (listed.has(a["Action ID"])) needed.add(a["Action ID"] as string);
+    // A tx a later import added again (spec: Copies a later import made): plan reads both copies to report it
+    for (const id of actionsSharingTxAcrossImports([...actions, ...late])) if (listed.has(id)) needed.add(id);
     // A made-up leg an apply left in place can be outside all of those: plan must see whether it is still there
     // and so can a manual entry the config names, alone in its action
     for (const legId of [
