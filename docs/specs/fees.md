@@ -382,7 +382,7 @@ request's `Fee`. Amounts and txids are observed (THORNode by hash); the 0.02
 RUNE fees are the default. A run that exports the pair later overtakes rows
 that match it exactly. A row that shares a txid, side and currency with a run
 row but differs otherwise (even by a second) is held as an overlap, and
-neither is uploaded; one that shares none of those is uploaded beside the
+neither is uploaded; one that does not share all three is uploaded beside the
 run's rows and counts twice.
 
 ### Refunds of an affiliate's cut
