@@ -1488,7 +1488,9 @@ export function makePlan(input: PlanInput): PlanResult {
       // would then count nowhere
       const holdsFee = (l: Leg) =>
         Number(l.feeQuantity) > 0 ||
-        input.legs.some((f) => f.actionId === l.actionId && f.side === "fees" && !IGNORED.has(f.trade));
+        input.legs.some(
+          (f) => f.actionId === l.actionId && f.side === "fees" && !IGNORED.has(f.trade) && !namedToIgnore.has(f.legId),
+        );
       const dropsFee = can.legs.some((l) => l.side === "fees" || Number(l.feeQuantity) > 0) && !other.some(holdsFee);
       const note = dropsFee
         ? " (its fee goes with it and the other side holds none, so the fee would count nowhere)"

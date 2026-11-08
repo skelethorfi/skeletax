@@ -4017,4 +4017,9 @@ test("exchange-copy: a fee held on the leg counts like a fee leg, and a line tha
   });
   const [both] = xcopies([{ ...api, quantity: 3 }, csv, otherFee]);
   assert.doesNotMatch(both.detail, /count nowhere/);
+  // Unless that fee is named to be ignored: then it counts nowhere once applied
+  const [named] = xcopies([{ ...api, quantity: 3 }, csv, otherFee], {
+    ignoreImportLegs: [{ legId: "api-fee", currency: "ZZZ", quantity: 1, reason: "test" }],
+  });
+  assert.match(named.detail, /count nowhere/);
 });
