@@ -533,4 +533,16 @@ test("actionsHeldTwiceAcrossImports: same account, side and currency, close in t
     },
   ];
   assert.deepEqual(actionsHeldTwiceAcrossImports(actions).sort(), ["api", "csv", "w-api", "w-csv"]);
+  // Two imports of one session (legs created minutes apart), and a small withdrawal whose fee is a fifth of it
+  const more = [
+    listed("s-api", "2024-08-01T10:00:00.000Z", { ...to, Incoming: "2 XMR (1.00)" }, ["664000000000000000000011"]),
+    listed("s-csv", "2024-08-01T10:00:00.000Z", { ...to, Incoming: "2 XMR (1.00)" }, ["664000780000000000000012"]),
+    listed("f-api", "2024-09-01T10:00:00.000Z", { ...from, Outgoing: "0.0012 ZEC (1.00)" }, [
+      "664000000000000000000013",
+    ]),
+    listed("f-csv", "2024-09-01T10:00:00.000Z", { ...from, Outgoing: "0.001 ZEC (1.00)" }, [
+      "664000780000000000000014",
+    ]),
+  ];
+  assert.deepEqual(actionsHeldTwiceAcrossImports(more).sort(), ["f-api", "f-csv", "s-api", "s-csv"]);
 });

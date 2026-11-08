@@ -82,8 +82,10 @@ export function actionsSharingTxAcrossImports(actions: ListedAction[]): string[]
 
 /**
  * The listed actions that may hold one event another import holds too (spec: One event from two imports): pairs with
- * the same account (raw address), side and currency, within two hours, quantities within 1% (an amount may include
- * its fee; plan checks exactly), no tx hash in common, and legs created more than an hour apart (from two imports).
+ * the same account (raw address), side and currency, within two hours, quantities within 25% (an amount may include
+ * its fee, a large share of a small withdrawal; plan checks exactly), no tx hash in common and not both chain txids,
+ * and not created in the same minutes (one import writes its legs within seconds; the listing has no import type, so
+ * plan decides whether the imports differ).
  * The listing gives each action's first incoming and outgoing amount, its From and To, and its leg ids.
  */
 export function actionsHeldTwiceAcrossImports(actions: ListedAction[]): string[] {
@@ -93,8 +95,17 @@ export function actionsHeldTwiceAcrossImports(actions: ListedAction[]): string[]
     const m = /^([\d.e+-]+) (\S+)/.exec(str(v as string));
     return m ? { quantity: Number(m[1]), currency: m[2].toLowerCase() } : null;
   };
+  // The minutes the action's legs were created in, as one key: alike orders of one import share it
   const created = (a: ListedAction) =>
-    (String(a["Transaction IDs"] ?? "").match(/[0-9a-f]{24}/gi) ?? []).map((id) => parseInt(id.slice(0, 8), 16) * 1000);
+    [
+      ...new Set(
+        (String(a["Transaction IDs"] ?? "").match(/[0-9a-f]{24}/gi) ?? []).map((id) =>
+          Math.floor(parseInt(id.slice(0, 8), 16) / 60),
+        ),
+      ),
+    ]
+      .sort()
+      .join(",");
   type Entry = {
     id: string;
     key: string;
@@ -102,7 +113,7 @@ export function actionsHeldTwiceAcrossImports(actions: ListedAction[]): string[]
     quantity: number;
     tx: string;
     chain: boolean;
-    created: number[];
+    created: string;
   };
   const byKey = new Map<string, Entry[]>();
   for (const a of actions) {
@@ -130,9 +141,8 @@ export function actionsHeldTwiceAcrossImports(actions: ListedAction[]): string[]
         const [x, y] = [same[i], same[j]];
         if (y.time - x.time > 2 * HOUR) break;
         if (x.id === y.id || (x.tx !== "" && x.tx === y.tx) || (x.chain && y.chain)) continue;
-        if (Math.abs(x.quantity - y.quantity) > 0.01 * Math.max(x.quantity, y.quantity)) continue;
-        if (!x.created.length || !y.created.length) continue;
-        if (Math.abs(Math.min(...x.created) - Math.min(...y.created)) <= HOUR) continue;
+        if (Math.abs(x.quantity - y.quantity) > 0.25 * Math.max(x.quantity, y.quantity)) continue;
+        if (x.created === "" || x.created === y.created) continue;
         ids.add(x.id).add(y.id);
       }
     }

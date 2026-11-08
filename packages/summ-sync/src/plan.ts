@@ -375,6 +375,16 @@ const accountOf = (l: Leg) => (l.side === "incoming" ? l.to : l.from).toLowerCas
  * hour apart: one import adds its legs together, so two real orders alike from one import are not paired). Grouped
  * by the pair of actions.
  */
+/** The fees of a leg's currency in its action: its fee legs, and a fee Summ holds on the leg itself. */
+export function feesBeside(legs: Leg[], l: Leg): number[] {
+  const own =
+    Number(l.feeQuantity) > 0 && sameCurrency(l.feeCurrency ?? l.currency, l.currency) ? [Number(l.feeQuantity)] : [];
+  const fees = legs.filter(
+    (f) =>
+      f.actionId === l.actionId && f.side === "fees" && !IGNORED.has(f.trade) && sameCurrency(f.currency, l.currency),
+  );
+  return [...own, ...fees.map((f) => f.quantity)];
+}
 export function exchangeCopies(legs: Leg[], managedSources: Set<string>): { a: Leg[]; b: Leg[] }[] {
   const imported = legs.filter(
     (l) =>
@@ -386,13 +396,10 @@ export function exchangeCopies(legs: Leg[], managedSources: Set<string>): { a: L
       accountOf(l) !== "" &&
       createdOf(l) !== "",
   );
-  const feesOf = (l: Leg) =>
-    legs.filter(
-      (f) =>
-        f.actionId === l.actionId && f.side === "fees" && !IGNORED.has(f.trade) && sameCurrency(f.currency, l.currency),
-    );
   const apartByFee = (big: Leg, small: Leg) =>
-    [...feesOf(big), ...feesOf(small)].some((f) => sameAmount(big.quantity, small.quantity + f.quantity));
+    [...feesBeside(legs, big), ...feesBeside(legs, small)].some((fee) =>
+      sameAmount(big.quantity, small.quantity + fee),
+    );
   const byKey = new Map<string, Leg[]>();
   for (const l of imported) {
     const key = `${accountOf(l)}|${l.side}|${l.currency.toLowerCase()}`;
@@ -1476,9 +1483,13 @@ export function makePlan(input: PlanInput): PlanResult {
     const option = (side: Leg[], other: Leg[]) => {
       const can = sideToIgnore(side, true);
       const what = `${side[0].importType} (${createdOf(side[0]).slice(0, 10)})`;
-      return "legs" in can
-        ? `to ignore ${what}, add to ignoreImportLegs: ${can.legs.map((l) => line(l, `${l.side === "fees" ? "fee beside a" : "a"} leg held twice by two imports (the other: ${other[0].legId})`)).join(", ")}`
-        : `${what} cannot simply be ignored (${can.why})`;
+      if (!("legs" in can)) return `${what} cannot simply be ignored (${can.why})`;
+      // Its fees go with it: when the other side holds none, the fee would then count nowhere
+      const dropsFee = can.legs.some((l) => l.side === "fees") && other.every((l) => !feesBeside(input.legs, l).length);
+      const note = dropsFee
+        ? " (its fee goes with it and the other side holds none, so the fee would count nowhere)"
+        : "";
+      return `to ignore ${what}${note}, add to ignoreImportLegs: ${can.legs.map((l) => line(l, `${l.side === "fees" ? "fee beside a" : "a"} leg held twice by two imports (the other: ${other[0].legId})`)).join(", ")}`;
     };
     plan.report.push({
       kind: "exchange-copy",

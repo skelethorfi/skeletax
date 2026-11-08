@@ -920,25 +920,28 @@ is read for another reason. Pull reads the actions this needs: each listed actio
 another listed action whose legs were created more than a day apart (the listing gives every leg's id, not its
 account, so a tx two accounts imported at different times is read on every pull too).
 
-**One event from two imports.** An exchange can reach Summ twice under different tx hashes: its API and a CSV
-upload of the same account, or two API syncs that gave one order two ids. Plan reports each such pair
-(`exchange-copy`): two legs of an import (not a managed source, not a manual entry, not one Summ made up, not a
-wallet's import, which a copy repeats under its tx hash: an import copy above), counted, in different actions, of
-the same account (the receiver of an incoming leg, the sender of an outgoing one), side and currency, within two
-hours, whose quantities are equal or apart by exactly a fee of that currency in one of the two actions (an
-exchange's withdrawal amount may include its fee), with no tx hash in common and not two different chain txids
-(those are two events), and from two imports: their import types differ, or they were created more than an hour
-apart (one import adds its legs together, so two real orders alike from one import are not paired). Each leg pairs
-with its nearest in time only, so two alike events held twice give two pairs. The entry names both sides and, for
-each side that stands alone in its action (apart from its fees and legs Summ made up), the `ignoreImportLegs` lines
-that would ignore it with its fees; a side paired in its action, or with a manual entry or a run row on it, is not
-offered. Which import to keep is the user's rule (e.g. the CSV for the period it covers); the report changes
-nothing, and a leg named in `ignoreImportLegs` is not reported again. Every plan, scoped or not, keeps these
-entries: they concern the imports, not a row. Not seen: a pair more than two hours apart, an amount apart by
-anything but a fee leg, and a manual entry that repeats an import (it is the user's own). Pull reads the actions
-this needs from the listing: pairs with the same account (raw address), side and currency, within two hours,
-quantities within 1% (the listing has no fees), no tx hash in common and not both chain txids, legs created more
-than an hour apart, neither set to ignore or spam.
+**One event from two imports.** An exchange can reach Summ twice under different tx hashes: its API and a CSV upload
+of the same account, or two API syncs that gave one order two ids. Plan reports each such pair (`exchange-copy`):
+two legs of an import (not a managed source, not a manual entry, not one Summ made up, not a wallet's import, which
+a copy repeats under its tx hash: an import copy above), counted, in different actions, of the same account (the
+receiver of an incoming leg, the sender of an outgoing one), side and currency, within two hours, whose quantities
+are equal or apart by exactly a fee of that currency in one of the two actions (a fee leg, or a fee Summ holds on
+the leg itself; an exchange's withdrawal amount may include its fee), with no tx hash in common and not two
+different chain txids (those are two events), and from two imports: their import types differ, or they were created
+more than an hour apart (one import adds its legs together, so two real orders alike from one import are not
+paired). Each leg pairs with its nearest in time only, so two alike events held twice give two pairs. The entry
+names both sides and, for each side that stands alone in its action (apart from its fees and legs Summ made up), the
+`ignoreImportLegs` lines that would ignore it with its fees (saying so when the other side holds no fee, as the fee
+would then count nowhere); a side paired in its action, or with a manual entry or a run row on it, is not offered.
+Which import to keep is the user's rule (e.g. the CSV for the period it covers); the report changes nothing, and a
+leg named in `ignoreImportLegs` is not reported again. Every plan, scoped or not, keeps these entries: they concern
+the imports, not a row. Not seen: a pair more than two hours apart, an amount apart by anything but a fee, and a
+manual entry that repeats an import (it is the user's own). Two real events alike, each given an id by a different
+sync of one import, are paired too: the report only offers, the user decides. Pull reads the actions this needs from
+the listing: pairs with the same account (raw address), side and currency, within two hours, quantities within 25%
+(the listing has no fees, and a small withdrawal's fee can be a large share), no tx hash in common and not both
+chain txids, not created in the same minutes (one import writes its legs within seconds; the listing has no import
+type, so plan decides whether the imports differ), neither set to ignore or spam.
 
 **Manual entries.** Before a delete entry's split, and before the reads that agree on its
 delete, apply lists the actions holding a manual entry (`importType` filter, every page) and reads

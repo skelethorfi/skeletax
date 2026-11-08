@@ -3961,3 +3961,43 @@ test("exchange-copy: two alike events held twice pair each with its nearest, one
     ],
   );
 });
+
+test("exchange-copy: a fee held on the leg counts like a fee leg, and a line that would leave a fee counted nowhere says so", () => {
+  // The API's withdrawal includes the fee; the CSV holds it on its leg
+  const api = xleg({
+    legId: "api",
+    actionId: "a1",
+    side: "outgoing",
+    trade: "withdrawal",
+    from: "exchange-a",
+    quantity: 3.06,
+    importType: "api",
+    createdAt: OLD,
+  });
+  const csv = xleg({
+    legId: "csv",
+    actionId: "a2",
+    side: "outgoing",
+    trade: "withdrawal",
+    from: "exchange-a",
+    quantity: 3,
+    feeQuantity: 0.06,
+    importType: "manual-csv",
+    createdAt: LATER,
+  });
+  assert.equal(xcopies([api, csv]).length, 1);
+  // Equal amounts, the fee only on the CSV side as a fee leg: ignoring that side would drop the fee
+  const csvFee = xleg({
+    legId: "csv-fee",
+    actionId: "a2",
+    side: "fees",
+    trade: "fee",
+    from: "exchange-a",
+    quantity: 0.06,
+    importType: "manual-csv",
+    createdAt: LATER,
+  });
+  const [report] = xcopies([{ ...api, quantity: 3 }, { ...csv, feeQuantity: undefined }, csvFee]);
+  assert.match(report.detail, /to ignore manual-csv \([^)]*\) \(its fee goes with it and the other side holds none/);
+  assert.doesNotMatch(report.detail, /to ignore api \([^)]*\) \(its fee/);
+});
