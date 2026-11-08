@@ -4000,4 +4000,7 @@ test("exchange-copy: a fee held on the leg counts like a fee leg, and a line tha
   const [report] = xcopies([{ ...api, quantity: 3 }, { ...csv, feeQuantity: undefined }, csvFee]);
   assert.match(report.detail, /to ignore manual-csv \([^)]*\) \(its fee goes with it and the other side holds none/);
   assert.doesNotMatch(report.detail, /to ignore api \([^)]*\) \(its fee/);
+  // The same with the CSV's fee held on its leg
+  const [onLeg] = xcopies([{ ...api, quantity: 3 }, csv]);
+  assert.match(onLeg.detail, /to ignore manual-csv \([^)]*\) \(its fee goes with it/);
 });

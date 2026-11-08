@@ -367,14 +367,6 @@ export const chainTxid = (l: Pick<Leg, "id">) => {
 };
 /** The account of a leg's side: the receiver of an incoming leg, the sender of an outgoing one. */
 const accountOf = (l: Leg) => (l.side === "incoming" ? l.to : l.from).toLowerCase();
-/**
- * Pairs of legs one account holds twice from two imports (spec: One event from two imports): in different actions,
- * same account, side and currency, within two hours, with no tx hash in common (a shared one is an import copy), the
- * quantities equal or apart by exactly a fee of the same currency in one of the two actions (an exchange's
- * withdrawal amount may include its fee), and from different imports (import types differ, or created more than an
- * hour apart: one import adds its legs together, so two real orders alike from one import are not paired). Grouped
- * by the pair of actions.
- */
 /** The fees of a leg's currency in its action: its fee legs, and a fee Summ holds on the leg itself. */
 export function feesBeside(legs: Leg[], l: Leg): number[] {
   const own =
@@ -385,6 +377,14 @@ export function feesBeside(legs: Leg[], l: Leg): number[] {
   );
   return [...own, ...fees.map((f) => f.quantity)];
 }
+/**
+ * Pairs of legs one account holds twice from two imports (spec: One event from two imports): in different actions,
+ * same account, side and currency, within two hours, with no tx hash in common (a shared one is an import copy), the
+ * quantities equal or apart by exactly a fee of the same currency in one of the two actions (a fee leg or one held
+ * on the leg; an exchange's withdrawal amount may include its fee), and from different imports (import types differ, or created more than an
+ * hour apart: one import adds its legs together, so two real orders alike from one import are not paired). Grouped
+ * by the pair of actions.
+ */
 export function exchangeCopies(legs: Leg[], managedSources: Set<string>): { a: Leg[]; b: Leg[] }[] {
   const imported = legs.filter(
     (l) =>
@@ -1485,7 +1485,9 @@ export function makePlan(input: PlanInput): PlanResult {
       const what = `${side[0].importType} (${createdOf(side[0]).slice(0, 10)})`;
       if (!("legs" in can)) return `${what} cannot simply be ignored (${can.why})`;
       // Its fees go with it: when the other side holds none, the fee would then count nowhere
-      const dropsFee = can.legs.some((l) => l.side === "fees") && other.every((l) => !feesBeside(input.legs, l).length);
+      const dropsFee =
+        can.legs.some((l) => l.side === "fees" || Number(l.feeQuantity) > 0) &&
+        other.every((l) => !feesBeside(input.legs, l).length);
       const note = dropsFee
         ? " (its fee goes with it and the other side holds none, so the fee would count nowhere)"
         : "";

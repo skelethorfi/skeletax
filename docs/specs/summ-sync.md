@@ -936,12 +936,14 @@ would then count nowhere); a side paired in its action, or with a manual entry o
 Which import to keep is the user's rule (e.g. the CSV for the period it covers); the report changes nothing, and a
 leg named in `ignoreImportLegs` is not reported again. Every plan, scoped or not, keeps these entries: they concern
 the imports, not a row. Not seen: a pair more than two hours apart, an amount apart by anything but a fee, and a
-manual entry that repeats an import (it is the user's own). Two real events alike, each given an id by a different
-sync of one import, are paired too: the report only offers, the user decides. Pull reads the actions this needs from
-the listing: pairs with the same account (raw address), side and currency, within two hours, quantities within 25%
-(the listing has no fees, and a small withdrawal's fee can be a large share), no tx hash in common and not both
-chain txids, not created in the same minutes (one import writes its legs within seconds; the listing has no import
-type, so plan decides whether the imports differ), neither set to ignore or spam.
+manual entry that repeats an import (it is the user's own); nor, as pull does not read them, two imports whose legs
+were created in the same minutes, a fee over a quarter of the amount, or a pair on an action's second leg of a side
+(the listing shows the first). Two real events alike, each given an id by a different sync of one import, are paired
+too: the report only offers, the user decides. Pull reads the actions this needs from the listing: pairs with the
+same account (raw address), side and currency, within two hours, quantities within 25% (the listing has no fees, and
+a small withdrawal's fee can be a large share), no tx hash in common and not both chain txids, not created in the
+same minutes (one import writes its legs within seconds; the listing has no import type, so plan decides whether the
+imports differ), neither set to ignore or spam.
 
 **Manual entries.** Before a delete entry's split, and before the reads that agree on its
 delete, apply lists the actions holding a manual entry (`importType` filter, every page) and reads
