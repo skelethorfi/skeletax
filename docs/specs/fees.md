@@ -318,9 +318,10 @@ pending asset back to its sender, less the outbound fee. No position was
 made, so it is exported as a refund: the add is the send, the withdrawal's
 payout the return.
 
-**Source.** Before the chain upgrade of March 2022, Midgard lists neither
-tx, and THORNode no longer serves them (its oldest block is far later). The
-paired THORChain wallet's Viewblock listing, read for sends before
+**Source.** Midgard lists neither tx, in any period: it drops a pending add
+once it is withdrawn. Before the chain upgrade of 2022-03-22, THORNode does
+not serve them either (the current API and the v1 archive both start later).
+The paired THORChain wallet's Viewblock listing, read for sends before
 2022-04-01 (`sends.md`, Sources), has both: the add (filed under the paired
 address too) and the withdrawal it signed, with the payout's amount, asset,
 recipient and, on an L1, txid.
@@ -351,6 +352,38 @@ the protocol.
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | L1 side (an add of a BEP2 token) | `FailedOut` of the amount added with its L1 gas; `Fee` of sent − returned; `FailedIn` of the payout with its txid; `Fee` 0.02 RUNE on the THORChain wallet (the request) |
 | THORChain side (an add of RUNE)  | `FailedOut` of the RUNE added, fee 0.02 RUNE; `Fee` of sent − returned; `Fee` 0.02 RUNE (the request)                                                                    |
+
+**Limitation: pairs after 2022-04-01 are not exported.** A run reads
+Viewblock only for sends before 2022-04-01, so it has no record that a later
+pair exists. THORNode serves both txs by hash (the v1 archive up to
+2024-09-04), so reading them is not the gap; listing them is (THORNode's tx
+search by the signing wallet could). What is missing:
+
+- THORChain side: the fees only, 0.06 RUNE per pair at the default native
+  fees (the add's, the request's, and what the protocol kept). Apart from
+  those fees the holdings come out the same, as the send and its payback are
+  both missing; the balance check (`run-summary.md`, Balance check) shows the
+  wallet that much above THORNode.
+- L1 side: Summ's own import of the L1 wallet holds the send and the return,
+  and treats them as its pairing decides (it may pair each with a receive or
+  send it makes up, `summ-sync.md`); what the protocol kept and the request's
+  fee on the THORChain wallet are missing either way.
+
+Until a source lists them, enter the rows above by hand in an extra folder of
+summ-sync (`packages/summ-sync/README.md`, `extraDirs`), with the times,
+wallets, types, currencies and amounts a run would give: the add's time on the
+`FailedOut` and the kept `Fee`, the payout's on a `FailedIn`, the request's on
+its `Fee`. summ-sync reads a row's txids from its Description, so word it as a
+run does: `refund (<add txid>): pending add withdrawn (<withdrawal txid>)` on
+the `FailedOut`, `refund (<add txid>): kept by thorchain, …` on the kept
+`Fee`, `refund (<add txid>): returned in <payout txid>` on a `FailedIn`, and
+`refund (<add txid>): fee of the withdrawal request <withdrawal txid>` on the
+request's `Fee`. Amounts and txids are observed (THORNode by hash); the 0.02
+RUNE fees are the default. A run that exports the pair later overtakes rows
+that match it exactly. A row that shares a txid, side and currency with a run
+row but differs otherwise (even by a second) is held as an overlap, and
+neither is uploaded; one that does not share all three is uploaded beside the
+run's rows and counts twice.
 
 ### Refunds of an affiliate's cut
 
