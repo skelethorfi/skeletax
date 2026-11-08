@@ -286,10 +286,12 @@ test("a leg joining between the two agreeing reads is never deleted: the entry's
   assert.ok(summ.leg("partner"), "the partner is still in Summ");
 });
 
-test("a quantity apart by exactly a fee Summ made, which came into or left the action, is Summ's regrouping: deleted", async () => {
+test("a quantity apart by exactly a fee Summ made, folded in or cut out, is Summ's regrouping: deleted", async () => {
+  const fee = (id: string, quantity = "0.25") =>
+    leg(id, { side: "fees", trade: "fee", quantity, importType: "assumed-fee" });
   // Summ folded the action's assumed fee into the leg after the pull
   const folded = new FakeSumm();
-  folded.add("a", [leg("d"), leg("af", { side: "fees", trade: "fee", quantity: "0.25", importType: "assumed-fee" })]);
+  folded.add("a", [leg("d"), fee("af")]);
   const one = stateFor(folded, named(folded, planOf({ delete: [del()] })));
   folded.add("a", [leg("d", { quantity: "1.25" })]);
   assert.equal((await apply(folded, one.dir, one.planDir)).result?.deleted, 1);
@@ -298,23 +300,56 @@ test("a quantity apart by exactly a fee Summ made, which came into or left the a
   const cut = new FakeSumm();
   cut.add("a", [leg("d")]);
   const two = stateFor(cut, named(cut, planOf({ delete: [del()] })));
-  cut.add("a", [
-    leg("d", { quantity: "0.75" }),
-    leg("af2", { side: "fees", trade: "fee", quantity: "0.25", importType: "assumed-fee" }),
-  ]);
+  cut.add("a", [leg("d", { quantity: "0.75" }), fee("af2")]);
   assert.equal((await apply(cut, two.dir, two.planDir)).result?.deleted, 1);
 
-  // Any other difference still stops, with nothing written
-  const other = new FakeSumm();
-  other.add("a", [leg("d")]);
-  const three = stateFor(other, named(other, planOf({ delete: [del()] })));
-  other.add("a", [
-    leg("d", { quantity: "0.7" }),
-    leg("af3", { side: "fees", trade: "fee", quantity: "0.25", importType: "assumed-fee" }),
-  ]);
-  const { stop } = await apply(other, three.dir, three.planDir);
-  assert.match(String(stop?.message), /quantity of leg d is 0.7, the plan holds 1/);
-  assert.deepEqual(writesOf(other), []);
+  // Folded with a partner in the action: read through the partner, the split moves the leg away, and the quantity
+  // the regrouping gave is still taken on the later reads
+  const away = new FakeSumm();
+  away.add("a", [leg("d"), partner(), fee("af3")]);
+  const three = stateFor(away, named(away, planOf({ delete: [del()] })));
+  away.add("a", [leg("d", { quantity: "1.25" }), partner()]);
+  const moved = await apply(away, three.dir, three.planDir);
+  assert.equal(moved.result?.deleted, 1);
+  assert.ok(away.leg("partner"));
+});
+
+test("a fee Summ only gave a new id, a fee that came with a leg that grew, or another amount does not excuse a change", async () => {
+  const fee = (id: string, quantity = "0.25") =>
+    leg(id, { side: "fees", trade: "fee", quantity, importType: "assumed-fee" });
+  for (const [label, pulled, now, shown] of [
+    ["renewed id, leg cut by its amount", [leg("d"), fee("f1")], [leg("d", { quantity: "0.75" }), fee("f2")], /0.75/],
+    ["renewed id, leg grown by its amount", [leg("d"), fee("f1")], [leg("d", { quantity: "1.25" }), fee("f2")], /1.25/],
+    ["a fee came, the leg grew", [leg("d")], [leg("d", { quantity: "1.25" }), fee("f3")], /1.25/],
+    ["a fee left, the leg shrank", [leg("d"), fee("f4")], [leg("d", { quantity: "0.75" })], /0.75/],
+    ["another amount", [leg("d")], [leg("d", { quantity: "0.7" }), fee("f5")], /0.7/],
+  ] as const) {
+    const summ = new FakeSumm();
+    summ.add("a", [...pulled]);
+    const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [del()] })));
+    summ.add("a", [...now]);
+    const { stop } = await apply(summ, dir, planDir);
+    assert.match(String(stop?.message), new RegExp(`quantity of leg d is ${shown.source}`), label);
+    assert.deepEqual(writesOf(summ), [], label);
+  }
+});
+
+test("a leg the plan names in an entry this run does not apply still stops a delete it joins", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [leg("d")]);
+  summ.add("b", [leg("e")]);
+  const entry: EditEntry = {
+    id: "row-e",
+    filed: true,
+    actionId: "b",
+    changes: [{ leg: "base", legId: "e", field: "trade", summ: "withdrawal", desired: "sell" }],
+  };
+  const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [del()], edit: [entry] })));
+  summ.actions.delete("b");
+  summ.add("a", [leg("d"), leg("e")]);
+  const { stop } = await apply(summ, dir, planDir);
+  assert.match(String(stop?.message), /leg e .* the plan does not name it/);
+  assert.deepEqual(writesOf(summ), []);
 });
 
 test("a change that settles by the next read goes on: one re-read before stopping", async () => {
