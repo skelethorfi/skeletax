@@ -35,6 +35,8 @@ import {
   type LegValues,
   type Plan,
   same,
+  sameAmount,
+  sameCurrency,
   sameValue,
   soldAmount,
   txidsNamedBy,
@@ -466,6 +468,8 @@ export async function applyPlan(
     return reads;
   }
 
+  /** Per delete entry, the fees Summ made that came into or left its actions during this apply. */
+  const regroupFees = new Map<string, { currency: string; quantity: number | string }[]>();
   /** What a fresh read of the entry's legs and their actions shows that the plan did not name, or null. */
   function deleteDiffers(key: string, entry: DeleteEntry, found: Found[]): string | null {
     const splitLines = (legId: string) =>
@@ -481,9 +485,32 @@ export async function applyPlan(
         if (!same(field, a, b)) differ(was.legId, field, a, b);
       }
     };
+    // Summ's own regrouping (spec: Deletes): a fee it made of the leg's currency came into or left the action since the
+    // pull, folded into the leg or cut from it. A quantity apart by exactly such a fee is that, not a hand edit
+    const assumedWas = ((entry.others ?? []) as LegValues[]).filter((l) => l.importType === "assumed-fee");
+    const assumedNow = seen.filter((l) => l.importType === "assumed-fee" && !entry.legIds.includes(l.legId));
+    // Kept for the entry's later reads: once its legs are split off, the fee stays in the action they left
+    const movedFees = [
+      ...(regroupFees.get(key) ?? []),
+      ...assumedNow.filter((l) => !assumedWas.some((w) => w.legId === l.legId)),
+      ...assumedWas.filter((w) => !assumedNow.some((l) => l.legId === w.legId)),
+    ];
+    regroupFees.set(key, movedFees);
+    const apartByMovedFee = (was: LegValues, now: Leg) =>
+      movedFees.some(
+        (f) =>
+          sameCurrency(f.currency, was.currency) &&
+          sameAmount(Math.abs(Number(now.quantity) - Number(was.quantity)), Number(f.quantity)),
+      );
     for (const was of entry.legs as LegValues[]) {
       const now = seen.find((l) => l.legId === was.legId) as Leg;
-      compare(was, now, IDENTITY_FIELDS);
+      compare(
+        was,
+        now,
+        IDENTITY_FIELDS.filter((f) => f !== "quantity"),
+      );
+      if (!same("quantity", was.quantity, now.quantity) && !apartByMovedFee(was, now))
+        differ(was.legId, "quantity", was.quantity, now.quantity);
       // Ignored by this plan's split, which also moves a fee leg to outgoing. An intent alone, as after a crash, excuses
       // only that: what else a split may change is excused only once its result shows it landed
       const lines = isIgnored(now) ? splitLines(was.legId) : [];
@@ -511,7 +538,14 @@ export async function applyPlan(
       }
       const was = named.get(leg.legId);
       if (!was) {
-        if (!deleting.has(leg.legId) && leg.importType !== "assumed-fee")
+        // A leg Summ paired in since the pull stays where it is: the split moves the entry's legs out of its action.
+        // Not a made-up leg (ignoring it after the delete is no decision of the plan's), nor one this apply writes
+        // elsewhere (its own entry checks it where the plan left it)
+        if (
+          !deleting.has(leg.legId) &&
+          leg.importType !== "assumed-fee" &&
+          (leg.importType === "soft-transfer" || ours.has(leg.legId))
+        )
           problems.push(
             `leg ${leg.legId} (${leg.quantity} ${leg.currency}, ${leg.importType}) is in the action, and the plan does not name it`,
           );
@@ -554,6 +588,7 @@ export async function applyPlan(
     const splitThisRun = new Set<string>();
     let waits = 0;
     let splits = 0;
+    let retried = false;
     let agreed: string | null = null;
     // A signal lets an entry finish what it began, but begins nothing permanent
     const holdForSignal = () => !splitThisRun.size && stopping();
@@ -579,7 +614,15 @@ export async function applyPlan(
         return conflict(key, entry.id, `leg ${absent.join(", ")} is no longer in Summ, the others are`);
 
       const differs = deleteDiffers(key, entry, reads as Found[]);
-      if (differs) return conflict(key, entry.id, `changed since the pull: ${differs}`);
+      if (differs) {
+        // Summ may still be regrouping after a write nearby: read once more before stopping
+        if (!retried) {
+          retried = true;
+          await sleep(settleMs);
+          continue;
+        }
+        return conflict(key, entry.id, `changed since the pull: ${differs}`);
+      }
 
       const actions = new Map((reads as Found[]).map((f) => [f.actionId, f]));
       const shared = [...actions.values()].filter((f) => f.legs.some((l) => !entry.legIds.includes(l.legId)));

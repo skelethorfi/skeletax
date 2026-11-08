@@ -933,15 +933,25 @@ holds back an event with a manual entry it can see, so these are the ones added 
 refused when deletes are approved, dry run too: pull and plan again. Every read of a delete's legs
 is compared with the plan, and any difference stops the entry before its next write:
 
-- each leg's row `ID`, currency, quantity, timestamp, source and import type, always.
+- each leg's row `ID`, currency, quantity, timestamp, source and import type, always. A quantity apart by exactly
+  a fee Summ made (`assumed-fee`) of the leg's currency, which came into or left the entry's actions since the pull
+  (seen in any read of this apply, as a split moves the legs away from it), is Summ's own regrouping, not a hand
+  edit: Summ folds such a fee into a leg, or cuts a leg by one when it pairs it anew.
 - its `side` and `trade`, unless it now reads ignored and this plan logged its split, even by intent alone
   (a crash can lose the result); a fee leg then reads outgoing. A leg not ignored is compared whatever was logged.
 - its from, to, blockchain, description, price, fee on the leg and comments (a hand edit a delete would lose),
   unless it reads ignored and the split's result line shows the split landed.
 
-- any leg in the action the plan does not name: a partner Summ paired after the pull, or a made-up
-  leg. It is neither split from nor ignored. Allowed: legs of this apply's other deletes and their
-  made-up legs, and Summ-made `assumed-fee` legs, whose ids do not last.
+- a made-up leg in the action the plan does not name, or a leg this apply writes elsewhere (its own
+  entry checks it where the plan left it): neither is split from or ignored. A leg Summ paired in
+  since the pull (an import's or a run row's) stops nothing: the split below moves the entry's legs
+  out of its action, and it stays; a manual entry still stops (Manual entries). Allowed too: legs of
+  this apply's other deletes and their made-up legs, and Summ-made `assumed-fee` legs, whose ids do
+  not last.
+
+A read that differs is read once more, a few seconds later, before the entry stops: Summ may still be
+regrouping after a write nearby.
+
 - each named other leg still there: its identity fields and `trade`; a named leg that has left.
   After a split in that action by this plan, its `trade` and its leaving are not compared, as
   Summ may retype or re-pair what stays.

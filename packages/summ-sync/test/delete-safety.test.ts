@@ -157,12 +157,18 @@ test("the same values delete, by the action just read and never by a filter", as
   assert.equal((call?.args.actionIds as string[]).length, 1);
 });
 
-test("a partner Summ paired after the pull stops the entry: not split, and not deleted with it", async () => {
-  await stopsUnwritten(
-    [leg("d")],
-    (summ) => summ.add("a", [leg("d"), partner()]),
-    /leg partner \(1 AAA, wallet\) is in the action, and the plan does not name it/,
-  );
+test("a partner Summ paired after the pull stays: the entry's leg is split off it and deleted alone", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [leg("d")]);
+  const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [del()] })));
+  summ.add("a", [leg("d"), partner()]);
+  const { result } = await apply(summ, dir, planDir);
+  assert.equal(result?.deleted, 1);
+  assert.deepEqual(writesOf(summ), [
+    ["edit", "d"],
+    ["delete", "d"],
+  ]);
+  assert.ok(summ.leg("partner"), "the partner is still in Summ");
 });
 
 test("a made-up leg not listed in the plan stops the entry rather than being split or ignored", async () => {
@@ -260,7 +266,7 @@ test("a split's fee leg, moved to outgoing, goes on to its delete; other changes
   assert.deepEqual(writesOf(changed), [["edit", "fee"]]);
 });
 
-test("a change between the two agreeing reads stops: a leg joining just before the delete is never deleted", async () => {
+test("a leg joining between the two agreeing reads is never deleted: the entry's leg is split off it first", async () => {
   const summ = new FakeSumm();
   summ.add("a", [leg("d")]);
   const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [del()] })));
@@ -271,9 +277,62 @@ test("a change between the two agreeing reads stops: a leg joining just before t
       summ.add("a", [leg("d"), partner()]);
     return real(name, args);
   };
-  const { stop } = await apply(summ, dir, planDir);
-  assert.match(String(stop?.message), /leg partner .* the plan does not name it/);
-  assert.deepEqual(writesOf(summ), []);
+  const { result } = await apply(summ, dir, planDir);
+  assert.equal(result?.deleted, 1);
+  assert.deepEqual(writesOf(summ), [
+    ["edit", "d"],
+    ["delete", "d"],
+  ]);
+  assert.ok(summ.leg("partner"), "the partner is still in Summ");
+});
+
+test("a quantity apart by exactly a fee Summ made, which came into or left the action, is Summ's regrouping: deleted", async () => {
+  // Summ folded the action's assumed fee into the leg after the pull
+  const folded = new FakeSumm();
+  folded.add("a", [leg("d"), leg("af", { side: "fees", trade: "fee", quantity: "0.25", importType: "assumed-fee" })]);
+  const one = stateFor(folded, named(folded, planOf({ delete: [del()] })));
+  folded.add("a", [leg("d", { quantity: "1.25" })]);
+  assert.equal((await apply(folded, one.dir, one.planDir)).result?.deleted, 1);
+
+  // Summ cut the leg by a fee it made up after the pull
+  const cut = new FakeSumm();
+  cut.add("a", [leg("d")]);
+  const two = stateFor(cut, named(cut, planOf({ delete: [del()] })));
+  cut.add("a", [
+    leg("d", { quantity: "0.75" }),
+    leg("af2", { side: "fees", trade: "fee", quantity: "0.25", importType: "assumed-fee" }),
+  ]);
+  assert.equal((await apply(cut, two.dir, two.planDir)).result?.deleted, 1);
+
+  // Any other difference still stops, with nothing written
+  const other = new FakeSumm();
+  other.add("a", [leg("d")]);
+  const three = stateFor(other, named(other, planOf({ delete: [del()] })));
+  other.add("a", [
+    leg("d", { quantity: "0.7" }),
+    leg("af3", { side: "fees", trade: "fee", quantity: "0.25", importType: "assumed-fee" }),
+  ]);
+  const { stop } = await apply(other, three.dir, three.planDir);
+  assert.match(String(stop?.message), /quantity of leg d is 0.7, the plan holds 1/);
+  assert.deepEqual(writesOf(other), []);
+});
+
+test("a change that settles by the next read goes on: one re-read before stopping", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [leg("d")]);
+  const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [del()] })));
+  let reads = 0;
+  const real = summ.callTool.bind(summ);
+  summ.callTool = async (name, args) => {
+    if (name === "inspect_transaction" && args.transactionId === "d") {
+      reads++;
+      const d = summ.leg("d") as FakeLeg | undefined;
+      if (d) d.description = reads === 1 ? "settling" : undefined;
+    }
+    return real(name, args);
+  };
+  const { result } = await apply(summ, dir, planDir);
+  assert.equal(result?.deleted, 1);
 });
 
 test("a leg joining after the last read goes with the action, and the removed count stops the run", async () => {
