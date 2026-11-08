@@ -514,14 +514,12 @@ export async function applyPlan(
         // A leg Summ paired in since the pull stays where it is: the split moves the entry's legs out of its action.
         // Not a made-up leg (ignoring it after the delete is no decision of the plan's), nor one the plan names
         // anywhere, applied in this run or not (its own entry checks it where the plan left it)
-        if (
-          !deleting.has(leg.legId) &&
-          leg.importType !== "assumed-fee" &&
-          (leg.importType === "soft-transfer" || planned.has(leg.legId))
-        )
-          problems.push(
-            `leg ${leg.legId} (${leg.quantity} ${leg.currency}, ${leg.importType}) is in the action, and the plan does not name it`,
-          );
+        const what = `leg ${leg.legId} (${leg.quantity} ${leg.currency}, ${leg.importType}) is in the action`;
+        if (!deleting.has(leg.legId) && leg.importType !== "assumed-fee") {
+          if (planned.has(leg.legId))
+            problems.push(`${what}, and the plan names it elsewhere (an edit, a hold or a report), not in this delete`);
+          else if (leg.importType === "soft-transfer") problems.push(`${what}, and the plan does not name it`);
+        }
         continue;
       }
       if (leg.importType !== "assumed-fee")
