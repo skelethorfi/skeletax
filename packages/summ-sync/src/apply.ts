@@ -35,8 +35,6 @@ import {
   type LegValues,
   type Plan,
   same,
-  sameAmount,
-  sameCurrency,
   sameValue,
   soldAmount,
   txidsNamedBy,
@@ -468,46 +466,8 @@ export async function applyPlan(
     return reads;
   }
 
-  /**
-   * Summ's own regrouping of a delete's leg (spec: Deletes), for an entry in one action: grown by exactly a fee Summ
-   * made (`assumed-fee`) of its currency that was in the plan's action and is no longer (folded in), or cut by exactly
-   * one that is now beside it and was not (cut out). Fees are counted by amount, as Summ renews their ids. Read through
-   * a leg of the plan's action that is not the entry's; with none, the leg's own action. Sets the quantity it gives.
-   */
-  async function regroupedQuantity(entry: DeleteEntry, found: Found[], regrouped: Map<string, number>) {
-    if (entry.actionIds.length !== 1) return;
-    const others = (entry.others ?? []) as LegValues[];
-    const fees = (legs: { importType: string; currency: string; quantity: number | string }[], currency: string) =>
-      legs
-        .filter((l) => l.importType === "assumed-fee" && sameCurrency(l.currency, currency))
-        .map((l) => Number(l.quantity));
-    const count = (amounts: number[], amount: number) => amounts.filter((a) => sameAmount(a, amount)).length;
-    for (const was of entry.legs as LegValues[]) {
-      const holder = found.find((f) => f.legs.some((l) => l.legId === was.legId));
-      const now = holder?.legs.find((l) => l.legId === was.legId);
-      if (!holder || !now || same("quantity", was.quantity, now.quantity)) continue;
-      if (regrouped.has(was.legId) && same("quantity", regrouped.get(was.legId) ?? null, now.quantity)) continue;
-      const delta = Math.abs(Number(now.quantity) - Number(was.quantity));
-      const before = count(fees(others, was.currency), delta);
-      if (Number(now.quantity) < Number(was.quantity)) {
-        if (count(fees(holder.legs, was.currency), delta) > before) regrouped.set(was.legId, Number(now.quantity));
-        continue;
-      }
-      if (!before) continue;
-      const anchor = others.find((l) => l.importType !== "assumed-fee");
-      const where = anchor ? await lookUp(client, anchor.legId) : holder;
-      if (where && count(fees(where.legs, was.currency), delta) < before)
-        regrouped.set(was.legId, Number(now.quantity));
-    }
-  }
-
   /** What a fresh read of the entry's legs and their actions shows that the plan did not name, or null. */
-  function deleteDiffers(
-    key: string,
-    entry: DeleteEntry,
-    found: Found[],
-    regrouped: Map<string, number> = new Map(),
-  ): string | null {
+  function deleteDiffers(key: string, entry: DeleteEntry, found: Found[]): string | null {
     const splitLines = (legId: string) =>
       journal.filter((l) => l.entry === key && l.kind === "split" && l.legId === legId);
 
@@ -523,15 +483,7 @@ export async function applyPlan(
     };
     for (const was of entry.legs as LegValues[]) {
       const now = seen.find((l) => l.legId === was.legId) as Leg;
-      compare(
-        was,
-        now,
-        IDENTITY_FIELDS.filter((f) => f !== "quantity"),
-      );
-      // A quantity Summ's own regrouping gave the leg (regroupedQuantity) is no hand edit
-      const byRegrouping = regrouped.has(was.legId) && same("quantity", regrouped.get(was.legId) ?? null, now.quantity);
-      if (!same("quantity", was.quantity, now.quantity) && !byRegrouping)
-        differ(was.legId, "quantity", was.quantity, now.quantity);
+      compare(was, now, IDENTITY_FIELDS);
       // Ignored by this plan's split, which also moves a fee leg to outgoing. An intent alone, as after a crash, excuses
       // only that: what else a split may change is excused only once its result shows it landed
       const lines = isIgnored(now) ? splitLines(was.legId) : [];
@@ -610,8 +562,6 @@ export async function applyPlan(
     let waits = 0;
     let splits = 0;
     let retried = false;
-    // Quantities Summ's own regrouping gave the entry's legs, kept for later reads (a split moves them away from it)
-    const regrouped = new Map<string, number>();
     let agreed: string | null = null;
     // A signal lets an entry finish what it began, but begins nothing permanent
     const holdForSignal = () => !splitThisRun.size && stopping();
@@ -636,12 +586,12 @@ export async function applyPlan(
       if (absent.length)
         return conflict(key, entry.id, `leg ${absent.join(", ")} is no longer in Summ, the others are`);
 
-      await regroupedQuantity(entry, reads as Found[], regrouped);
-      const differs = deleteDiffers(key, entry, reads as Found[], regrouped);
+      const differs = deleteDiffers(key, entry, reads as Found[]);
       if (differs) {
         // Summ may still be regrouping after a write nearby: read once more before stopping
         if (!retried) {
           retried = true;
+          agreed = null;
           await sleep(settleMs);
           continue;
         }
@@ -678,18 +628,18 @@ export async function applyPlan(
         }
         const namedSplit = await namedByManual(entry.txids ?? []);
         if (namedSplit) return conflict(key, entry.id, namedSplit);
-        if (!write)
-          return say(
-            `  would split ${entry.legIds.length} legs of ${entry.summId} off their actions, then delete them`,
-          );
-        if (holdForSignal()) return;
-        const legs = ownLegs(next).filter((l) => !isIgnored(l));
         // A leg Summ paired in since the pull stays where it is, and Summ may retype it once these leave
         const known = new Set([...entry.legIds, ...(entry.others ?? []).map((l) => l.legId)]);
         for (const l of next.legs.filter((x) => !known.has(x.legId) && x.importType !== "assumed-fee"))
           say(
             `  leg ${l.legId} (${l.quantity} ${l.currency}, ${l.importType}) joined the action of ${entry.summId} since the pull: it stays, and Summ may retype it; the next plan shows it`,
           );
+        if (!write)
+          return say(
+            `  would split ${entry.legIds.length} legs of ${entry.summId} off their actions, then delete them`,
+          );
+        if (holdForSignal()) return;
+        const legs = ownLegs(next).filter((l) => !isIgnored(l));
         const repeat = legs.find((l) => splitThisRun.has(l.legId));
         if (repeat) return conflict(key, entry.id, `leg ${repeat.legId} is not ignored after its split was read back`);
         await split(key, entry, next, legs, splits++);
@@ -930,6 +880,9 @@ export async function applyPlan(
   // Every leg the plan names, whether this run applies its entry or not: a delete's split never leaves one behind
   const planned = new Set([
     ...plan.delete.flatMap((e) => [...e.legIds, ...(e.others ?? []).map((l) => l.legId)]),
+    // Legs the plan holds or reports for the user to decide: not for a split to move from
+    ...(plan.held ?? []).flatMap((h) => h.legIds ?? []),
+    ...(plan.report ?? []).flatMap((r) => r.legIds ?? []),
     ...[...plan.edit, ...plan.categorise, ...(plan.ignore ?? []), ...(plan.currency ?? [])].flatMap((e) => [
       ...e.changes.map((c) => c.legId),
       ...(e.match ? [e.match.legId] : []),

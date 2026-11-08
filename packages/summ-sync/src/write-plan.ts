@@ -138,7 +138,7 @@ export function renderPlan(plan: Plan, snapshot: string, run: string, legs: Map<
       (es) => ["| Extra row | Run row |", "| --- | --- |", ...es.map((e) => `| ${cell(e.extra)} | ${cell(e.run)} |`)],
     ),
     ...section("Delete (only with --approve-deletes)", plan.delete, (es) => [
-      'Deletes are permanent. Apply compares each leg here with a fresh read, and stops on any difference but a regrouping by Summ itself (a quantity apart by a fee it made), or on a made-up leg, a manual entry, or a leg the plan writes elsewhere joining the action. A leg that stays is split from what is deleted, and Summ may then change its category. A delete marked "no txid" has none to look for, so the check for a manual entry naming it could not apply: only a manual entry in its action stops it.',
+      'Deletes are permanent. Apply compares each leg here with a fresh read, and stops on any difference, or on a made-up leg, a manual entry, or a leg the plan names elsewhere joining the action; any other leg that joined is split from and stays. A leg that stays is split from what is deleted, and Summ may then change its category. A delete marked "no txid" has none to look for, so the check for a manual entry naming it could not apply: only a manual entry in its action stops it.',
       "",
 
       "| Row | ID in Summ | Reason | What happens | Leg | Side | Type | Currency | Amount | Fee on the leg | Date | Source | Import type | Comments |",

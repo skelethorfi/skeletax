@@ -933,20 +933,14 @@ holds back an event with a manual entry it can see, so these are the ones added 
 refused when deletes are approved, dry run too: pull and plan again. Every read of a delete's legs
 is compared with the plan, and any difference stops the entry before its next write:
 
-- each leg's row `ID`, currency, quantity, timestamp, source and import type, always. One exception, for an
-  entry in one action: a quantity grown by exactly a fee Summ made (`assumed-fee`) of the leg's currency that was in
-  the plan's action and no longer is (Summ folded it in), or cut by exactly one now beside the leg that was not
-  (Summ cut it out when it paired the leg anew), is Summ's own regrouping. Fees are counted by amount, as Summ renews
-  their ids, so a fee with only a new id excuses nothing; the plan's action is read through one of its other legs
-  that is not a Summ fee. The quantity so excused is taken on the entry's later reads too, as a split moves the leg
-  away from the fee. A hand edit that does exactly what Summ does is taken for Summ's.
+- each leg's row `ID`, currency, quantity, timestamp, source and import type, always.
 - its `side` and `trade`, unless it now reads ignored and this plan logged its split, even by intent alone
   (a crash can lose the result); a fee leg then reads outgoing. A leg not ignored is compared whatever was logged.
 - its from, to, blockchain, description, price, fee on the leg and comments (a hand edit a delete would lose),
   unless it reads ignored and the split's result line shows the split landed.
 
-- a made-up leg in the action the plan does not name, or a leg the plan names anywhere, applied in
-  this run or not (its own entry checks it where the plan left it): neither is split from or ignored. A leg Summ paired in
+- a made-up leg in the action the plan does not name, or a leg the plan names anywhere (an entry
+  applied in this run or not, a hold, a report): neither is split from or ignored. A leg Summ paired in
   since the pull (an import's or a run row's) stops nothing: the split below moves the entry's legs
   out of its action, and it stays; a manual entry still stops (Manual entries). Allowed too: legs of
   this apply's other deletes and their made-up legs, and Summ-made `assumed-fee` legs, whose ids do
@@ -957,7 +951,7 @@ is compared with the plan, and any difference stops the entry before its next wr
   Summ may retype or re-pair what stays.
 
 A read that differs is read once more, a few seconds later, before the entry stops: Summ may still be regrouping after a
-write nearby. A leg that joined and stays behind a split is printed, as Summ may retype it; the next plan shows it.
+write nearby; two reads after it must then agree before a delete. A leg that joined and stays behind a split is printed, as Summ may retype it; the next plan shows it.
 
 A leg's action is read by its `_id`; no filter chooses what is written. Then, by what the read shows,
 and read again after each step:
