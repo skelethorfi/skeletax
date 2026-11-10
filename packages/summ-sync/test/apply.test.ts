@@ -120,6 +120,21 @@ test("an edit looks the leg up again, edits it in its current action and logs th
   assert.deepEqual([change?.field, change?.value, change?.undo], ["trade", "bridgeTradeOut", "undo1abcdef"]);
 });
 
+test("a read-back Summ answers in a form summ-sync cannot read stops with that, after logging the write", async () => {
+  const summ = new FakeSumm();
+  summ.add("current-action", [{ _id: "leg-1", trade: "withdrawal", quantity: "1" }]);
+  const callTool = summ.callTool.bind(summ);
+  summ.callTool = async (name, args) =>
+    name === "inspect_transaction" && args.actionId && summ.calls.some((c) => c.name === "edit_transaction")
+      ? (summ.calls.push({ name, args }), "# Transaction Detail\n\n```json\n{}\n```\n")
+      : callTool(name, args);
+  const { log } = await stops(summ, planFile({ categorise: [edit()] }), /no longer reads as summ-sync expects/);
+  // Read once: a retry would read the same answer
+  assert.equal(summ.calls.filter((c) => c.name === "inspect_transaction" && c.args.actionId).length, 1);
+  const change = log.find((l) => l.legId === "leg-1" && !l.intent);
+  assert.equal(change?.undo, "undo1abcdef");
+});
+
 const STALE = "2026-01-01T00:00:00.000Z";
 const priceChange = (desired = 2.5): EditEntry["changes"] => [
   { leg: "base", legId: "leg-1", field: "price", summ: 3.9, desired },
