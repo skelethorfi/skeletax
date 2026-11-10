@@ -511,10 +511,18 @@ export async function applyPlan(
       }
       const was = named.get(leg.legId);
       if (!was) {
-        if (!deleting.has(leg.legId) && leg.importType !== "assumed-fee")
-          problems.push(
-            `leg ${leg.legId} (${leg.quantity} ${leg.currency}, ${leg.importType}) is in the action, and the plan does not name it`,
-          );
+        // A leg Summ paired in since the pull stays where it is: the split moves the entry's legs out of its action.
+        // Not a made-up leg (ignoring it after the delete is no decision of the plan's), nor one the plan names
+        // anywhere: an entry, applied in this run or not, which checks it where the plan left it; a hold or a report,
+        // left to the user
+        const what = `leg ${leg.legId} (${leg.quantity} ${leg.currency}, ${leg.importType}) is in the action`;
+        if (!deleting.has(leg.legId) && leg.importType !== "assumed-fee") {
+          if (planned.has(leg.legId))
+            problems.push(
+              `${what}, and the plan names it elsewhere (another entry, a hold or a report), not in this delete`,
+            );
+          else if (leg.importType === "soft-transfer") problems.push(`${what}, and the plan does not name it`);
+        }
         continue;
       }
       if (leg.importType !== "assumed-fee")
@@ -554,6 +562,7 @@ export async function applyPlan(
     const splitThisRun = new Set<string>();
     let waits = 0;
     let splits = 0;
+    let retried = false;
     let agreed: string | null = null;
     // A signal lets an entry finish what it began, but begins nothing permanent
     const holdForSignal = () => !splitThisRun.size && stopping();
@@ -579,7 +588,16 @@ export async function applyPlan(
         return conflict(key, entry.id, `leg ${absent.join(", ")} is no longer in Summ, the others are`);
 
       const differs = deleteDiffers(key, entry, reads as Found[]);
-      if (differs) return conflict(key, entry.id, `changed since the pull: ${differs}`);
+      if (differs) {
+        // Summ may still be regrouping after a write nearby: read once more before stopping
+        if (!retried) {
+          retried = true;
+          agreed = null;
+          await sleep(settleMs);
+          continue;
+        }
+        return conflict(key, entry.id, `changed since the pull: ${differs}`);
+      }
 
       const actions = new Map((reads as Found[]).map((f) => [f.actionId, f]));
       const shared = [...actions.values()].filter((f) => f.legs.some((l) => !entry.legIds.includes(l.legId)));
@@ -611,6 +629,12 @@ export async function applyPlan(
         }
         const namedSplit = await namedByManual(entry.txids ?? []);
         if (namedSplit) return conflict(key, entry.id, namedSplit);
+        // A leg Summ paired in since the pull stays where it is, and Summ may retype it once these leave
+        const known = new Set([...entry.legIds, ...(entry.others ?? []).map((l) => l.legId)]);
+        for (const l of next.legs.filter((x) => !known.has(x.legId) && x.importType !== "assumed-fee"))
+          say(
+            `  leg ${l.legId} (${l.quantity} ${l.currency}, ${l.importType}) joined the action of ${entry.summId} since the pull: it stays, and Summ may retype it; the next plan shows it`,
+          );
         if (!write)
           return say(
             `  would split ${entry.legIds.length} legs of ${entry.summId} off their actions, then delete them`,
@@ -854,6 +878,18 @@ export async function applyPlan(
       ...(e.others ?? []).filter((l) => l.importType === "soft-transfer").map((l) => l.legId),
     ]),
   );
+  // Every leg the plan names, whether this run applies its entry or not: a delete's split never leaves one behind
+  const planned = new Set([
+    ...plan.delete.flatMap((e) => [...e.legIds, ...(e.others ?? []).map((l) => l.legId)]),
+    // Legs the plan holds or reports for the user to decide: not for a split to move from
+    ...(plan.held ?? []).flatMap((h) => h.legIds ?? []),
+    ...(plan.report ?? []).flatMap((r) => r.legIds ?? []),
+    ...[...plan.edit, ...plan.categorise, ...(plan.ignore ?? []), ...(plan.currency ?? [])].flatMap((e) => [
+      ...e.changes.map((c) => c.legId),
+      ...(e.match ? [e.match.legId, e.match.baseLegId] : []),
+      ...(e.ignore ?? []),
+    ]),
+  ]);
   // The legs this apply may itself change or move: their own entries check them. A Summ-made fee has no lasting id
   const ours = new Set([
     ...deleting,

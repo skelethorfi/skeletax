@@ -147,7 +147,7 @@ export interface DeleteEntry {
   otherLegs: number;
   /** The values of `legIds`, compared at apply. A plan made before these has none, and its deletes are refused. */
   legs?: LegValues[];
-  /** The other legs by name: any other leg in the action at apply stops the entry. */
+  /** The other legs by name, compared at apply; a leg not among them that joined is split away from, unless the plan names it elsewhere. */
   others?: LegValues[];
   /** The row's txids, or with no row those its legs name: a manual entry naming one at apply stops the entry. */
   txids?: string[];
