@@ -31,10 +31,10 @@ describe("a tx with several coins", () => {
     assert.throws(() => onlyCoin({ coins: [EXTRA, EXTRA] }, "send"), /send: expected 1 coin but there were 2/);
   });
 
-  test("oneCoin gives the one coin and throws for none or several", () => {
+  test("oneCoin gives the one coin and throws for no tx, none or several", () => {
     assert.deepEqual(oneCoin({ coins: [EXTRA] }, "bond"), EXTRA);
     assert.throws(() => oneCoin({ coins: [] }, "bond"), /bond: expected 1 coin but there were 0/);
-    assert.throws(() => oneCoin(undefined, "bond"), /bond: expected 1 coin but there were 0/);
+    assert.throws(() => oneCoin(undefined, "bond"), /bond: expected 1 coin but there was no tx/);
     assert.throws(() => oneCoin({ coins: [EXTRA, EXTRA] }, "bond"), /bond: expected 1 coin but there were 2/);
   });
 

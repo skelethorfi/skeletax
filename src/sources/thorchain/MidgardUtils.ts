@@ -47,8 +47,13 @@ export function onlyCoin<C>(tx: { coins: C[] } | undefined, what: string): C | u
   return tx?.coins[0];
 }
 
-// The one coin of a tx that must carry one: none, or several, fails the action, as onlyCoin
+// The one coin of a tx that must carry exactly one. It throws, failing the action, for several coins (as onlyCoin
+// does) and also for no coin or no tx, where onlyCoin gives undefined.
 export function oneCoin<C>(tx: { coins: C[] } | undefined, what: string): C {
+  if (!tx) {
+    throw new Error(`${what}: expected 1 coin but there was no tx`);
+  }
+
   const coin = onlyCoin(tx, what);
 
   if (!coin) {
