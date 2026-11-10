@@ -204,11 +204,11 @@ denoms. Every interpreter maps one coin per tx it reads as a leg:
 - a trade account deposit or withdrawal (`trade.md`).
 
 One of those txs with more than one coin fails the action (`expected 1 coin
-but there were <n>`), rather than export the first coin and drop the others
-without notice. A tx that must carry a coin and has none fails the same way
-(`... there were 0`); a send, a THORName update and a withdrawal request may
-carry none. Whether Midgard lists a tx with several coins on mainnet is not
-confirmed.
+but there were <n>`; a trade gives its own message, `trade.md`), rather than
+export the first coin and drop the others without notice. A tx that must
+carry a coin and has none fails too; a send, a THORName update and a
+withdrawal request may carry none. Whether Midgard lists a tx with several
+coins on mainnet is not confirmed.
 
 A failed send moved no coin, so its coins are not read and it still gives its
 fee row. A withdrawal's request coin is not a leg (`liquidity.md`), so its
