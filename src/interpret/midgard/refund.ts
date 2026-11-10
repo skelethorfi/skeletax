@@ -3,7 +3,7 @@ import type { Activity, Leg } from "../../domain/Activity.ts";
 import { formatAmount, parseAmount } from "../../domain/Amount.ts";
 import { toAsset } from "../../domain/Asset.ts";
 import type { Issue } from "../../domain/Issue.ts";
-import { getActionDate } from "../../sources/thorchain/MidgardUtils.ts";
+import { getActionDate, oneCoin } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { inboundGas } from "./gas.ts";
@@ -15,7 +15,7 @@ import { inboundGas } from "./gas.ts";
 export function interpretRefund(bundle: RawBundle, protocol: Protocol): { activities: Activity[]; issues: Issue[] } {
   const action = bundle.data as Action;
   const input = action.in[0];
-  const inputCoin = input.coins[0];
+  const inputCoin = oneCoin(input, "refund");
   const inputAsset = toAsset(inputCoin.asset);
 
   // THORChain swaps an affiliate's cut to RUNE as a swap of its own, carrying the user's txid and address.

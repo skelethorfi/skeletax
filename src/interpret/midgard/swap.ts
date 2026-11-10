@@ -8,6 +8,7 @@ import {
   isMemoName,
   memoDestination,
   memoRefundAddress,
+  oneCoin,
   parseMidgardAsset,
 } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
@@ -28,7 +29,7 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
   }
 
   const input = action.in[0];
-  const inputCoin = input.coins[0];
+  const inputCoin = oneCoin(input, "swap");
   const inputAsset = toAsset(inputCoin.asset);
 
   // A synth swapped from an L1 address is a savers withdrawal's internal leg, not the wallet's swap
@@ -44,7 +45,7 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
   }
 
   const output = getOutput(action);
-  const outputCoin = output.coins[0];
+  const outputCoin = oneCoin(output, "swap");
   const outputAsset = toAsset(outputCoin.asset);
 
   // Can appear with lending transactions
@@ -55,8 +56,7 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
   const amount = (coin: { asset: string; amount: string }) => parseAmount(coin.amount, protocol.decimals(coin.asset));
   const returnOutputs = getReturnOutputs(action, input, output);
   const returned = returnOutputs
-    .flatMap((out) => out.coins)
-    .filter((coin) => coin.asset === inputCoin.asset)
+    .map((out) => oneCoin(out, "swap return"))
     .reduce((sum, coin) => sum + BigInt(coin.amount), 0n);
   const { sent, issues } = sentCoin(bundle, inputCoin, returned, protocol);
 

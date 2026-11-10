@@ -2,7 +2,7 @@ import type { Action } from "@xchainjs/xchain-midgard";
 import type { Activity, Leg } from "../../domain/Activity.ts";
 import { parseAmount } from "../../domain/Amount.ts";
 import { toAsset } from "../../domain/Asset.ts";
-import { getActionDate } from "../../sources/thorchain/MidgardUtils.ts";
+import { getActionDate, oneCoin } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { nativeGas } from "./bond.ts";
@@ -28,13 +28,15 @@ export function interpretSwitch(bundle: RawBundle, protocol: Protocol): Activity
     basis: "observed",
     txid,
   });
+  const sent = oneCoin(input, "switch");
+  const received = oneCoin(output, "switch");
   const txid = input.txID ?? "";
-  const gas = inboundGas(txid, bundle, input.address, input.coins[0].asset, protocol);
+  const gas = inboundGas(txid, bundle, input.address, sent.asset, protocol);
 
   return activity(bundle, protocol, "switch", [
-    leg("out", input.address, input.coins[0], txid),
+    leg("out", input.address, sent, txid),
     ...(gas ? [{ ...gas, txid }] : []),
-    leg("in", output.address, output.coins[0], output.txID ?? ""),
+    leg("in", output.address, received, output.txID ?? ""),
   ]);
 }
 
@@ -44,7 +46,7 @@ export function interpretRunePool(bundle: RawBundle, protocol: Protocol): Activi
   const action = bundle.data as Action;
   const isDeposit = (action.type as string) === "runePoolDeposit";
   const tx = isDeposit ? action.in[0] : action.out[0];
-  const coin = tx.coins[0];
+  const coin = oneCoin(tx, isDeposit ? "RUNEPool deposit" : "RUNEPool withdrawal");
   const units = (action.metadata as any)[isDeposit ? "runePoolDeposit" : "runePoolWithdraw"]?.units ?? "";
   const txid = tx.txID ?? "";
   const rune: Leg = {

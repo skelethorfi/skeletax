@@ -189,12 +189,26 @@ row of 1 RUNE with a 0.02 RUNE fee: today's row. The interpreter is
 ## One coin per tx
 
 A Midgard tx lists its `coins`, and a Cosmos `MsgSend` can carry several
-denoms. A send, a liquidity or savers withdrawal and a loan map one coin per
-tx: the coin sent, each output paid, and a loan's collateral, payout,
-repayment and returned collateral. One of those txs with more than one coin
-fails the action (`expected 1 coin but there were <n>`), rather than export
-the first coin and drop the others without notice. Whether Midgard lists such
-a tx on mainnet is not confirmed.
+denoms. Every interpreter maps one coin per tx it reads as a leg:
+
+- a send: the coin sent;
+- a swap: the coin sent, the output paid to the destination, and each return
+  of the input asset; a stuck swap: the coin sent;
+- a refund: the coin sent (the returned coins are summed);
+- a liquidity or savers add: each deposit; a withdrawal: each output paid;
+  Maya's liquidity auction: both sides and each RUNE deposit found;
+- a loan: its collateral, payout, repayment and returned collateral;
+- a switch: the coin sent and the coin minted;
+- a bond or unbond, a RUNEPool deposit or withdrawal, a TCY claim, stake or
+  unstake, and a THORName's payment;
+- a trade account deposit or withdrawal (`trade.md`).
+
+One of those txs with more than one coin fails the action (`expected 1 coin
+but there were <n>`; a trade gives its own message, `trade.md`), rather than
+export the first coin and drop the others without notice. A tx that must
+carry a coin and has none fails too; a send, a THORName update and a
+withdrawal request may carry none. Whether Midgard lists a tx with several
+coins on mainnet is not confirmed.
 
 A failed send moved no coin, so its coins are not read and it still gives its
 fee row. A withdrawal's request coin is not a leg (`liquidity.md`), so its

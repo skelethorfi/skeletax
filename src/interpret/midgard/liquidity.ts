@@ -3,7 +3,7 @@ import type { Activity, Leg } from "../../domain/Activity.ts";
 import { formatAmount, parseAmount } from "../../domain/Amount.ts";
 import { toAsset, toPositionAsset } from "../../domain/Asset.ts";
 import type { Issue } from "../../domain/Issue.ts";
-import { getActionDate, onlyCoin, parseMidgardAsset } from "../../sources/thorchain/MidgardUtils.ts";
+import { getActionDate, oneCoin, onlyCoin, parseMidgardAsset } from "../../sources/thorchain/MidgardUtils.ts";
 import { type Protocol, THORCHAIN } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { isDonateAdd, midgardActionKey } from "../../sources/store/Sources.ts";
@@ -40,7 +40,7 @@ export function interpretAddLiquidity(
   const issues: Issue[] = [];
 
   for (const deposit of deposits) {
-    const coin = deposit.coins[0];
+    const coin = oneCoin(deposit, "liquidity add");
     const wallet = deposit.address ?? "";
     // Midgard reports a savers deposit's coin as the synth (BTC/BTC), but a wallet on the asset's own chain
     // sent the L1 asset and paid that chain's gas (savers.md)
@@ -115,10 +115,11 @@ function interpretAuction(bundle: RawBundle, protocol: Protocol): { activities: 
   const action = bundle.data as Action;
   const cacaoSide = action.in.find((tx) => tx.txID)!;
   const side = action.in.find((tx) => !tx.txID)!;
-  const sideCoin = side.coins[0];
+  const sideCoin = oneCoin(side, "liquidity auction");
   const amountOf = (asset: string, amount: string | bigint) => parseAmount(amount.toString(), protocol.decimals(asset));
   const sends = bundle.inbounds ?? [];
-  const deposited = sends.reduce((sum, send) => sum + BigInt(send.in[0].coins[0].amount), 0n);
+  const sent = (send: Action) => oneCoin(send.in[0], "liquidity auction deposit").amount;
+  const deposited = sends.reduce((sum, send) => sum + BigInt(sent(send)), 0n);
   const extra = BigInt(sideCoin.amount) - deposited;
   const deposits: Activity[] = sends.map((send) => {
     const txid = send.in[0].txID ?? "";
@@ -137,7 +138,7 @@ function interpretAuction(bundle: RawBundle, protocol: Protocol): { activities: 
           direction: "out",
           wallet,
           asset: toAsset(sideCoin.asset),
-          amount: amountOf(sideCoin.asset, send.in[0].coins[0].amount),
+          amount: amountOf(sideCoin.asset, sent(send)),
           role: "principal",
           basis: "observed",
           txid,
@@ -163,7 +164,7 @@ function interpretAuction(bundle: RawBundle, protocol: Protocol): { activities: 
     role: "principal",
     basis: "observed",
   });
-  const cacao = cacaoSide.coins[0];
+  const cacao = oneCoin(cacaoSide, "liquidity auction");
   const legs: Leg[] = [
     ...supplied(cacaoSide.address, cacao.asset, amountOf(cacao.asset, cacao.amount)),
     ...(sends.length === 0
