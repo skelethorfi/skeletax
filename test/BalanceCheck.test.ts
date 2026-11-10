@@ -114,6 +114,27 @@ describe("balance check: trade accounts", () => {
     ]);
     assert.deepEqual(report.lines, []);
   });
+
+  test("a sell's or buy's quote in a trade asset is a trade account holding too", () => {
+    const trade = (type: SummRowType, asset: string, quoteAsset: string) =>
+      row({
+        type,
+        wallet: "thor1w",
+        baseCurrency: "BTC",
+        baseAmount: "1",
+        quoteCurrency: "ETH",
+        quoteAmount: "30",
+        trace: { role: "out", asset, quoteAsset },
+      });
+    assert.deepEqual(held(computeHoldings([trade(SummRowType.Sell, "BTC~BTC", "ETH~ETH")]), "thor1w"), {
+      "BTC (trade account)": "-1",
+      "ETH (trade account)": "30",
+    });
+    assert.deepEqual(held(computeHoldings([trade(SummRowType.Buy, "BTC.BTC", "ETH~ETH")]), "thor1w"), {
+      BTC: "1",
+      "ETH (trade account)": "-30",
+    });
+  });
 });
 
 describe("balance check: report", () => {

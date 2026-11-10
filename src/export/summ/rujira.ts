@@ -91,7 +91,7 @@ export function rujiraTradeRows(activity: Activity, protocol: Protocol): SummRow
         from: sent.wallet,
         to: sent.wallet,
         blockchain,
-        trace: legTrace(sent),
+        trace: { ...legTrace(sent), quoteAsset: received.asset.notation },
         description: `1/1 - ${description}`,
       },
     ];
