@@ -1,12 +1,12 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { interpret } from "../src/interpret/registry.ts";
-import { THORCHAIN } from "../src/domain/Protocol.ts";
+import { PROTOCOLS, THORCHAIN, type Protocol } from "../src/domain/Protocol.ts";
 import { readCaseInput, toBundle } from "../src/fixtures/GoldenCase.ts";
-import { onlyCoin } from "../src/sources/thorchain/MidgardUtils.ts";
+import { oneCoin, onlyCoin } from "../src/sources/thorchain/MidgardUtils.ts";
 
 // A tx can list several coins (a Cosmos MsgSend can carry several denoms). The send, withdrawal and loan
-// interpreters map one coin per tx, so a second would be dropped: the action fails instead (#130).
+// interpreters map one coin per tx, so a second would be dropped: the action fails instead (#130, #140).
 const EXTRA = { asset: "THOR.TCY", amount: "100000000" };
 
 function withExtraCoin(dir: string, txOf: (data: any) => { coins: unknown[] }) {
@@ -15,8 +15,8 @@ function withExtraCoin(dir: string, txOf: (data: any) => { coins: unknown[] }) {
   return bundle;
 }
 
-function failure(bundle: ReturnType<typeof toBundle>) {
-  const { activities, issues } = interpret(bundle, THORCHAIN);
+function failure(bundle: ReturnType<typeof toBundle>, protocol: Protocol = THORCHAIN) {
+  const { activities, issues } = interpret(bundle, protocol);
   assert.deepEqual(activities, []);
   assert.equal(issues.length, 1);
   assert.equal(issues[0].kind, "failed");
@@ -29,6 +29,13 @@ describe("a tx with several coins", () => {
     assert.equal(onlyCoin({ coins: [] }, "send"), undefined);
     assert.equal(onlyCoin(undefined, "send"), undefined);
     assert.throws(() => onlyCoin({ coins: [EXTRA, EXTRA] }, "send"), /send: expected 1 coin but there were 2/);
+  });
+
+  test("oneCoin gives the one coin and throws for none or several", () => {
+    assert.deepEqual(oneCoin({ coins: [EXTRA] }, "bond"), EXTRA);
+    assert.throws(() => oneCoin({ coins: [] }, "bond"), /bond: expected 1 coin but there were 0/);
+    assert.throws(() => oneCoin(undefined, "bond"), /bond: expected 1 coin but there were 0/);
+    assert.throws(() => oneCoin({ coins: [EXTRA, EXTRA] }, "bond"), /bond: expected 1 coin but there were 2/);
   });
 
   test("the unchanged cases still map", () => {
@@ -83,5 +90,45 @@ describe("a tx with several coins", () => {
 
     const output = withExtraCoin("test/cases/loan/repay-btc-loan-with-rune-closed", (data) => data.out[0]);
     assert.match(failure(output), /loan: expected 1 coin but there were 2/);
+  });
+
+  // Each case below maps today (GoldenCases); with a second coin on the tx it reads, the action fails
+  const cases: [string, string, (data: any) => { coins: unknown[] }][] = [
+    ["test/cases/swap/eth-to-btc", "swap", (data) => data.in[0]],
+    ["test/cases/swap/eth-to-btc", "swap", (data) => data.out.find((out: any) => !out.affiliate)],
+    [
+      "test/cases/swap/btc-to-wbtc-partial-fill-more-returned",
+      "swap return",
+      (data) => data.out.find((out: any) => out.coins[0].asset === "BTC.BTC"),
+    ],
+    ["test/cases/refund/btc-price-limit", "refund", (data) => data.in[0]],
+    ["test/cases/switch/bep2-rune", "switch", (data) => data.in[0]],
+    ["test/cases/switch/bep2-rune", "switch", (data) => data.out[0]],
+    ["test/cases/bond/bond", "bond", (data) => data.in[0]],
+    ["test/cases/bond/unbond", "unbond", (data) => data.out[0]],
+    ["test/cases/runepool/deposit", "RUNEPool deposit", (data) => data.in[0]],
+    ["test/cases/runepool/withdraw", "RUNEPool withdrawal", (data) => data.out[0]],
+    ["test/cases/tcy/claim", "TCY claim", (data) => data.out[0]],
+    ["test/cases/tcy/stake", "TCY stake", (data) => data.in[0]],
+    ["test/cases/tcy/unstake", "TCY unstake", (data) => data.out[0]],
+    ["test/cases/thorname/register", "THORName", (data) => data.in[0]],
+    ["test/cases/liquidity/add-btc-rune-symmetric", "liquidity add", (data) => data.in[1]],
+    ["test/cases/maya/liquidity-auction-rune", "liquidity auction", (data) => data.in.find((tx: any) => !tx.txID)],
+    ["test/cases/maya/liquidity-auction-rune", "liquidity auction", (data) => data.in.find((tx: any) => tx.txID)],
+  ];
+
+  for (const [dir, what, txOf] of cases) {
+    test(`${what} fails (${dir.split("/").slice(-1)[0]})`, () => {
+      const protocol = PROTOCOLS[readCaseInput(dir).protocol ?? "thorchain"];
+      const message = failure(withExtraCoin(dir, txOf), protocol);
+      assert.match(message, new RegExp(`${what}: expected 1 coin but there were 2`));
+    });
+  }
+
+  test("a liquidity auction fails when a RUNE deposit it found carries several", () => {
+    const dir = "test/cases/maya/liquidity-auction-rune";
+    const bundle = toBundle(readCaseInput(dir));
+    bundle.inbounds![0].in[0].coins.push(EXTRA);
+    assert.match(failure(bundle, PROTOCOLS.maya), /liquidity auction deposit: expected 1 coin but there were 2/);
   });
 });

@@ -47,6 +47,17 @@ export function onlyCoin<C>(tx: { coins: C[] } | undefined, what: string): C | u
   return tx?.coins[0];
 }
 
+// The one coin of a tx that must carry one: none, or several, fails the action, as onlyCoin
+export function oneCoin<C>(tx: { coins: C[] } | undefined, what: string): C {
+  const coin = onlyCoin(tx, what);
+
+  if (!coin) {
+    throw new Error(`${what}: expected 1 coin but there were 0`);
+  }
+
+  return coin;
+}
+
 export function toMidgardNanoTimestamp(date: Date): string {
   return (date.getTime() * 1000000).toString();
 }

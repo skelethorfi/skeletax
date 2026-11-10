@@ -2,7 +2,7 @@ import type { Action, BondMetadata } from "@xchainjs/xchain-midgard";
 import type { Activity, Leg } from "../../domain/Activity.ts";
 import { parseAmount } from "../../domain/Amount.ts";
 import { toAsset } from "../../domain/Asset.ts";
-import { getActionDate } from "../../sources/thorchain/MidgardUtils.ts";
+import { getActionDate, oneCoin } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 
@@ -13,7 +13,7 @@ export function interpretBond(bundle: RawBundle, protocol: Protocol): Activity {
   const action = bundle.data as Action;
   const isBond = (action.type as string) === "bond";
   const request = action.in[0];
-  const coin = isBond ? request.coins[0] : action.out[0].coins[0];
+  const coin = oneCoin(isBond ? request : action.out[0], isBond ? "bond" : "unbond");
 
   const requestTxid = request.txID ?? "";
   const principal: Leg = {

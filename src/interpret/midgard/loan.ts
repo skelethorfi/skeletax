@@ -3,7 +3,7 @@ import type { Activity, Leg } from "../../domain/Activity.ts";
 import type { Issue } from "../../domain/Issue.ts";
 import { formatAmount, parseAmount } from "../../domain/Amount.ts";
 import { toAsset } from "../../domain/Asset.ts";
-import { getActionDate, isMemoName, memoDestination, onlyCoin } from "../../sources/thorchain/MidgardUtils.ts";
+import { getActionDate, isMemoName, memoDestination, oneCoin, onlyCoin } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { inboundGas } from "./gas.ts";
@@ -27,7 +27,7 @@ export function interpretLoanOpen(bundle: RawBundle, protocol: Protocol): Activi
   const sent = getCollateral(action, bundle);
   const output = getOutput(action, sent.memo, LOANOPEN_DESTADDR);
   const gas = inboundGas(sent.txid, bundle, sent.wallet, sent.asset, protocol);
-  const borrowed = loanCoin(output);
+  const borrowed = oneCoin(output, "loan");
 
   return activity(
     bundle,
@@ -69,7 +69,8 @@ export function interpretLoanRepay(bundle: RawBundle, protocol: Protocol): Inter
 
   // An output to the destination holds one coin, like every loan tx (activity.md, One coin per tx)
   const isCollateral = (out: Transaction) =>
-    out.address.toLowerCase() === dest.toLowerCase() && loanCoin(out).asset.toUpperCase() === collateral.toUpperCase();
+    out.address.toLowerCase() === dest.toLowerCase() &&
+    oneCoin(out, "loan").asset.toUpperCase() === collateral.toUpperCase();
   const returned = action.out.filter(isCollateral);
   const others = action.out.filter((out) => !isCollateral(out));
   const issues: Issue[] = others.map((out) => ({
@@ -78,7 +79,7 @@ export function interpretLoanRepay(bundle: RawBundle, protocol: Protocol): Inter
   }));
 
   const txid = input.txID ?? "";
-  const repaid = loanCoin(input);
+  const repaid = oneCoin(input, "loan");
   const gas = inboundGas(txid, bundle, input.address, repaid.asset, protocol);
 
   return {
@@ -91,7 +92,10 @@ export function interpretLoanRepay(bundle: RawBundle, protocol: Protocol): Inter
         [
           leg("out", input.address, repaid.asset, repaid.amount, txid),
           ...(gas ? [{ ...gas, txid }] : []),
-          ...returned.map((out) => leg("in", out.address, out.coins[0].asset, out.coins[0].amount, out.txID ?? "")),
+          ...returned.map((out) => {
+            const coin = oneCoin(out, "loan");
+            return leg("in", out.address, coin.asset, coin.amount, out.txID ?? "");
+          }),
         ],
         { collateral },
       ),
@@ -105,7 +109,7 @@ function getCollateral(
   bundle: RawBundle,
 ): { wallet: string; asset: string; amount: string; txid: string; memo?: string } {
   const input = action.in[0];
-  const inputCoin = loanCoin(input);
+  const inputCoin = oneCoin(input, "loan");
 
   if (inputCoin.asset !== "THOR.TOR") {
     return {
@@ -125,17 +129,6 @@ function getCollateral(
   }
 
   return { wallet: tx.from_address ?? "", asset: coin.asset, amount: coin.amount, txid: tx.id ?? "", memo: tx.memo };
-}
-
-// The one coin of a loan's input or output: none, or several, fails the action (onlyCoin)
-function loanCoin(tx: { coins: { asset: string; amount: string }[] }): { asset: string; amount: string } {
-  const coin = onlyCoin(tx, "loan");
-
-  if (!coin) {
-    throw new Error("loan: a tx with no coin");
-  }
-
-  return coin;
 }
 
 function getOutput(action: Action, memo: string | undefined, destIndex: number): Transaction {

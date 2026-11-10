@@ -4,7 +4,7 @@ import type { Issue } from "../../domain/Issue.ts";
 import type { Interpretation } from "../registry.ts";
 import { formatAmount, parseAmount } from "../../domain/Amount.ts";
 import { toAsset, toPositionAsset } from "../../domain/Asset.ts";
-import { getActionDate } from "../../sources/thorchain/MidgardUtils.ts";
+import { getActionDate, oneCoin, onlyCoin } from "../../sources/thorchain/MidgardUtils.ts";
 import { getDistributionDate, type TcyDistributionItem } from "../../sources/tcy/TcyDistributionService.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
@@ -38,7 +38,7 @@ export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Interp
   const input = action.in[0];
   const output = action.out[0];
   const txid = output.txID ?? "";
-  const tcy = output.coins[0];
+  const tcy = oneCoin(output, "TCY claim");
   const issues: Issue[] = [];
   const kind = claimKind(bundle, tcy.amount, issues);
   const position: Leg[] =
@@ -128,12 +128,13 @@ export function interpretTcyStake(bundle: RawBundle, protocol: Protocol): Activi
   const isStake = (action.type as string) === "tcy_stake";
   const tx = isStake ? action.in[0] : action.out[0];
   const txid = tx.txID ?? "";
+  const coin = oneCoin(tx, isStake ? "TCY stake" : "TCY unstake");
 
   return activity(
     bundle,
     protocol,
     isStake ? "tcy.stake" : "tcy.unstake",
-    [leg(isStake ? "out" : "in", tx.address, tx.coins[0], txid), { ...nativeGas(tx.address, protocol), txid }],
+    [leg(isStake ? "out" : "in", tx.address, coin, txid), { ...nativeGas(tx.address, protocol), txid }],
     {},
   );
 }
@@ -146,15 +147,13 @@ export function interpretThorname(bundle: RawBundle, protocol: Protocol): Activi
   const metadata = (action.metadata as any).thorname;
   const wallet = input.address || metadata?.owner || "";
   const txid = input.txID ?? "";
+  const paid = onlyCoin(input, "THORName");
 
   return activity(
     bundle,
     protocol,
     "thorname",
-    [
-      ...(input.coins.length ? [leg("out", wallet, input.coins[0], txid)] : []),
-      { ...nativeGas(wallet, protocol), txid },
-    ],
+    [...(paid ? [leg("out", wallet, paid, txid)] : []), { ...nativeGas(wallet, protocol), txid }],
     metadata?.thorname ? { name: metadata.thorname } : {},
   );
 }
