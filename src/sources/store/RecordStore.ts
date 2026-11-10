@@ -288,6 +288,11 @@ export class RecordStore {
     const rules = options.rules ?? {};
 
     if (this.replay) {
+      // The replayed run could not fetch the list and had none stored: it warns again, and gives nothing as it did
+      if (this.skippedInReplay(source, skippedListKey(wallet))) {
+        options.onFetchError?.(new Error("skipped by the replayed run"), false);
+      }
+
       const list = this.replay.findList(source, wallet);
 
       // A source added after the replayed run gave it nothing
@@ -329,7 +334,12 @@ export class RecordStore {
             throw error;
           }
 
-          options.onFetchError(error, this.lists(source, wallet).length > 0);
+          const stored = this.lists(source, wallet).length > 0;
+          options.onFetchError(error, stored);
+
+          if (!stored) {
+            this.recordSkipped(source, skippedListKey(wallet));
+          }
         }
 
         return fetched
@@ -711,4 +721,9 @@ function walk(dir: string): string[] {
   return fs
     .readdirSync(dir, { withFileTypes: true })
     .flatMap((entry) => (entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)]));
+}
+
+// A list's key among the manifest's skipped records: never a record's key, which is a hash or an id
+function skippedListKey(wallet: string): string {
+  return `list/${wallet}`;
 }
