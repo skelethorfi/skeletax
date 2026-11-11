@@ -256,6 +256,23 @@ describe("Viewblock.getInbound", () => {
     );
   });
 
+  test("a list a run could not fetch, with none stored, is warned about again when that run is replayed", async () => {
+    mock.method(http, "get", async () => {
+      throw Object.assign(new Error("400"), { response: { status: 400 } });
+    });
+    const dir = tmp();
+    const manifest = new SnapshotManifest();
+    assert.deepEqual(await new Viewblock(new RecordStore(dir, { manifest })).getTxs("thor1-wallet"), []);
+    manifest.write(path.join(dir, "run"));
+
+    const replay = new Viewblock(new RecordStore(dir, { replay: SnapshotManifest.load(path.join(dir, "run")) }));
+    assert.deepEqual(await replay.getTxs("thor1-wallet"), []);
+    assert.match(
+      replay.warnings().join("\n"),
+      /could not list the txs of thor1-wallet \(skipped by the replayed run\); its sends and withdrawn pending adds/,
+    );
+  });
+
   test("an inbound asked for twice at once, whose fetch fails, is skipped and warned about once", async () => {
     mock.method(http, "get", async () => {
       throw Object.assign(new Error("429"), { response: { status: 429, data: { value: 1000 } } });

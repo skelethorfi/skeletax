@@ -109,7 +109,9 @@ the first above zero and the second below. A trade account holding is named
 like its L1 asset (`assets.md`) but is not in the bank balance either: the
 rows' total of it is kept as `<currency> (trade account)`, apart from a
 secured asset of the same name, checked for going below zero and not
-compared.
+compared. That holds for a row's base asset and for a sell's quote (a FIN
+swap between trade assets): the row's trace names each asset as the source
+does.
 
 The balance is read after the wallet's Midgard list, and Midgard can lag
 THORNode by a few blocks: activity in between gives a one-off difference.

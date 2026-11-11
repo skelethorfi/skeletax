@@ -168,3 +168,11 @@ describe("FIN trades: several in one tx", () => {
     }
   });
 });
+
+describe("FIN trades: the sell row's trace", () => {
+  test("names the quote asset as the source does, for the balance check (never in the row ID)", () => {
+    const [sell] = runBundle(toBundle(readCaseInput("test/cases/rujira/fin-swap-rune-to-brune")), THORCHAIN).rows;
+    assert.equal(sell.trace?.asset, "THOR.RUNE");
+    assert.equal(sell.trace?.quoteAsset, "X/BRUNE");
+  });
+});

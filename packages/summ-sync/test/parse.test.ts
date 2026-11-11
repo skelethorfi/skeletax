@@ -120,5 +120,6 @@ test("parseDetail stops on action JSON without an _id", () => {
 });
 
 test("parseDetail refuses text without action JSON", () => {
-  assert.throws(() => parseDetail("nothing here"), /No action JSON/);
+  assert.throws(() => parseDetail("nothing here"), /no action JSON block/);
+  assert.throws(() => parseDetail("```json\n{ not json\n```"), /the action JSON does not parse/);
 });

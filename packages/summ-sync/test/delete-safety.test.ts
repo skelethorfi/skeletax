@@ -673,6 +673,20 @@ test("the list of manual entries is read to its last page, and a total it does n
   assert.deepEqual(writesOf(summ), []);
 });
 
+test("a page of manual entries read in part stops: a block with no Action ID, or fewer blocks than it says", async () => {
+  const summ = new FakeSumm();
+  summ.add("a", [leg("d")]);
+  const { dir, planDir } = stateFor(summ, named(summ, planOf({ delete: [del({ txids: [TXID] })] })));
+  for (const text of [
+    "(Page 1 of 1, 2 returned, 2 total)\n## 1. Send\n- **Action ID**: `m1`\n## 2. Send\n- **Tx Hash**: `x`\n",
+    "(Page 1 of 1, 2 returned, 2 total)\n## 1. Send\n- **Action ID**: `m1`\n",
+  ]) {
+    summ.manualListText = text;
+    assert.match(String((await apply(summ, dir, planDir)).stop?.message), /no longer reads as summ-sync expects/);
+  }
+  assert.deepEqual(writesOf(summ), []);
+});
+
 test("only Summ's own empty answer reads as empty", async () => {
   const summ = new FakeSumm();
   summ.add("a", [leg("d")]);

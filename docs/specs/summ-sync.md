@@ -1037,6 +1037,9 @@ which logs only `apply-stop`, blocks nothing, and a failed write, which logs an 
 
 **Stops.** `apply-stop` carries a `reason`: `complete`, `signal`, `conflict`, `bad-result`, `read-back`,
 `write-failed` or `error`, with what was found. A hard kill leaves none; the next run needs none.
+A read-back that never shows the write stops with `read-back` after its retries; one whose answer no longer reads as
+summ-sync expects (`FormatChanged`) stops at once, with `error` and that message, as no retry would read it. Either
+way the write's result and undo lines are logged first.
 The first SIGINT or SIGTERM says it is waiting, finishes the steps of an entry this run has begun to write
 (split, delete, ignore, and both edits of a sell), writes `apply-stop` and exits 130. A delete entry with no split yet in this run
 stops before its split or its permanent delete. A second stops at once, which is as safe as a crash.

@@ -138,4 +138,6 @@ export interface RowTrace {
   role: string;
   // The leg's asset as the source names it, e.g. 'BTC.BTC', when the action has a row of this role per asset
   asset?: string;
+  // A sell's or buy's quote asset as the source names it, e.g. 'ETH~ETH': for the balance check, never in the row ID
+  quoteAsset?: string;
 }

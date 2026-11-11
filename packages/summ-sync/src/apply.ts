@@ -27,7 +27,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { configSha } from "./config.ts";
 import { figuresNote } from "./figures.ts";
-import { type ActionDetail, isLegAbsent, parseActions, parseDetail, parsePageHeader } from "./parse.ts";
+import { type ActionDetail, FormatChanged, isLegAbsent, parseActions, parseDetail, parsePage } from "./parse.ts";
 import {
   type Change,
   type DeleteEntry,
@@ -304,8 +304,9 @@ async function manualEntries(client: ToolCaller): Promise<Leg[]> {
     if (!listed.length && page === 1 && NOTHING_LISTED.test(text)) return [];
     if (!listed.length)
       throw new ApplyStop("bad-result", `the list of manual entries reads: ${JSON.stringify(text.slice(0, 200))}`);
+    // Every block of the page an action with an id, as many as the header says: none read in part
+    const { header } = parsePage(text);
     ids.push(...listed.map((a) => a["Action ID"] as string));
-    const header = parsePageHeader(text);
     if (header.page < header.pages) continue;
     if (new Set(ids).size !== header.total)
       throw new ApplyStop("bad-result", `the list of manual entries gave ${ids.length} actions of ${header.total}`);
@@ -403,26 +404,40 @@ export async function applyPlan(
     }
   };
 
-  /** The legs as the actions a result names show them, once they agree (Summ settles a few seconds after a write). */
+  /** An answer of Summ's that readBack could not read: no retry reads it, and its stop says so (readBackStop). */
+  let unreadable: FormatChanged | null = null;
+
+  /** The legs as the actions a result names show them, once they agree (Summ settles a few seconds after a write).
+   * Null when they never do; the caller logs the write's result, then stops with readBackStop. */
   async function readBack(
     text: string,
     legIds: string[],
     agrees: (l: Leg) => boolean,
   ): Promise<Map<string, Leg> | null> {
+    unreadable = null;
     for (let i = 0; i < READ_BACKS; i++) {
       if (i) await sleep(settleMs);
       const seen = new Map<string, Leg>();
       for (const actionId of affectedActions(text)) {
-        const legs = await client
-          .callTool("inspect_transaction", { actionId })
-          .then((t) => legsOf(parseDetail(t)))
-          .catch(() => []);
+        let legs: Leg[] = [];
+        try {
+          legs = legsOf(parseDetail(await client.callTool("inspect_transaction", { actionId })));
+        } catch (e) {
+          // An action gone by now (an id changes on a write) is read again; an answer that no longer parses is not
+          if (e instanceof FormatChanged) {
+            unreadable = e;
+            return null;
+          }
+        }
         for (const l of legs) if (legIds.includes(l.legId)) seen.set(l.legId, l);
       }
       if (legIds.every((id) => seen.has(id) && agrees(seen.get(id) as Leg))) return seen;
     }
     return null;
   }
+
+  /** The stop after a read-back that never agreed: Summ's unreadable answer when that was the reason. */
+  const readBackStop = (key: string, message: string): Error => unreadable ?? new ApplyStop("read-back", message, key);
 
   // Read when the first delete needs them
   let lines: Map<string, RowLine> | null = null;
@@ -707,11 +722,7 @@ export async function applyPlan(
     checkResult(key, text, PATCHED, legs.length, true);
     const ids = legs.map((l) => l.legId);
     if (!(await readBack(text, ids, isIgnored)))
-      throw new ApplyStop(
-        "read-back",
-        `${key}: the actions the split names do not show ${ids.join(", ")} ignored`,
-        key,
-      );
+      throw readBackStop(key, `${key}: the actions the split names do not show ${ids.join(", ")} ignored`);
   }
 
   async function remove(key: string, entry: DeleteEntry, actions: Map<string, Found>) {
@@ -826,7 +837,7 @@ export async function applyPlan(
     write({ call: "bulk_edit_transactions", ...tag, undo, result: text });
     checkResult(key, text, IGNORED, 1, true);
     if (!(await readBack(text, [legId], isIgnored)))
-      throw new ApplyStop("read-back", `${key}: the actions the ignore names do not show ${legId} ignored`, key);
+      throw readBackStop(key, `${key}: the actions the ignore names do not show ${legId} ignored`);
     say(`  ignored the made-up leg of ${id}${undo ? ` (undo ${undo})` : ""}`);
   }
 
@@ -1034,7 +1045,7 @@ export async function applyPlan(
     if (problem) throw new ApplyStop("bad-result", `${key}: ${problem}`, key);
     if (!affectedActions(text).length)
       throw new ApplyStop("bad-result", `${key}: the result names no affected action`, key);
-    if (!seen) throw new ApplyStop("read-back", `${key}: the actions the edit names do not show ${summary}`, key);
+    if (!seen) throw readBackStop(key, `${key}: the actions the edit names do not show ${summary}`);
     say(`  ${kind} ${entry.id}: ${summary}${undo ? ` (undo ${undo})` : ""}`);
     return true;
   }
@@ -1118,7 +1129,7 @@ export async function applyPlan(
     if (problem) throw new ApplyStop("bad-result", `${key}: ${problem}`, key);
     if (!affectedActions(text).length)
       throw new ApplyStop("bad-result", `${key}: the result names no affected action`, key);
-    if (!seen) throw new ApplyStop("read-back", `${key}: the actions the edit names do not show ${desired}`, key);
+    if (!seen) throw readBackStop(key, `${key}: the actions the edit names do not show ${desired}`);
     say(`  ${kind} ${entry.id}: quote price ${m.summ} -> ${desired}${undo ? ` (undo ${undo})` : ""}`);
     return true;
   }

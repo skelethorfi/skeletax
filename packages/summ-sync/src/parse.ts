@@ -93,8 +93,13 @@ export const isLegAbsent = (message: string, legId: string): boolean =>
  */
 export function parseDetail(markdown: string): ActionDetail {
   const json = markdown.match(/```json\n([\s\S]*?)\n```/);
-  if (!json) throw new Error(`No action JSON in: ${markdown.slice(0, 200)}`);
-  const action = JSON.parse(json[1]);
+  if (!json) throw new FormatChanged("inspect_transaction", "no action JSON block", markdown);
+  let action;
+  try {
+    action = JSON.parse(json[1]);
+  } catch {
+    throw new FormatChanged("inspect_transaction", "the action JSON does not parse", markdown);
+  }
   if (typeof action?._id !== "string")
     throw new FormatChanged("inspect_transaction", "no _id in the action JSON", markdown);
   const section = markdown.split(/^## Change History\s*$/m)[1];

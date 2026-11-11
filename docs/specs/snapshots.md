@@ -240,9 +240,10 @@ manifest from an earlier layout is refused, as its paths no longer exist):
   which of them were missing from the latest fetch, and `incomplete` (why)
   when the latest list came back short (Viewblock, `sends.md`).
 - `skipped` (only when there are any): records a best-effort source
-  (Viewblock's inbound gas, `fees.md`) could not give the run. `--replay`
-  gives nothing for these, as the run had; any other record missing from the
-  manifest is an error.
+  (Viewblock's inbound gas, `fees.md`) could not give the run, and lists it
+  could not fetch with none stored (Viewblock, key `list/<wallet>`).
+  `--replay` gives nothing for these, as the run had, and repeats the run's
+  warning for each; any other record missing from the manifest is an error.
 
 The run prints a summary: records fetched (new, changed, unchanged), and
 records finalised, revised, kept over a pruned copy, or missing. It lists the

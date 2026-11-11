@@ -82,8 +82,11 @@ export function computeHoldings(rows: SummRow[]): Holdings {
         held.set(currency, (held.get(currency) ?? 0n) + sign * parseScaled(amount));
       }
     };
-    // The base amount of a row whose asset is a trade asset (BTC~BTC)
-    const base = row.trace?.asset?.includes("~") ? `${row.baseCurrency}${TRADE_ACCOUNT}` : row.baseCurrency;
+    // A trade asset (BTC~BTC), as a row's base or a sell's or buy's quote
+    const named = (currency: string | undefined, asset: string | undefined) =>
+      currency && asset?.includes("~") ? `${currency}${TRADE_ACCOUNT}` : currency;
+    const base = named(row.baseCurrency, row.trace?.asset);
+    const quote = named(row.quoteCurrency, row.trace?.quoteAsset);
     const isWallet = (address?: string) => !!address && addressKey(address) === wallet;
 
     if (OUTGOING.has(row.type)) {
@@ -92,10 +95,10 @@ export function computeHoldings(rows: SummRow[]): Holdings {
       add(base, row.baseAmount, 1n);
     } else if (row.type === SummRowType.Sell) {
       add(base, row.baseAmount, -1n);
-      add(row.quoteCurrency, row.quoteAmount, 1n);
+      add(quote, row.quoteAmount, 1n);
     } else if (row.type === SummRowType.Buy) {
       add(base, row.baseAmount, 1n);
-      add(row.quoteCurrency, row.quoteAmount, -1n);
+      add(quote, row.quoteAmount, -1n);
     } else if (row.type !== SummRowType.FailedIn && row.type !== SummRowType.FailedOut) {
       if (isWallet(row.from)) {
         add(base, row.baseAmount, -1n);
