@@ -8,7 +8,6 @@ import {
   getActionDate,
   isMemoName,
   isSwapAfterCut,
-  isSwapCutUnknown,
   memoDestination,
   memoRefundAddress,
   oneCoin,
@@ -17,7 +16,7 @@ import {
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { inboundGas } from "./gas.ts";
-import { depositBeforeCut, inboundCoin } from "./affiliate.ts";
+import { depositBeforeCut, inboundCoin, unknownCutIssues } from "./affiliate.ts";
 
 // https://dev.thorchain.org/concepts/memos.html#swap
 const SWAP_DESTADDR = 2;
@@ -166,19 +165,6 @@ type Coin = { asset: string; amount: string };
 // plus the return and the return's outbound fee (networkFees), which the refund's input equals. A trade or secured asset's
 // unfilled part is credited back on the chain, never returned: the part swapped is what left. Until an L1 return is paid,
 // only the part swapped is exported.
-// A swap whose memo names an affiliate with no fee, when the affiliate's own default fee may have been cut from it
-function unknownCutIssues(action: Action, protocol: Protocol): Issue[] {
-  return isSwapCutUnknown(action, protocol)
-    ? [
-        {
-          kind: "warning",
-          message:
-            "the memo names an affiliate with no fee: its default fee may have been cut from the deposit, which Midgard lists after it; check the amount sent",
-        },
-      ]
-    : [];
-}
-
 function sentCoin(
   bundle: RawBundle,
   inputCoin: Coin,
@@ -305,6 +291,7 @@ function stuckSwap(bundle: RawBundle, protocol: Protocol): { activities: Activit
     ],
     issues: [
       ...(cut?.issues ?? []),
+      ...unknownCutIssues(action, protocol),
       {
         kind: "warning",
         message:

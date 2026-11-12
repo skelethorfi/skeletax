@@ -7,7 +7,7 @@ import { affiliateBps, getActionDate, isSwapAfterCut, oneCoin } from "../../sour
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { inboundGas } from "./gas.ts";
-import { inboundCoin, leavesListed } from "./affiliate.ts";
+import { inboundCoin, leavesListed, unknownCutIssues } from "./affiliate.ts";
 
 // A refund (docs/specs/fees.md): the wallet sent an amount in, and the protocol returned all or part of
 // it, or, for a stuck one still pending, nothing yet (docs/specs/pending.md). Two refunds are not the wallet's own and give no activity: the refund of an affiliate's cut, which
@@ -96,6 +96,7 @@ export function interpretRefund(bundle: RawBundle, protocol: Protocol): { activi
   const reason = ((action.metadata.refund as any)?.reason ?? "").replace(/[\n\t]/g, " ").trim();
   // The source exports a pending refund only once it is stuck (docs/specs/pending.md)
   const issues: Issue[] = [
+    ...unknownCutIssues(action, protocol),
     ...(afterCut && inbound && !cutFromInbound && inbound.amount !== inputCoin.amount
       ? [
           {

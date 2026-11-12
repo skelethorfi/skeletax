@@ -151,36 +151,50 @@ export const SWAP_CUT_BEFORE_HEIGHT: Record<string, { nativeAsset: number; other
   [MAYA.id]: { nativeAsset: 10253469, otherAsset: 8788026 },
 };
 
-// The affiliates a swap or add memo names and their fees in basis points (=:ASSET:DEST:LIMIT:AFFILIATE:FEE,
-// +:POOL:PAIRED:AFFILIATE:FEE). Several affiliates are 'a/b' with a fee each ('10/20') or one fee for every one of them
-// ('10'). With no memo listed, Midgard's affiliateFee, which holds one fee only.
-export function memoAffiliates(action: Action): { names: string[]; bps: bigint[] } {
+// The affiliates a swap or add memo names and its fee slots (=:ASSET:DEST:LIMIT:AFFILIATE:FEE,
+// +:POOL:PAIRED:AFFILIATE:FEE; several affiliates as 'a/b', fees as '10/20' or '10'; an empty slot is ''). With no
+// memo listed, Midgard's affiliate and affiliateFee, which hold one each.
+function memoFields(action: Action): { names: string[]; slots: string[] } {
   const meta = action.metadata?.swap ?? action.metadata?.addLiquidity ?? action.metadata?.refund;
   const memo = meta?.memo ?? "";
+
+  if (!memo) {
+    return { names: meta?.affiliateAddress ? [meta.affiliateAddress] : [], slots: [meta?.affiliateFee ?? ""] };
+  }
+
   const field = action.type === "addLiquidity" ? 4 : 5;
   const fields = memo.split(":");
-  const names = memo ? (fields[field - 1] ?? "").split("/").filter(Boolean) : meta?.affiliateAddress ? ["?"] : [];
-  const fees = (memo ? (names.length ? (fields[field] ?? "") : "") : (meta?.affiliateFee ?? ""))
-    .split("/")
-    .filter((b) => /^\d+$/.test(b))
-    .map(BigInt);
-  const bps = fees.length === 1 && names.length > 1 ? names.map(() => fees[0]) : fees;
-  return { names, bps: bps.filter((b) => b > 0n) };
+  const names = (fields[field - 1] ?? "").split("/").filter(Boolean);
+  return { names, slots: names.length ? (fields[field] ?? "").split("/") : [] };
 }
 
+// The fee in basis points of each affiliate a memo names: a fee each, or one fee for every one of them (THORNode)
 export function affiliateBps(action: Action): bigint[] {
-  return memoAffiliates(action).bps;
+  const { names, slots } = memoFields(action);
+  const fees = slots.filter((slot) => /^\d+$/.test(slot)).map(BigInt);
+  const bps = fees.length === 1 && names.length > 1 ? names.map(() => fees[0]) : fees;
+  return bps.filter((b) => b > 0n);
 }
 
-// A memo's first field says what the tx asks for; '=', 's' and 'swap' ask for a swap
+// From Mayanode v1.112.0 an affiliate with no fee of its own takes its Maya name's default fee, which no source here
+// gives: an empty slot, or a later name when one fee is given for several (memo_parser.go)
+function hasMayaDefaultFee(action: Action, protocol: Protocol): boolean {
+  if (protocol.id !== MAYA.id || Number(action.height) < SWAP_CUT_BEFORE_HEIGHT[MAYA.id].otherAsset) {
+    return false;
+  }
+
+  const { names, slots } = memoFields(action);
+  return names.length > 0 && (slots.some((slot) => !/^\d+$/.test(slot)) || slots.length < names.length);
+}
+
+// A memo's first field says what the tx asks for; '=', 's', 'swap' and the limit orders 'lo' and 'limito' ask for a swap
 function isSwapMemo(action: Action): boolean {
   const meta = action.metadata?.swap ?? action.metadata?.refund;
-  return ["=", "s", "swap"].includes((meta?.memo ?? "").split(":")[0].toLowerCase());
+  return ["=", "s", "swap", "lo", "limito"].includes((meta?.memo ?? "").split(":")[0].toLowerCase());
 }
 
 // A swap (or the refund of one) of a native deposit whose affiliate cut the protocol took before queueing it: "fee"
-// when the memo gives the fees, "unknown" when it names an affiliate with no fee but a cut may still have been taken
-// (from Mayanode v1.112.0 a Maya name's own default fee applies)
+// when the memo gives every fee, "unknown" when a Maya name's default fee may have been cut too
 function swapCut(action: Action, protocol: Protocol): "fee" | "unknown" | undefined {
   const asset = action.in[0]?.coins?.[0]?.asset ?? "";
   const cutoff = SWAP_CUT_BEFORE_HEIGHT[protocol.id];
@@ -191,21 +205,18 @@ function swapCut(action: Action, protocol: Protocol): "fee" | "unknown" | undefi
     Number(action.height) < (asset === protocol.nativeAsset ? cutoff.nativeAsset : cutoff.otherAsset) &&
     action.in.length === 1 &&
     !!action.in[0].address?.toLowerCase().startsWith(protocol.nativeAddressPrefix);
-  const { names, bps } = memoAffiliates(action);
-  const defaultFee = protocol.id === MAYA.id && Number(action.height) >= SWAP_CUT_BEFORE_HEIGHT[MAYA.id].otherAsset;
-
-  if (!inScope || names.length === 0) {
+  if (!inScope || memoFields(action).names.length === 0) {
     return undefined;
   }
 
-  return bps.length ? "fee" : defaultFee ? "unknown" : undefined;
+  return hasMayaDefaultFee(action, protocol) ? "unknown" : affiliateBps(action).length ? "fee" : undefined;
 }
 
 export function isSwapAfterCut(action: Action, protocol: Protocol): boolean {
   return swapCut(action, protocol) === "fee";
 }
 
-// A swap in scope that names an affiliate with no fee: the cut, if any, is not known
+// A swap in scope whose cut is not known: a Maya name's default fee may have been cut
 export function isSwapCutUnknown(action: Action, protocol: Protocol): boolean {
   return swapCut(action, protocol) === "unknown";
 }

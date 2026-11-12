@@ -194,4 +194,21 @@ describe("which actions Midgard lists after the cut", () => {
     assert.equal(isSwapAfterCut(refund("s:ETH.ETH:0xdest:0:t:30"), THORCHAIN), true);
     assert.equal(isSwapAfterCut(refund("+:ETH.ETH:0xpaired:t:30:x"), THORCHAIN), false);
   });
+  test("on Maya, a later name given no fee of its own, or an empty slot, takes its default fee: not known", () => {
+    const at = maya.otherAsset;
+    assert.equal(isSwapCutUnknown(swap(at, "=:ETH.ETH:0xdest:0:maya1addr/nameb:10", cacao), MAYA), true);
+    assert.equal(isSwapCutUnknown(swap(at, "=:ETH.ETH:0xdest:0:maya1addr/nameb:10/", cacao), MAYA), true);
+    assert.equal(isSwapCutUnknown(swap(at, "=:ETH.ETH:0xdest:0:namea/maya1addr:/10", cacao), MAYA), true);
+    assert.equal(isSwapAfterCut(swap(at, "=:ETH.ETH:0xdest:0:namea/nameb:10/20", cacao), MAYA), true);
+    assert.equal(isSwapAfterCut(swap(at - 1, "=:ETH.ETH:0xdest:0:namea/nameb:10", cacao), MAYA), true);
+  });
+
+  test("a limit order memo is a swap memo too", () => {
+    const refund = {
+      ...swap(100, "lo:ETH.ETH:0xdest:0:t:30"),
+      type: "refund",
+      metadata: { refund: { memo: "lo:ETH.ETH:0xdest:0:t:30" } },
+    } as unknown as Action;
+    assert.equal(isSwapAfterCut(refund, THORCHAIN), true);
+  });
 });

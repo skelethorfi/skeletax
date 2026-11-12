@@ -1,6 +1,9 @@
 import type { Basis } from "../../domain/Activity.ts";
 import type { Issue } from "../../domain/Issue.ts";
 import type { RawBundle } from "../../sources/RawBundle.ts";
+import type { Action } from "@xchainjs/xchain-midgard";
+import type { Protocol } from "../../domain/Protocol.ts";
+import { isSwapCutUnknown } from "../../sources/thorchain/MidgardUtils.ts";
 
 // A deposit that Midgard lists after an affiliate cut (docs/specs/fees.md, Affiliate cut taken from a deposit)
 
@@ -104,4 +107,17 @@ export function depositBeforeCut(
   }
 
   return { coin: { asset: listed.asset, amount: derived.toString() }, basis: "default", issues: smaller };
+}
+
+// A swap (or its refund) whose cut is not known, when a Maya name's own default fee may have been cut from the deposit
+export function unknownCutIssues(action: Action, protocol: Protocol): Issue[] {
+  return isSwapCutUnknown(action, protocol)
+    ? [
+        {
+          kind: "warning",
+          message:
+            "the memo names an affiliate with no fee of its own: its Maya name's default fee may have been cut from the deposit, which Midgard lists after it; check the amount sent",
+        },
+      ]
+    : [];
 }

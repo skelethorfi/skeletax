@@ -425,11 +425,12 @@ the cut. Midgard does not always list the whole deposit:
 
 The fees are read from the action's memo (`=:ASSET:DEST:LIMIT:AFFILIATE:FEE`,
 `+:POOL:PAIRED:AFFILIATE:FEE`), and only when it names an affiliate. Several
-affiliates are `a/b`, with a fee each (`10/20`) or one fee that applies to every
-one of them (`10`). Midgard's `affiliateFee` holds a single fee and is read only
+affiliates are `a/b`, with a fee each (`10/20`), or on THORChain one fee that
+applies to every one of them (`10`). Midgard's `affiliateFee` holds a single fee and is read only
 when it lists no memo. A two-sided add uses the memo Midgard lists for both
-sides. From Mayanode v1.112.0 a memo that names a Maya name with no fee takes
-the name's own default fee, which no source here gives: such a swap keeps
+sides. From Mayanode v1.112.0 an affiliate with no fee of its own (an empty slot,
+or any name after the first when one fee is given) takes its Maya name's
+default fee, which no source here gives: such a swap, stuck swap or refund keeps
 Midgard's amount, with a warning. An affiliate the protocol could not pay
 (THORNode v2.137.0 skips it) is cut nothing, so the gross-up overstates the
 deposit; THORNode's inbound coin, when it has one, gives the right amount.
@@ -459,7 +460,8 @@ A swap still pending past the cut-off was queued, so its cut was taken: it is
 exported as the whole deposit lost. A refund is less certain: a swap that
 failed once queued (a missed price limit, halted trading) was refunded from its
 deposit less the cut, but one rejected on deposit (e.g. a destination on the
-wrong chain) was refunded before any cut. So a refund of a swap memo
+wrong chain) was refunded before any cut. So a refund of a swap memo (`=`, `s`, `swap`, or the limit orders `lo` and
+`limito`)
 uses THORNode's inbound coin as the amount sent when that coin less the cut is
 Midgard's input; otherwise, or with no inbound, Midgard's input stays, with a
 warning that a cut may be missing.
