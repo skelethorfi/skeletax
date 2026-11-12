@@ -1,5 +1,5 @@
 {
-  "description": "swap/swap success: [THOR.RUNE] -> [ETH.ETH], then an aggregator delivers SNX",
+  "description": "swap/swap success: [THOR.RUNE] -> [ETH.ETH] to an aggregator's final token",
   "source": "midgard",
   "wallet": "thor1lnre6rd4m2fnrpemsmffksvw7wm65gwfcvfa35",
   "data": {
@@ -56,6 +56,82 @@
     "status": "success",
     "type": "swap"
   },
+  "thornodeTxs": [
+    {
+      "tx": {
+        "id": "197E79C4AF5647087738DAA5D314F37C0435A455F804B4FA0AB4F72B087D70AB",
+        "chain": "THOR",
+        "from_address": "thor1lnre6rd4m2fnrpemsmffksvw7wm65gwfcvfa35",
+        "to_address": "thor1g98cy3n9mmjrpn0sxmn63lztelera37n8n67c0",
+        "coins": [
+          {
+            "asset": "THOR.RUNE",
+            "amount": "1000025578345"
+          }
+        ],
+        "gas": [
+          {
+            "asset": "THOR.RUNE",
+            "amount": "2000000"
+          }
+        ],
+        "memo": "=:ETH.ETH:0x5225c3548a8d143d68c4b266218c1f92add08ac4:607152672:t:15:f2:2a6F:420042957972160472115800"
+      },
+      "planned_out_txs": [
+        {
+          "chain": "ETH",
+          "to_address": "0x5225c3548a8d143d68c4b266218c1f92add08ac4",
+          "coin": {
+            "asset": "ETH.ETH",
+            "amount": "610188379"
+          },
+          "refund": false
+        }
+      ],
+      "out_txs": [
+        {
+          "id": "1B031CA139B576C2FABAF483A10A47B0EFA213F0EE05518C1826C22C93935AB7",
+          "chain": "ETH",
+          "from_address": "0x33f006eDd3faf893CeE3DC32043ef151b7541906",
+          "to_address": "0x5225C3548a8d143D68c4b266218C1F92add08AC4",
+          "coins": [
+            {
+              "asset": "ETH.ETH",
+              "amount": "610188379"
+            }
+          ],
+          "gas": [
+            {
+              "asset": "ETH.ETH",
+              "amount": "1871240"
+            }
+          ],
+          "memo": "OUT:197E79C4AF5647087738DAA5D314F37C0435A455F804B4FA0AB4F72B087D70AB"
+        }
+      ],
+      "stages": {
+        "inbound_observed": {
+          "final_count": 0,
+          "completed": true
+        },
+        "inbound_finalised": {
+          "completed": true
+        },
+        "swap_status": {
+          "pending": false
+        },
+        "swap_finalised": {
+          "completed": true
+        },
+        "outbound_delay": {
+          "completed": true
+        },
+        "outbound_signed": {
+          "completed": true
+        }
+      }
+    }
+  ],
   "tokenPayout": {
     "chain": "ETH",
     "transactionHash": "0x1b031ca139b576c2fabaf483a10a47b0efa213f0ee05518c1826c22c93935ab7",
@@ -66,15 +142,7 @@
       "decimals": 18
     }
   },
-  "thornodeTxs": [
-    {
-      "stages": {
-        "inbound_observed": {
-          "started": false,
-          "final_count": 0,
-          "completed": false
-        }
-      }
-    }
-  ]
+  "usdPrices": {
+    "THOR.RUNE": "1.1145697432237136"
+  }
 }

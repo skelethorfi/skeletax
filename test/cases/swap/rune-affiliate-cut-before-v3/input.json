@@ -1,0 +1,155 @@
+{
+  "description": "swap/swap success: [THOR.RUNE] -> [AVAX.USDT-0X9702230A8EA53601F5CD2DC00FDBC13D4DF4A8C7]",
+  "source": "midgard",
+  "wallet": "thor1heexz8s23jn9td48k4sq80d8cfdcka4y3h6utv",
+  "data": {
+    "date": "1729889573914186180",
+    "height": "18296202",
+    "in": [
+      {
+        "address": "thor1heexz8s23jn9td48k4sq80d8cfdcka4y3h6utv",
+        "coins": [
+          {
+            "amount": "18805500000",
+            "asset": "THOR.RUNE"
+          }
+        ],
+        "txID": "529E3DE8A9E62831E8F9AF1C3381295D8C1DC027EE23AAF59AEC93CC6DCE12C2"
+      }
+    ],
+    "metadata": {
+      "swap": {
+        "affiliateAddress": "t",
+        "affiliateFee": "50",
+        "inPriceUSD": "5.10364500172922",
+        "isStreamingSwap": true,
+        "liquidityFee": "15489430",
+        "memo": "=:AVAX.USDT-0X9702230A8EA53601F5CD2DC00FDBC13D4DF4A8C7:0x93fE5B365E024BF35Fe5abc83B28c0EC7CeB75EF:93008371300/3/0:t:50",
+        "networkFees": [
+          {
+            "amount": "99940300",
+            "asset": "AVAX.USDT-0X9702230A8EA53601F5CD2DC00FDBC13D4DF4A8C7"
+          }
+        ],
+        "outPriceUSD": "0.9999395052413759",
+        "streamingSwapMeta": {
+          "count": "6",
+          "depositedCoin": {
+            "amount": "18805500000",
+            "asset": "THOR.RUNE"
+          },
+          "inCoin": {
+            "amount": "18805500000",
+            "asset": "THOR.RUNE"
+          },
+          "interval": "3",
+          "lastHeight": "18296217",
+          "outCoin": {
+            "amount": "95945761200",
+            "asset": "AVAX.USDT-0X9702230A8EA53601F5CD2DC00FDBC13D4DF4A8C7"
+          },
+          "outEstimation": "95984114400",
+          "quantity": "6"
+        },
+        "swapSlip": "8",
+        "swapTarget": "15501395217",
+        "txType": "swap"
+      }
+    },
+    "out": [
+      {
+        "address": "0x93fE5B365E024BF35Fe5abc83B28c0EC7CeB75EF",
+        "coins": [
+          {
+            "amount": "95845820900",
+            "asset": "AVAX.USDT-0X9702230A8EA53601F5CD2DC00FDBC13D4DF4A8C7"
+          }
+        ],
+        "height": "18296222",
+        "txID": "61F7B7E7CCE599C94FD616F6F37FC6D13242E2AD0447351CD65295A0E63E9098"
+      }
+    ],
+    "pools": [
+      "AVAX.USDT-0X9702230A8EA53601F5CD2DC00FDBC13D4DF4A8C7"
+    ],
+    "status": "success",
+    "type": "swap"
+  },
+  "thornodeTxs": [
+    {
+      "tx": {
+        "id": "529E3DE8A9E62831E8F9AF1C3381295D8C1DC027EE23AAF59AEC93CC6DCE12C2",
+        "chain": "THOR",
+        "from_address": "thor1heexz8s23jn9td48k4sq80d8cfdcka4y3h6utv",
+        "to_address": "thor1g98cy3n9mmjrpn0sxmn63lztelera37n8n67c0",
+        "coins": [
+          {
+            "asset": "THOR.RUNE",
+            "amount": "18900000000"
+          }
+        ],
+        "gas": null,
+        "memo": "=:AVAX.USDT-0X9702230A8EA53601F5CD2DC00FDBC13D4DF4A8C7:0x93fE5B365E024BF35Fe5abc83B28c0EC7CeB75EF:93008371300/3/0:t:50"
+      },
+      "planned_out_txs": [
+        {
+          "chain": "AVAX",
+          "to_address": "0x93fE5B365E024BF35Fe5abc83B28c0EC7CeB75EF",
+          "coin": {
+            "asset": "AVAX.USDT-0X9702230A8EA53601F5CD2DC00FDBC13D4DF4A8C7",
+            "amount": "95845820900"
+          },
+          "refund": false
+        }
+      ],
+      "out_txs": [
+        {
+          "id": "61F7B7E7CCE599C94FD616F6F37FC6D13242E2AD0447351CD65295A0E63E9098",
+          "chain": "AVAX",
+          "from_address": "0x0e5c46dcaedcd918c3516a800d7f60f33d4b7e7c",
+          "to_address": "0x93fE5B365E024BF35Fe5abc83B28c0EC7CeB75EF",
+          "coins": [
+            {
+              "asset": "AVAX.USDT-0X9702230A8EA53601F5CD2DC00FDBC13D4DF4A8C7",
+              "amount": "95845820900",
+              "decimals": 6
+            }
+          ],
+          "gas": [
+            {
+              "asset": "AVAX.AVAX",
+              "amount": "408240"
+            }
+          ],
+          "memo": "OUT:529E3DE8A9E62831E8F9AF1C3381295D8C1DC027EE23AAF59AEC93CC6DCE12C2"
+        }
+      ],
+      "stages": {
+        "inbound_observed": {
+          "final_count": 0,
+          "completed": true
+        },
+        "inbound_confirmation_counted": {
+          "remaining_confirmation_seconds": 0,
+          "completed": true
+        },
+        "inbound_finalised": {
+          "completed": true
+        },
+        "swap_status": {
+          "pending": false
+        },
+        "swap_finalised": {
+          "completed": true
+        },
+        "outbound_signed": {
+          "completed": true
+        }
+      }
+    }
+  ],
+  "usdPrices": {
+    "AVAX.USDT-0X9702230A8EA53601F5CD2DC00FDBC13D4DF4A8C7": "0.9989810484915733",
+    "THOR.RUNE": "5.105044850340489"
+  }
+}

@@ -13,7 +13,7 @@ legs:
     role: principal
     basis: observed
     txid: 197E79C4AF5647087738DAA5D314F37C0435A455F804B4FA0AB4F72B087D70AB
-    amount: "9985.25539977"
+    amount: "10000.25578345"
     decimals: 8
   - direction: in
     wallet: "0x5225c3548a8d143d68c4b266218c1f92add08ac4"
@@ -31,7 +31,7 @@ legs:
       notation: THOR.RUNE
       kind: native
     role: gas
-    basis: default
+    basis: observed
     txid: 197E79C4AF5647087738DAA5D314F37C0435A455F804B4FA0AB4F72B087D70AB
     amount: "0.02"
     decimals: 8
@@ -46,5 +46,10 @@ prices:
       kind: native
     usd: "1822.2074678384636"
     source: midgard:swap.outPriceUSD
+  - asset:
+      notation: THOR.RUNE
+      kind: native
+    usd: "1.1145697432237136"
+    source: midgard:history.rune
 details:
   paidVia: 6.10188379 ETH.ETH

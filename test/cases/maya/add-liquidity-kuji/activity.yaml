@@ -11,9 +11,9 @@ legs:
       notation: MAYA.CACAO
       kind: native
     role: principal
-    basis: observed
+    basis: default
     txid: 493628E56D76DCB664E14C142C35CB4AA45D5643A0958F250F583A4029D11166
-    amount: "355.055465624"
+    amount: "356.1238371354"
     decimals: 10
   - direction: out
     wallet: maya12d0t6ehehejmeje63scrj0w3p9g6yx9kxyuq5q
@@ -31,9 +31,9 @@ legs:
       notation: KUJI.KUJI
       kind: native
     role: principal
-    basis: observed
+    basis: default
     txid: A93E940CECD931784A998010462F25FFF482A4C0A33A415632295AAABC1E7AE3
-    amount: "17.59938896"
+    amount: "17.652346"
     decimals: 8
   - direction: in
     wallet: maya12d0t6ehehejmeje63scrj0w3p9g6yx9kxyuq5q

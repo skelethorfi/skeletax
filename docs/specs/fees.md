@@ -11,6 +11,8 @@ THORChain and Maya deduct other fees (liquidity, affiliate, outbound network,
 slip) from the inbound amount before paying out. They are already reflected in
 what comes out, so they are not exported as fees. Listing them as fees as well
 would count them twice, and the wallet balances in Summ would not add up.
+Where Midgard lists a deposit after an affiliate's cut, the amount sent is the
+whole deposit (Affiliate cut taken from a deposit).
 
 From the earlier restructure (fetch-tx), which follows the same rule:
 
@@ -199,7 +201,8 @@ is an error, as for every other record. `--replay` of a run made before
 these sources were read gives none, so it maps as that run did.
 
 Never use Midgard `networkFees` (outbound), `liquidityFee`, `affiliateFee` or
-affiliate outputs as a fee.
+affiliate outputs as a fee. An affiliate cut Midgard took out of a listed
+deposit is added back to the deposit (Affiliate cut taken from a deposit).
 
 The fee goes on the row for the wallet that paid it: the row for the inbound
 transaction. Rows for what comes out have no fee.
@@ -385,6 +388,89 @@ row but differs otherwise (even by a second) is held as an overlap, and
 neither is uploaded; one that does not share all three is uploaded beside the
 run's rows and counts twice.
 
+### Affiliate cut taken from a deposit
+
+An affiliate's cut is part of what the wallet gave up, like the liquidity fee:
+the row trades out (or adds) the whole deposit, and no fee row is exported for
+the cut. Midgard does not always list the whole deposit:
+
+- **A native swap before the protocol moved the cut.** The protocol took the
+  cut out of a native deposit before queueing the swap (`handler_deposit.go`,
+  `addSwapDirect`) and paid it to the affiliate directly, so Midgard lists the
+  input after the cut with no output for it:
+  - RUNE below THORChain height 18,972,070 (THORNode v3.0.0), CACAO below Maya
+    height 10,253,469 (Mayanode v1.118.0). From then the cut is part of the
+    swap's outbound, listed whole;
+  - another native asset (a synth) below THORChain height 18,393,714 (THORNode
+    v2.137.0) or Maya height 8,788,026 (Mayanode v1.112.0). From then the cut
+    of a non-native asset is a swap of its own with the same txid, and Midgard
+    adds it back to the input;
+  - never a trade asset (`BTC~BTC`): before THORNode v2.137.0 the trade account
+    kept the cut (the swap took the deposit less the cut, and paying the
+    affiliate failed), and from it the cut is a swap.
+
+  Midgard's `affiliate: true` on an output is not read for this: Midgard sets
+  it by guessing (the smallest RUNE or CACAO output when the memo has a fee),
+  and a partly filled swap's return can carry it. Deposits sent on another
+  chain are listed whole in every version.
+
+- **An add with an affiliate fee** (THORChain and Maya, every version Maya's
+  chain has run). The fee's share of each deposit, RUNE or CACAO and the asset
+  alike, is added as the affiliate's own position (`handler_add_liquidity.go`),
+  and Midgard lists the wallet's deposits after it. Savers adds are left as
+  they are: a deposit on the asset's own chain is read from THORNode's inbound
+  or the deposit's swap already (`savers.md`), and no case of a native synth
+  savers add with an affiliate is known. A pending add has no memo in Midgard
+  and is left as listed.
+
+The fees are read from the action's memo (`=:ASSET:DEST:LIMIT:AFFILIATE:FEE`,
+`+:POOL:PAIRED:AFFILIATE:FEE`), and only when it names an affiliate. Several
+affiliates are `a/b`, with a fee each (`10/20`), or on THORChain one fee that
+applies to every one of them (`10`). Midgard's `affiliateFee` holds a single fee
+and is read only when it lists no memo. A two-sided add uses the memo Midgard
+lists for both sides. From Mayanode v1.112.0 an affiliate with no fee of its own
+(an empty slot, or a Maya name after the first when one fee is given; an address
+there takes the given fee) takes its Maya name's default fee, which no source
+here gives: such a swap, stuck swap or refund keeps Midgard's amount, with a
+warning. An affiliate the protocol could not pay (THORNode v2.137.0 skips it) is
+cut nothing, so the gross-up overstates the deposit; THORNode's inbound coin,
+when it has one, gives the right amount.
+
+For those, the amount sent is, in order:
+
+1. the coin THORNode's inbound status shows (observed), when THORNode still
+   has it: a swap's input, or an add's deposit sent on another chain (an add's
+   native side is not looked up). Maya has no such source;
+2. else Midgard's amount grossed up by the fees (default): the smallest
+   deposit that leaves Midgard's amount once each affiliate's cut, deposit ×
+   bps / 10000 rounded to the nearest unit (`GetSafeShare`; an exact half
+   rounds up or to even depending on the version, and either is accepted), is
+   taken from it. When two deposits leave the same amount, the smaller is one
+   base unit under the other.
+
+When the inbound coin less the cut is not Midgard's amount (nor Midgard's
+amount itself, as for a partly filled swap read from THORNode), the inbound
+coin is used, with a warning; when it is less than Midgard's amount, the
+gross-up is used, with a warning. When no deposit leaves Midgard's amount
+exactly, the nearest estimate is used, with a warning. A partly filled swap
+whose unfilled part is not returned yet trades out only the part swapped
+(Partially filled swaps), grossed up; the whole deposit THORNode shows is not
+used.
+
+A swap still pending past the cut-off was queued, so its cut was taken: it is
+exported as the whole deposit lost. A refund is less certain: a swap that failed
+once queued (a missed price limit, halted trading) was refunded from its deposit
+less the cut, but one rejected on deposit (e.g. a destination on the wrong
+chain) was refunded before any cut. So a refund of a swap memo (`=`, `s`,
+`swap`, or the limit orders `lo` and `limito`) uses THORNode's inbound coin as
+the amount sent when that coin less the cut is Midgard's input; otherwise, or
+with no inbound, Midgard's input stays, with a warning that a cut may be
+missing.
+
+A RUNEPool withdrawal's coin is what left RUNEPool. THORNode pays the
+affiliate's share of it (`affiliateAmount`) first, so the wallet received the
+coin less `affiliateAmount` (observed).
+
 ### Refunds of an affiliate's cut
 
 When a swap has an affiliate, THORChain swaps the affiliate's cut to RUNE as a
@@ -477,4 +563,9 @@ gives no row, and the warning asks for its loss to be entered by hand.
     refund has no row (`refund/btc-partial-fill`)
   - `networkFees` (except for refunds), `liquidityFee` and affiliate outputs are
     never used as fees
+  - a deposit listed after an affiliate cut trades out the whole deposit: THORNode's
+    inbound coin (`swap/rune-to-token-aggregator`,
+    `swap/rune-affiliate-cut-before-v3`), or Midgard's amount grossed up
+    (`maya/add-liquidity-kuji`, both sides; `maya/swap-cacao-affiliate-cut-before-v1118`); a RUNEPool withdrawal receives its coin
+    less `affiliateAmount` (`runepool/withdraw`)
 - Golden cases in `test/cases/` carry the expected fee in each row.

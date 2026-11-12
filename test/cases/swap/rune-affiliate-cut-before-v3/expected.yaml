@@ -1,0 +1,29 @@
+wallet: thor1heexz8s23jn9td48k4sq80d8cfdcka4y3h6utv
+timestamp: 2024-10-25T20:52:53.914Z
+type: bridge-trade-out
+baseCurrency: RUNE
+baseAmount: "189"
+quoteCurrency: USDT
+quoteAmount: "958.458209"
+feeCurrency: RUNE
+feeAmount: "0.02"
+from: thor1heexz8s23jn9td48k4sq80d8cfdcka4y3h6utv
+to: thorchain
+blockchain: THORChain
+referencePricePerUnit: "5.10364500172922"
+referencePriceCurrency: USD
+description: 1/2 - Swap 189 RUNE to 958.458209 USDT; 529E3DE8A9E62831E8F9AF1C3381295D8C1DC027EE23AAF59AEC93CC6DCE12C2
+id: 2024-10-25T20:52:53.914Z.out.562afb8b4974
+---
+wallet: "0x93fE5B365E024BF35Fe5abc83B28c0EC7CeB75EF"
+timestamp: 2024-10-25T20:53:03.914Z
+type: bridge-trade-in
+baseCurrency: USDT
+baseAmount: "958.458209"
+from: thorchain
+to: "0x93fE5B365E024BF35Fe5abc83B28c0EC7CeB75EF"
+blockchain: AVAX
+referencePricePerUnit: "0.9999395052413759"
+referencePriceCurrency: USD
+description: 2/2 - Swap 189 RUNE to 958.458209 USDT; 529E3DE8A9E62831E8F9AF1C3381295D8C1DC027EE23AAF59AEC93CC6DCE12C2; paid out in 61F7B7E7CCE599C94FD616F6F37FC6D13242E2AD0447351CD65295A0E63E9098
+id: 2024-10-25T20:52:53.914Z.in.8b21a28dedb7

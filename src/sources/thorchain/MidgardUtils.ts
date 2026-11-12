@@ -1,6 +1,6 @@
 import type { Action } from "@xchainjs/xchain-midgard";
 import { assetFromStringEx, AssetType } from "@xchainjs/xchain-util";
-import { type Protocol, THORCHAIN } from "../../domain/Protocol.ts";
+import { MAYA, type Protocol, THORCHAIN } from "../../domain/Protocol.ts";
 
 export function parseMidgardDate(nanoTimestamp: string): Date {
   return new Date(parseInt(nanoTimestamp) / 1000000);
@@ -137,4 +137,100 @@ export function parseMidgardAsset(
 export function parseMidgardPool(pool: string): string {
   const { blockchain, currency } = parseMidgardAsset(pool);
   return `${blockchain}.${currency}`;
+}
+
+// Below these heights the protocol took a native deposit's affiliate cut before queueing its swap, and Midgard lists
+// the input after the cut with no output for it (docs/specs/fees.md, Affiliate cut taken from a deposit):
+// - the protocol's own asset (RUNE, CACAO): until the cut became part of the swap's outbound (THORNode v3.0.0,
+//   Mayanode v1.118.0);
+// - another native asset (a synth): until the cut became a swap of its own with the same txid, which Midgard adds back
+//   to the input (THORNode v2.137.0, Mayanode v1.112.0).
+// A trade asset never: before THORNode v2.137.0 the trade account kept the cut, and from it the cut is a swap.
+export const SWAP_CUT_BEFORE_HEIGHT: Record<string, { nativeAsset: number; otherAsset: number }> = {
+  [THORCHAIN.id]: { nativeAsset: 18972070, otherAsset: 18393714 },
+  [MAYA.id]: { nativeAsset: 10253469, otherAsset: 8788026 },
+};
+
+// The affiliates a swap or add memo names and its fee slots (=:ASSET:DEST:LIMIT:AFFILIATE:FEE,
+// +:POOL:PAIRED:AFFILIATE:FEE; several affiliates as 'a/b', fees as '10/20' or '10'; an empty slot is ''). With no
+// memo listed, Midgard's affiliate and affiliateFee, which hold one each.
+function memoFields(action: Action): { names: string[]; slots: string[] } {
+  const meta = action.metadata?.swap ?? action.metadata?.addLiquidity ?? action.metadata?.refund;
+  const memo = meta?.memo ?? "";
+
+  if (!memo) {
+    return { names: meta?.affiliateAddress ? [meta.affiliateAddress] : [], slots: [meta?.affiliateFee ?? ""] };
+  }
+
+  const field = action.type === "addLiquidity" ? 4 : 5;
+  const fields = memo.split(":");
+  const names = (fields[field - 1] ?? "").split("/").filter(Boolean);
+  return { names, slots: names.length ? (fields[field] ?? "").split("/") : [] };
+}
+
+// The fee in basis points of each affiliate a memo names: a fee each, or one fee for every one of them (THORNode)
+export function affiliateBps(action: Action): bigint[] {
+  const { names, slots } = memoFields(action);
+
+  if (names.length === 0) {
+    return [];
+  }
+
+  const fees = slots.filter((slot) => /^\d+$/.test(slot)).map(BigInt);
+  const bps = fees.length === 1 && names.length > 1 ? names.map(() => fees[0]) : fees;
+  return bps.filter((b) => b > 0n);
+}
+
+// From Mayanode v1.112.0 an affiliate with no fee of its own takes its Maya name's default fee, which no source here
+// gives: an empty slot, or a later Maya name (not an address) when one fee is given for several (memo_parser.go)
+function hasMayaDefaultFee(action: Action, protocol: Protocol): boolean {
+  if (protocol.id !== MAYA.id || Number(action.height) < SWAP_CUT_BEFORE_HEIGHT[MAYA.id].otherAsset) {
+    return false;
+  }
+
+  const { names, slots } = memoFields(action);
+  const laterName = names
+    .slice(slots.length)
+    .some((name) => !name.toLowerCase().startsWith(protocol.nativeAddressPrefix));
+  return names.length > 0 && (slots.some((slot) => !/^\d+$/.test(slot)) || laterName);
+}
+
+// A memo's first field says what the tx asks for; '=', 's', 'swap' and the limit orders 'lo' and 'limito' ask for a swap
+function isSwapMemo(action: Action): boolean {
+  const meta = action.metadata?.swap ?? action.metadata?.refund;
+  return ["=", "s", "swap", "lo", "limito"].includes((meta?.memo ?? "").split(":")[0].toLowerCase());
+}
+
+// A swap (or the refund of one) of a native deposit whose affiliate cut the protocol took before queueing it: "fee"
+// when the memo gives every fee, "unknown" when a Maya name's default fee may have been cut too
+function swapCut(action: Action, protocol: Protocol): "fee" | "unknown" | undefined {
+  const asset = action.in[0]?.coins?.[0]?.asset ?? "";
+  const cutoff = SWAP_CUT_BEFORE_HEIGHT[protocol.id];
+  const inScope =
+    (action.type === "swap" || (action.type === "refund" && isSwapMemo(action))) &&
+    !!cutoff &&
+    !asset.includes("~") &&
+    Number(action.height) < (asset === protocol.nativeAsset ? cutoff.nativeAsset : cutoff.otherAsset) &&
+    action.in.length === 1 &&
+    !!action.in[0].address?.toLowerCase().startsWith(protocol.nativeAddressPrefix);
+  if (!inScope || memoFields(action).names.length === 0) {
+    return undefined;
+  }
+
+  return hasMayaDefaultFee(action, protocol) ? "unknown" : affiliateBps(action).length ? "fee" : undefined;
+}
+
+export function isSwapAfterCut(action: Action, protocol: Protocol): boolean {
+  return swapCut(action, protocol) === "fee";
+}
+
+// A swap in scope whose cut is not known: a Maya name's default fee may have been cut
+export function isSwapCutUnknown(action: Action, protocol: Protocol): boolean {
+  return swapCut(action, protocol) === "unknown";
+}
+
+// An add with an affiliate fee: THORNode and Mayanode add the fee's share of each deposit as the affiliate's own
+// position, and Midgard lists the wallet's deposits after it
+export function isAddAfterCut(action: Action): boolean {
+  return action.type === "addLiquidity" && affiliateBps(action).length > 0;
 }

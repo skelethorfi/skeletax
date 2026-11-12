@@ -47,13 +47,17 @@ export function interpretRunePool(bundle: RawBundle, protocol: Protocol): Activi
   const isDeposit = (action.type as string) === "runePoolDeposit";
   const tx = isDeposit ? action.in[0] : action.out[0];
   const coin = oneCoin(tx, isDeposit ? "RUNEPool deposit" : "RUNEPool withdrawal");
-  const units = (action.metadata as any)[isDeposit ? "runePoolDeposit" : "runePoolWithdraw"]?.units ?? "";
+  const meta = (action.metadata as any)[isDeposit ? "runePoolDeposit" : "runePoolWithdraw"];
+  const units = meta?.units ?? "";
+  // A withdrawal's coin is what left RUNEPool; THORNode pays the affiliate's share of it first (docs/specs/fees.md)
+  const affiliateAmount = !isDeposit && /^\d+$/.test(meta?.affiliateAmount ?? "") ? BigInt(meta.affiliateAmount) : 0n;
+  const received = BigInt(coin.amount) - affiliateAmount;
   const txid = tx.txID ?? "";
   const rune: Leg = {
     direction: isDeposit ? "out" : "in",
     wallet: tx.address,
     asset: toAsset(coin.asset),
-    amount: parseAmount(coin.amount, protocol.decimals(coin.asset)),
+    amount: parseAmount(received.toString(), protocol.decimals(coin.asset)),
     role: "principal",
     basis: "observed",
     txid,

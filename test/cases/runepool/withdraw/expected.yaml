@@ -15,9 +15,9 @@ wallet: thor1-user-wallet-11111
 timestamp: 2020-12-31T13:00:10.000Z
 type: remove-liquidity
 baseCurrency: RUNE
-baseAmount: "220"
+baseAmount: "219.8"
 from: thorchain
 to: thor1-user-wallet-11111
 blockchain: THORChain
-description: 2/2 - Withdraw 220 RUNE from RUNEPool; AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1
+description: 2/2 - Withdraw 219.8 RUNE from RUNEPool; AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1
 id: 2020-12-31T13:00:00.000Z.in.855756be2996

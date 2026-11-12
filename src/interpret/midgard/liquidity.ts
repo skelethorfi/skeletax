@@ -3,11 +3,19 @@ import type { Activity, Leg } from "../../domain/Activity.ts";
 import { formatAmount, parseAmount } from "../../domain/Amount.ts";
 import { toAsset, toPositionAsset } from "../../domain/Asset.ts";
 import type { Issue } from "../../domain/Issue.ts";
-import { getActionDate, oneCoin, onlyCoin, parseMidgardAsset } from "../../sources/thorchain/MidgardUtils.ts";
+import {
+  affiliateBps,
+  getActionDate,
+  isAddAfterCut,
+  oneCoin,
+  onlyCoin,
+  parseMidgardAsset,
+} from "../../sources/thorchain/MidgardUtils.ts";
 import { type Protocol, THORCHAIN } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { isDonateAdd, midgardActionKey } from "../../sources/store/Sources.ts";
 import { inboundGas } from "./gas.ts";
+import { depositBeforeCut, inboundCoin } from "./affiliate.ts";
 
 // Liquidity units and savers units are reported with 8 decimals
 const UNIT_DECIMALS = 8;
@@ -73,13 +81,21 @@ export function interpretAddLiquidity(
       });
     }
 
+    // An affiliate fee's share of each deposit is added as the affiliate's own position, and Midgard lists the
+    // wallet's deposit after it (docs/specs/fees.md). THORNode's inbound status shows what was sent, when it has it.
+    const cut =
+      isAddAfterCut(action) && position.position !== "savers"
+        ? depositBeforeCut(coin, affiliateBps(action), inboundCoin(bundle, txid, coin.asset), txid)
+        : undefined;
+    issues.push(...(cut?.issues ?? []));
+
     legs.push({
       direction: "out",
       wallet,
       asset: toAsset(sentAsset),
-      amount: parseAmount(sent?.amount ?? coin.amount, protocol.decimals(coin.asset)),
+      amount: parseAmount(sent?.amount ?? cut?.coin.amount ?? coin.amount, protocol.decimals(coin.asset)),
       role: "principal",
-      basis: "observed",
+      basis: cut?.basis ?? "observed",
       txid,
     });
 
