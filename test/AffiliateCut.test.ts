@@ -6,6 +6,7 @@ import {
   affiliateBps,
   isAddAfterCut,
   isSwapAfterCut,
+  isSwapCutUnknown,
   SWAP_CUT_BEFORE_HEIGHT,
 } from "../src/sources/thorchain/MidgardUtils.ts";
 import { MAYA, THORCHAIN } from "../src/domain/Protocol.ts";
@@ -81,6 +82,12 @@ describe("depositBeforeCut", () => {
   test("else Midgard's coin grossed up", () => {
     const result = depositBeforeCut(listed, [15n], undefined, "TX");
     assert.deepEqual(result, { coin: { asset: "THOR.RUNE", amount: "1000025578345" }, basis: "default", issues: [] });
+  });
+
+  test("an inbound coin below Midgard's is not used, and says so", () => {
+    const result = depositBeforeCut(listed, [15n], { asset: "THOR.RUNE", amount: "1" }, "TX");
+    assert.equal(result.coin.amount, "1000025578345");
+    assert.equal(result.issues.length, 1);
   });
 
   test("an inbound coin of another asset, or below Midgard's, is not used", () => {
@@ -168,5 +175,23 @@ describe("which actions Midgard lists after the cut", () => {
     const action = swap(100, "");
     (action.metadata as any).swap.affiliateFee = "20";
     assert.deepEqual(affiliateBps(action), [20n]);
+  });
+  test("one fee for several affiliates applies to each of them", () => {
+    assert.deepEqual(affiliateBps(swap(100, "=:ETH.ETH:0xdest:0:a/b:10")), [10n, 10n]);
+  });
+
+  test("a Maya name with no fee: its default fee may be cut, from Mayanode v1.112.0", () => {
+    const noFee = "=:ETH.ETH:0xdest:0:wr";
+    assert.equal(isSwapCutUnknown(swap(maya.otherAsset, noFee, cacao), MAYA), true);
+    assert.equal(isSwapCutUnknown(swap(maya.otherAsset - 1, noFee, cacao), MAYA), false);
+    assert.equal(isSwapCutUnknown(swap(100, noFee), THORCHAIN), false);
+    assert.equal(isSwapAfterCut(swap(maya.otherAsset, noFee, cacao), MAYA), false);
+  });
+
+  test("only the refund of a swap memo", () => {
+    const refund = (memo: string) =>
+      ({ ...swap(100, memo), type: "refund", metadata: { refund: { memo } } }) as unknown as Action;
+    assert.equal(isSwapAfterCut(refund("s:ETH.ETH:0xdest:0:t:30"), THORCHAIN), true);
+    assert.equal(isSwapAfterCut(refund("+:ETH.ETH:0xpaired:t:30:x"), THORCHAIN), false);
   });
 });

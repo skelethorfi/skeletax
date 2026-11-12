@@ -151,34 +151,63 @@ export const SWAP_CUT_BEFORE_HEIGHT: Record<string, { nativeAsset: number; other
   [MAYA.id]: { nativeAsset: 10253469, otherAsset: 8788026 },
 };
 
-// The affiliate fees in basis points a swap or add memo gives (=:ASSET:DEST:LIMIT:AFFILIATE:FEE, +:POOL:PAIRED:
-// AFFILIATE:FEE; several affiliates as 'a/b' and '10/20'), or else Midgard's affiliateFee, which holds one fee only
-export function affiliateBps(action: Action): bigint[] {
+// The affiliates a swap or add memo names and their fees in basis points (=:ASSET:DEST:LIMIT:AFFILIATE:FEE,
+// +:POOL:PAIRED:AFFILIATE:FEE). Several affiliates are 'a/b' with a fee each ('10/20') or one fee for every one of them
+// ('10'). With no memo listed, Midgard's affiliateFee, which holds one fee only.
+export function memoAffiliates(action: Action): { names: string[]; bps: bigint[] } {
   const meta = action.metadata?.swap ?? action.metadata?.addLiquidity ?? action.metadata?.refund;
   const memo = meta?.memo ?? "";
-  const fields = memo.split(":");
   const field = action.type === "addLiquidity" ? 4 : 5;
-  const bps = memo ? (fields[field - 1] ? (fields[field] ?? "") : "") : (meta?.affiliateFee ?? "");
-  return bps
+  const fields = memo.split(":");
+  const names = memo ? (fields[field - 1] ?? "").split("/").filter(Boolean) : meta?.affiliateAddress ? ["?"] : [];
+  const fees = (memo ? (names.length ? (fields[field] ?? "") : "") : (meta?.affiliateFee ?? ""))
     .split("/")
     .filter((b) => /^\d+$/.test(b))
-    .map(BigInt)
-    .filter((b) => b > 0n);
+    .map(BigInt);
+  const bps = fees.length === 1 && names.length > 1 ? names.map(() => fees[0]) : fees;
+  return { names, bps: bps.filter((b) => b > 0n) };
 }
 
-// A swap (or the refund of one) of a native deposit whose affiliate cut the protocol took before queueing it
-export function isSwapAfterCut(action: Action, protocol: Protocol): boolean {
+export function affiliateBps(action: Action): bigint[] {
+  return memoAffiliates(action).bps;
+}
+
+// A memo's first field says what the tx asks for; '=', 's' and 'swap' ask for a swap
+function isSwapMemo(action: Action): boolean {
+  const meta = action.metadata?.swap ?? action.metadata?.refund;
+  return ["=", "s", "swap"].includes((meta?.memo ?? "").split(":")[0].toLowerCase());
+}
+
+// A swap (or the refund of one) of a native deposit whose affiliate cut the protocol took before queueing it: "fee"
+// when the memo gives the fees, "unknown" when it names an affiliate with no fee but a cut may still have been taken
+// (from Mayanode v1.112.0 a Maya name's own default fee applies)
+function swapCut(action: Action, protocol: Protocol): "fee" | "unknown" | undefined {
   const asset = action.in[0]?.coins?.[0]?.asset ?? "";
   const cutoff = SWAP_CUT_BEFORE_HEIGHT[protocol.id];
-  return (
-    (action.type === "swap" || action.type === "refund") &&
+  const inScope =
+    (action.type === "swap" || (action.type === "refund" && isSwapMemo(action))) &&
     !!cutoff &&
     !asset.includes("~") &&
     Number(action.height) < (asset === protocol.nativeAsset ? cutoff.nativeAsset : cutoff.otherAsset) &&
     action.in.length === 1 &&
-    !!action.in[0].address?.toLowerCase().startsWith(protocol.nativeAddressPrefix) &&
-    affiliateBps(action).length > 0
-  );
+    !!action.in[0].address?.toLowerCase().startsWith(protocol.nativeAddressPrefix);
+  const { names, bps } = memoAffiliates(action);
+  const defaultFee = protocol.id === MAYA.id && Number(action.height) >= SWAP_CUT_BEFORE_HEIGHT[MAYA.id].otherAsset;
+
+  if (!inScope || names.length === 0) {
+    return undefined;
+  }
+
+  return bps.length ? "fee" : defaultFee ? "unknown" : undefined;
+}
+
+export function isSwapAfterCut(action: Action, protocol: Protocol): boolean {
+  return swapCut(action, protocol) === "fee";
+}
+
+// A swap in scope that names an affiliate with no fee: the cut, if any, is not known
+export function isSwapCutUnknown(action: Action, protocol: Protocol): boolean {
+  return swapCut(action, protocol) === "unknown";
 }
 
 // An add with an affiliate fee: THORNode and Mayanode add the fee's share of each deposit as the affiliate's own

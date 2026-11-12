@@ -424,10 +424,15 @@ the cut. Midgard does not always list the whole deposit:
   and is left as listed.
 
 The fees are read from the action's memo (`=:ASSET:DEST:LIMIT:AFFILIATE:FEE`,
-`+:POOL:PAIRED:AFFILIATE:FEE`; several affiliates as `a/b` and `10/20`), and
-only when it names an affiliate: Midgard's `affiliateFee` holds a single fee
-and is read only when it lists no memo. A two-sided add uses the memo Midgard
-lists for both sides.
+`+:POOL:PAIRED:AFFILIATE:FEE`), and only when it names an affiliate. Several
+affiliates are `a/b`, with a fee each (`10/20`) or one fee that applies to every
+one of them (`10`). Midgard's `affiliateFee` holds a single fee and is read only
+when it lists no memo. A two-sided add uses the memo Midgard lists for both
+sides. From Mayanode v1.112.0 a memo that names a Maya name with no fee takes
+the name's own default fee, which no source here gives: such a swap keeps
+Midgard's amount, with a warning. An affiliate the protocol could not pay
+(THORNode v2.137.0 skips it) is cut nothing, so the gross-up overstates the
+deposit; THORNode's inbound coin, when it has one, gives the right amount.
 
 For those, the amount sent is, in order:
 
@@ -443,16 +448,21 @@ For those, the amount sent is, in order:
 
 When the inbound coin less the cut is not Midgard's amount (nor Midgard's
 amount itself, as for a partly filled swap read from THORNode), the inbound
-coin is used, with a warning. When no deposit leaves Midgard's amount exactly,
-the nearest estimate is used, with a warning.
+coin is used, with a warning; when it is less than Midgard's amount, the
+gross-up is used, with a warning. When no deposit leaves Midgard's amount
+exactly, the nearest estimate is used, with a warning. A partly filled swap
+whose unfilled part is not returned yet trades out only the part swapped
+(Partially filled swaps), grossed up; the whole deposit THORNode shows is not
+used.
 
 A swap still pending past the cut-off was queued, so its cut was taken: it is
 exported as the whole deposit lost. A refund is less certain: a swap that
 failed once queued (a missed price limit, halted trading) was refunded from its
 deposit less the cut, but one rejected on deposit (e.g. a destination on the
-wrong chain) was refunded before any cut. So a refund's amount sent is
-THORNode's inbound coin when it is larger than Midgard's input; with no inbound,
-Midgard's input stays, with a warning that a cut may be missing.
+wrong chain) was refunded before any cut. So a refund of a swap memo
+uses THORNode's inbound coin as the amount sent when that coin less the cut is
+Midgard's input; otherwise, or with no inbound, Midgard's input stays, with a
+warning that a cut may be missing.
 
 A RUNEPool withdrawal's coin is what left RUNEPool. THORNode pays the
 affiliate's share of it (`affiliateAmount`) first, so the wallet received the

@@ -78,6 +78,15 @@ export function depositBeforeCut(
     return { coin: { asset: listed.asset, amount: observed.amount }, basis: "observed", issues };
   }
 
+  const smaller: Issue[] = sameAsset
+    ? [
+        {
+          kind: "warning",
+          message: `deposit ${txid}: THORNode shows ${observed.amount} sent, less than Midgard's ${listed.amount}; Midgard's amount is grossed up instead, so check the amount sent`,
+        },
+      ]
+    : [];
+
   if (derived === undefined) {
     const total = bps.reduce((sum, b) => sum + b, 0n);
     const estimate = total > 0n && total < 10000n ? (BigInt(listed.amount) * 10000n) / (10000n - total) : undefined;
@@ -85,6 +94,7 @@ export function depositBeforeCut(
       coin: estimate === undefined ? listed : { asset: listed.asset, amount: estimate.toString() },
       basis: estimate === undefined ? "observed" : "default",
       issues: [
+        ...smaller,
         {
           kind: "warning",
           message: `deposit ${txid}: no amount less an affiliate fee of ${bps.join("/")} bps leaves Midgard's ${listed.amount} exactly, so ${estimate === undefined ? "Midgard's amount" : `the nearest estimate, ${estimate},`} is exported; check the amount sent`,
@@ -93,5 +103,5 @@ export function depositBeforeCut(
     };
   }
 
-  return { coin: { asset: listed.asset, amount: derived.toString() }, basis: "default", issues: [] };
+  return { coin: { asset: listed.asset, amount: derived.toString() }, basis: "default", issues: smaller };
 }

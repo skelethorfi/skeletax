@@ -8,6 +8,7 @@ import {
   getActionDate,
   isMemoName,
   isSwapAfterCut,
+  isSwapCutUnknown,
   memoDestination,
   memoRefundAddress,
   oneCoin,
@@ -67,12 +68,14 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
     ? depositBeforeCut(
         listedSent.sent,
         affiliateBps(action),
-        inboundCoin(bundle, input.txID ?? "", inputCoin.asset),
+        // A partly filled swap whose unfilled part is not returned yet exports only the part swapped, so not the whole
+        // deposit THORNode shows
+        listedSent.issues.length ? undefined : inboundCoin(bundle, input.txID ?? "", inputCoin.asset),
         input.txID ?? "",
       )
     : undefined;
   const sent = cut?.coin ?? listedSent.sent;
-  const issues = [...listedSent.issues, ...(cut?.issues ?? [])];
+  const issues = [...listedSent.issues, ...(cut?.issues ?? []), ...unknownCutIssues(action, protocol)];
 
   if (returned >= BigInt(sent.amount)) {
     throw new Error(`swap: returned ${returned} of ${sent.amount} sent, so nothing was swapped`);
@@ -163,6 +166,19 @@ type Coin = { asset: string; amount: string };
 // plus the return and the return's outbound fee (networkFees), which the refund's input equals. A trade or secured asset's
 // unfilled part is credited back on the chain, never returned: the part swapped is what left. Until an L1 return is paid,
 // only the part swapped is exported.
+// A swap whose memo names an affiliate with no fee, when the affiliate's own default fee may have been cut from it
+function unknownCutIssues(action: Action, protocol: Protocol): Issue[] {
+  return isSwapCutUnknown(action, protocol)
+    ? [
+        {
+          kind: "warning",
+          message:
+            "the memo names an affiliate with no fee: its default fee may have been cut from the deposit, which Midgard lists after it; check the amount sent",
+        },
+      ]
+    : [];
+}
+
 function sentCoin(
   bundle: RawBundle,
   inputCoin: Coin,
