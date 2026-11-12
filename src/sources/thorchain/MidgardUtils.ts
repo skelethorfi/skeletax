@@ -171,20 +171,28 @@ function memoFields(action: Action): { names: string[]; slots: string[] } {
 // The fee in basis points of each affiliate a memo names: a fee each, or one fee for every one of them (THORNode)
 export function affiliateBps(action: Action): bigint[] {
   const { names, slots } = memoFields(action);
+
+  if (names.length === 0) {
+    return [];
+  }
+
   const fees = slots.filter((slot) => /^\d+$/.test(slot)).map(BigInt);
   const bps = fees.length === 1 && names.length > 1 ? names.map(() => fees[0]) : fees;
   return bps.filter((b) => b > 0n);
 }
 
 // From Mayanode v1.112.0 an affiliate with no fee of its own takes its Maya name's default fee, which no source here
-// gives: an empty slot, or a later name when one fee is given for several (memo_parser.go)
+// gives: an empty slot, or a later Maya name (not an address) when one fee is given for several (memo_parser.go)
 function hasMayaDefaultFee(action: Action, protocol: Protocol): boolean {
   if (protocol.id !== MAYA.id || Number(action.height) < SWAP_CUT_BEFORE_HEIGHT[MAYA.id].otherAsset) {
     return false;
   }
 
   const { names, slots } = memoFields(action);
-  return names.length > 0 && (slots.some((slot) => !/^\d+$/.test(slot)) || slots.length < names.length);
+  const laterName = names
+    .slice(slots.length)
+    .some((name) => !name.toLowerCase().startsWith(protocol.nativeAddressPrefix));
+  return names.length > 0 && (slots.some((slot) => !/^\d+$/.test(slot)) || laterName);
 }
 
 // A memo's first field says what the tx asks for; '=', 's', 'swap' and the limit orders 'lo' and 'limito' ask for a swap

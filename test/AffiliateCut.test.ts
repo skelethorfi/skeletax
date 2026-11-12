@@ -170,12 +170,15 @@ describe("which actions Midgard lists after the cut", () => {
     assert.deepEqual(affiliateBps(action), [10n, 25n]);
   });
 
-  test("a fee with no affiliate named is no cut; Midgard's affiliateFee when the memo has none", () => {
+  test("a fee with no affiliate named is no cut; Midgard's affiliate and affiliateFee when the memo has none", () => {
     assert.deepEqual(affiliateBps(swap(100, "=:ETH.ETH:0xdest:0::30")), []);
     const action = swap(100, "");
     (action.metadata as any).swap.affiliateFee = "20";
+    assert.deepEqual(affiliateBps(action), []);
+    (action.metadata as any).swap.affiliateAddress = "t";
     assert.deepEqual(affiliateBps(action), [20n]);
   });
+
   test("one fee for several affiliates applies to each of them", () => {
     assert.deepEqual(affiliateBps(swap(100, "=:ETH.ETH:0xdest:0:a/b:10")), [10n, 10n]);
   });
@@ -194,13 +197,14 @@ describe("which actions Midgard lists after the cut", () => {
     assert.equal(isSwapAfterCut(refund("s:ETH.ETH:0xdest:0:t:30"), THORCHAIN), true);
     assert.equal(isSwapAfterCut(refund("+:ETH.ETH:0xpaired:t:30:x"), THORCHAIN), false);
   });
-  test("on Maya, a later name given no fee of its own, or an empty slot, takes its default fee: not known", () => {
+  test("on Maya, a later name (not an address) given no fee of its own, or an empty slot, takes its default fee", () => {
     const at = maya.otherAsset;
     assert.equal(isSwapCutUnknown(swap(at, "=:ETH.ETH:0xdest:0:maya1addr/nameb:10", cacao), MAYA), true);
     assert.equal(isSwapCutUnknown(swap(at, "=:ETH.ETH:0xdest:0:maya1addr/nameb:10/", cacao), MAYA), true);
     assert.equal(isSwapCutUnknown(swap(at, "=:ETH.ETH:0xdest:0:namea/maya1addr:/10", cacao), MAYA), true);
     assert.equal(isSwapAfterCut(swap(at, "=:ETH.ETH:0xdest:0:namea/nameb:10/20", cacao), MAYA), true);
-    assert.equal(isSwapAfterCut(swap(at - 1, "=:ETH.ETH:0xdest:0:namea/nameb:10", cacao), MAYA), true);
+    assert.equal(isSwapAfterCut(swap(at, "=:ETH.ETH:0xdest:0:namea/maya1addr:10", cacao), MAYA), true);
+    assert.deepEqual(affiliateBps(swap(at, "=:ETH.ETH:0xdest:0:namea/maya1addr:10", cacao)), [10n, 10n]);
   });
 
   test("a limit order memo is a swap memo too", () => {
