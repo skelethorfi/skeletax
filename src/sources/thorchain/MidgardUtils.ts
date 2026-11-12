@@ -138,3 +138,37 @@ export function parseMidgardPool(pool: string): string {
   const { blockchain, currency } = parseMidgardAsset(pool);
   return `${blockchain}.${currency}`;
 }
+
+// Up to THORNode v3.0.0, which took effect at this height, THORNode took a native deposit's affiliate cut before
+// queueing its swap, and Midgard lists the swap's input after the cut with no affiliate output (docs/specs/fees.md,
+// Affiliate cut taken from a deposit). From v3.0.0 the cut is an affiliate output.
+export const SWAP_CUT_BEFORE_HEIGHT = 18972070;
+
+// The affiliate fees in basis points Midgard lists for a swap or an add ('30'; several affiliates as '10/20')
+export function affiliateBps(action: Action): bigint[] {
+  const meta = action.metadata?.swap ?? action.metadata?.addLiquidity;
+  return (meta?.affiliateFee ?? "")
+    .split("/")
+    .filter((bps) => /^\d+$/.test(bps))
+    .map(BigInt)
+    .filter((bps) => bps > 0n);
+}
+
+// A THORChain swap of a native deposit that Midgard lists after THORNode took its affiliate cut
+export function isSwapAfterCut(action: Action, protocol: Protocol): boolean {
+  return (
+    protocol.id === THORCHAIN.id &&
+    action.type === "swap" &&
+    Number(action.height) < SWAP_CUT_BEFORE_HEIGHT &&
+    action.in.length === 1 &&
+    !!action.in[0].address?.toLowerCase().startsWith(protocol.nativeAddressPrefix) &&
+    affiliateBps(action).length > 0 &&
+    !action.out.some((out) => out.affiliate)
+  );
+}
+
+// An add with an affiliate fee: THORNode and Mayanode add the fee's share of each deposit as the affiliate's own
+// position, and Midgard lists the wallet's deposits after it
+export function isAddAfterCut(action: Action): boolean {
+  return action.type === "addLiquidity" && affiliateBps(action).length > 0;
+}

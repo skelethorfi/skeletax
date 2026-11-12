@@ -33,7 +33,7 @@ legs:
     role: principal
     basis: observed
     txid: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1
-    amount: "220"
+    amount: "219.8"
     decimals: 8
 prices: []
 details: {}

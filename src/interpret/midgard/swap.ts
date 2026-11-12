@@ -4,8 +4,10 @@ import { formatAmount, parseAmount } from "../../domain/Amount.ts";
 import { type Asset, toAsset } from "../../domain/Asset.ts";
 import type { Issue } from "../../domain/Issue.ts";
 import {
+  affiliateBps,
   getActionDate,
   isMemoName,
+  isSwapAfterCut,
   memoDestination,
   memoRefundAddress,
   oneCoin,
@@ -14,6 +16,7 @@ import {
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { inboundGas } from "./gas.ts";
+import { depositBeforeCut, inboundCoin } from "./affiliate.ts";
 
 // https://dev.thorchain.org/concepts/memos.html#swap
 const SWAP_DESTADDR = 2;
@@ -58,7 +61,18 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
   const returned = returnOutputs
     .map((out) => oneCoin(out, "swap return"))
     .reduce((sum, coin) => sum + BigInt(coin.amount), 0n);
-  const { sent, issues } = sentCoin(bundle, inputCoin, returned, protocol);
+  const listedSent = sentCoin(bundle, inputCoin, returned, protocol);
+  // Before THORNode v3.0.0 Midgard lists a native deposit after its affiliate cut (docs/specs/fees.md)
+  const cut = isSwapAfterCut(action, protocol)
+    ? depositBeforeCut(
+        listedSent.sent,
+        affiliateBps(action),
+        inboundCoin(bundle, input.txID ?? "", inputCoin.asset),
+        input.txID ?? "",
+      )
+    : undefined;
+  const sent = cut?.coin ?? listedSent.sent;
+  const issues = [...listedSent.issues, ...(cut?.issues ?? [])];
 
   if (returned >= BigInt(sent.amount)) {
     throw new Error(`swap: returned ${returned} of ${sent.amount} sent, so nothing was swapped`);
@@ -77,7 +91,7 @@ export function interpretSwap(bundle: RawBundle, protocol: Protocol): { activiti
       asset: inputAsset,
       amount: amount(sent),
       role: "principal",
-      basis: "observed",
+      basis: cut?.basis ?? "observed",
       txid,
     },
     ...(returned > 0n

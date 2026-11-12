@@ -11,6 +11,8 @@ THORChain and Maya deduct other fees (liquidity, affiliate, outbound network,
 slip) from the inbound amount before paying out. They are already reflected in
 what comes out, so they are not exported as fees. Listing them as fees as well
 would count them twice, and the wallet balances in Summ would not add up.
+Where Midgard lists a deposit after an affiliate's cut, the amount sent is the
+whole deposit (Affiliate cut taken from a deposit).
 
 From the earlier restructure (fetch-tx), which follows the same rule:
 
@@ -199,7 +201,8 @@ is an error, as for every other record. `--replay` of a run made before
 these sources were read gives none, so it maps as that run did.
 
 Never use Midgard `networkFees` (outbound), `liquidityFee`, `affiliateFee` or
-affiliate outputs as a fee.
+affiliate outputs as a fee. An affiliate cut Midgard took out of a listed
+deposit is added back to the deposit (Affiliate cut taken from a deposit).
 
 The fee goes on the row for the wallet that paid it: the row for the inbound
 transaction. Rows for what comes out have no fee.
@@ -385,6 +388,44 @@ row but differs otherwise (even by a second) is held as an overlap, and
 neither is uploaded; one that does not share all three is uploaded beside the
 run's rows and counts twice.
 
+### Affiliate cut taken from a deposit
+
+An affiliate's cut is part of what the wallet gave up, like the liquidity fee:
+the row trades out (or adds) the whole deposit, and no fee row is exported for
+the cut. Midgard does not always list the whole deposit:
+
+- **A native swap before THORNode v3.0.0** (THORChain, below height
+  18,972,070). THORNode took the cut out of a native deposit (RUNE, a synth)
+  before queueing the swap (`handler_deposit.go`), and Midgard lists the input
+  after the cut, with no affiliate output. From v3.0.0 the cut is a separate
+  step and Midgard lists it as an output with `affiliate: true`, which is not a
+  leg. Deposits sent on another chain are listed whole in every version.
+- **An add with an affiliate fee** (THORChain and Maya, every version). The
+  fee's share of each deposit, RUNE or CACAO and the asset alike, is added as
+  the affiliate's own position (`handler_add_liquidity.go`), and Midgard lists
+  the wallet's deposits after it. Savers deposits are read from THORNode's
+  inbound or the deposit's swap already (`savers.md`) and are left as they are.
+
+For those, the amount sent is, in order:
+
+1. the coin THORNode's inbound status shows (observed). THORNode has it from
+   the 2022-03-22 migration to the v1 chain's last block (2024-09-04), for a
+   swap's input and an add's deposit sent on another chain;
+2. else Midgard's amount grossed up by the action's `affiliateFee` (default):
+   the smallest deposit that leaves Midgard's amount once each affiliate's cut,
+   deposit × bps / 10000 rounded half up (THORNode's `GetSafeShare`), is taken
+   from it. When two deposits leave the same amount, the smaller is one base
+   unit under the other.
+
+When both are known and disagree, the inbound coin is used, with a warning.
+When no deposit leaves Midgard's amount, Midgard's amount is used, with a
+warning. Maya swaps are not grossed up: no case of a Maya native swap listed
+after its cut is known, nor the version that changed it.
+
+A RUNEPool withdrawal's coin is what left RUNEPool. THORNode pays the
+affiliate's share of it (`affiliateAmount`) first, so the wallet received the
+coin less `affiliateAmount` (observed).
+
 ### Refunds of an affiliate's cut
 
 When a swap has an affiliate, THORChain swaps the affiliate's cut to RUNE as a
@@ -477,4 +518,9 @@ gives no row, and the warning asks for its loss to be entered by hand.
     refund has no row (`refund/btc-partial-fill`)
   - `networkFees` (except for refunds), `liquidityFee` and affiliate outputs are
     never used as fees
+  - a deposit listed after an affiliate cut trades out the whole deposit: THORNode's
+    inbound coin (`swap/rune-to-token-aggregator`,
+    `swap/rune-affiliate-cut-before-v3`), or Midgard's amount grossed up
+    (`maya/add-liquidity-kuji`, both sides); a RUNEPool withdrawal receives its coin
+    less `affiliateAmount` (`runepool/withdraw`)
 - Golden cases in `test/cases/` carry the expected fee in each row.
