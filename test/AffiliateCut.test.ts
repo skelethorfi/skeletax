@@ -7,7 +7,6 @@ import {
   isAddAfterCut,
   isSwapAfterCut,
   SWAP_CUT_BEFORE_HEIGHT,
-  TRADE_CUT_FROM_HEIGHT,
 } from "../src/sources/thorchain/MidgardUtils.ts";
 import { MAYA, THORCHAIN } from "../src/domain/Protocol.ts";
 
@@ -112,29 +111,42 @@ describe("which actions Midgard lists after the cut", () => {
       ],
       metadata: { swap: { memo, affiliateFee: memo.split(":")[5] ?? "" } },
     }) as unknown as Action;
-  const thorCutoff = SWAP_CUT_BEFORE_HEIGHT[THORCHAIN.id];
-  const mayaCutoff = SWAP_CUT_BEFORE_HEIGHT[MAYA.id];
+  const thor = SWAP_CUT_BEFORE_HEIGHT[THORCHAIN.id];
+  const maya = SWAP_CUT_BEFORE_HEIGHT[MAYA.id];
   const memo = "=:ETH.ETH:0xdest:0:t:30";
+  const cacao = { address: "maya1wallet", asset: "MAYA.CACAO" };
 
-  test("a native swap with a fee before the protocol's cutoff, with no affiliate output", () => {
-    assert.equal(isSwapAfterCut(swap(thorCutoff - 1, memo), THORCHAIN), true);
+  test("RUNE or CACAO swapped before the cut became part of the outbound", () => {
+    assert.equal(isSwapAfterCut(swap(thor.nativeAsset - 1, memo), THORCHAIN), true);
+    assert.equal(isSwapAfterCut(swap(thor.nativeAsset, memo), THORCHAIN), false);
+    assert.equal(isSwapAfterCut(swap(maya.nativeAsset - 1, memo, cacao), MAYA), true);
+    assert.equal(isSwapAfterCut(swap(maya.nativeAsset, memo, cacao), MAYA), false);
+  });
+
+  test("a synth swapped before the cut became a swap of its own", () => {
+    assert.equal(isSwapAfterCut(swap(thor.otherAsset - 1, memo, { asset: "BTC/BTC" }), THORCHAIN), true);
+    assert.equal(isSwapAfterCut(swap(thor.otherAsset, memo, { asset: "BTC/BTC" }), THORCHAIN), false);
     assert.equal(
-      isSwapAfterCut(swap(mayaCutoff - 1, memo, { address: "maya1wallet", asset: "MAYA.CACAO" }), MAYA),
-      true,
+      isSwapAfterCut(swap(maya.otherAsset, memo, { address: "maya1wallet", asset: "BTC/BTC" }), MAYA),
+      false,
     );
   });
 
-  test("not from the cutoff, nor with an affiliate output, a zero fee or an L1 deposit", () => {
-    assert.equal(isSwapAfterCut(swap(thorCutoff, memo), THORCHAIN), false);
-    assert.equal(isSwapAfterCut(swap(mayaCutoff, memo, { address: "maya1wallet", asset: "MAYA.CACAO" }), MAYA), false);
-    assert.equal(isSwapAfterCut(swap(100, memo, { affiliateOut: true }), THORCHAIN), false);
+  test("never a trade asset, a zero fee or an L1 deposit", () => {
+    assert.equal(isSwapAfterCut(swap(100, memo, { asset: "BTC~BTC" }), THORCHAIN), false);
     assert.equal(isSwapAfterCut(swap(100, "=:ETH.ETH:0xdest:0:t:0"), THORCHAIN), false);
     assert.equal(isSwapAfterCut(swap(100, memo, { address: "bc1wallet", asset: "BTC.BTC" }), THORCHAIN), false);
   });
 
-  test("a trade asset only from THORNode v2.137.0: before it the trade account kept the cut", () => {
-    assert.equal(isSwapAfterCut(swap(TRADE_CUT_FROM_HEIGHT - 1, memo, { asset: "BTC~BTC" }), THORCHAIN), false);
-    assert.equal(isSwapAfterCut(swap(TRADE_CUT_FROM_HEIGHT, memo, { asset: "BTC~BTC" }), THORCHAIN), true);
+  test("Midgard's affiliate flag is not read: it can mark a partial fill's return", () => {
+    assert.equal(isSwapAfterCut(swap(100, memo, { affiliateOut: true }), THORCHAIN), true);
+  });
+
+  test("the refund of such a swap", () => {
+    const refund = swap(100, memo);
+    (refund as any).type = "refund";
+    (refund as any).metadata = { refund: { memo } };
+    assert.equal(isSwapAfterCut(refund, THORCHAIN), true);
   });
 
   test("an add with a fee, at any height", () => {

@@ -139,22 +139,22 @@ export function parseMidgardPool(pool: string): string {
   return `${blockchain}.${currency}`;
 }
 
-// Up to these heights the protocol took a native deposit's affiliate cut before queueing its swap, and Midgard lists
-// the swap's input after the cut with no affiliate output (docs/specs/fees.md, Affiliate cut taken from a deposit):
-// THORNode v3.0.0, Mayanode v1.112.0. From them the cut is an affiliate output.
-export const SWAP_CUT_BEFORE_HEIGHT: Record<string, number> = {
-  [THORCHAIN.id]: 18972070,
-  [MAYA.id]: 8788026,
+// Below these heights the protocol took a native deposit's affiliate cut before queueing its swap, and Midgard lists
+// the input after the cut with no output for it (docs/specs/fees.md, Affiliate cut taken from a deposit):
+// - the protocol's own asset (RUNE, CACAO): until the cut became part of the swap's outbound (THORNode v3.0.0,
+//   Mayanode v1.118.0);
+// - another native asset (a synth): until the cut became a swap of its own with the same txid, which Midgard adds back
+//   to the input (THORNode v2.137.0, Mayanode v1.112.0).
+// A trade asset never: before THORNode v2.137.0 the trade account kept the cut, and from it the cut is a swap.
+export const SWAP_CUT_BEFORE_HEIGHT: Record<string, { nativeAsset: number; otherAsset: number }> = {
+  [THORCHAIN.id]: { nativeAsset: 18972070, otherAsset: 18393714 },
+  [MAYA.id]: { nativeAsset: 10253469, otherAsset: 8788026 },
 };
-
-// Before THORNode v2.137.0 a trade asset swapped from the trade account kept its cut: the swap took the deposit less
-// the cut from the account, and paying the affiliate failed
-export const TRADE_CUT_FROM_HEIGHT = 18393714;
 
 // The affiliate fees in basis points a swap or add memo gives (=:ASSET:DEST:LIMIT:AFFILIATE:FEE, +:POOL:PAIRED:
 // AFFILIATE:FEE; several affiliates as 'a/b' and '10/20'), or else Midgard's affiliateFee, which holds one fee only
 export function affiliateBps(action: Action): bigint[] {
-  const meta = action.metadata?.swap ?? action.metadata?.addLiquidity;
+  const meta = action.metadata?.swap ?? action.metadata?.addLiquidity ?? action.metadata?.refund;
   const memo = meta?.memo ?? "";
   const fields = memo.split(":");
   const field = action.type === "addLiquidity" ? 4 : 5;
@@ -166,18 +166,18 @@ export function affiliateBps(action: Action): bigint[] {
     .filter((b) => b > 0n);
 }
 
-// A swap of a native deposit that Midgard lists after the protocol took its affiliate cut
+// A swap (or the refund of one) of a native deposit whose affiliate cut the protocol took before queueing it
 export function isSwapAfterCut(action: Action, protocol: Protocol): boolean {
-  const height = Number(action.height);
   const asset = action.in[0]?.coins?.[0]?.asset ?? "";
+  const cutoff = SWAP_CUT_BEFORE_HEIGHT[protocol.id];
   return (
-    action.type === "swap" &&
-    height < (SWAP_CUT_BEFORE_HEIGHT[protocol.id] ?? 0) &&
-    !(asset.includes("~") && height < TRADE_CUT_FROM_HEIGHT) &&
+    (action.type === "swap" || action.type === "refund") &&
+    !!cutoff &&
+    !asset.includes("~") &&
+    Number(action.height) < (asset === protocol.nativeAsset ? cutoff.nativeAsset : cutoff.otherAsset) &&
     action.in.length === 1 &&
     !!action.in[0].address?.toLowerCase().startsWith(protocol.nativeAddressPrefix) &&
-    affiliateBps(action).length > 0 &&
-    !action.out.some((out) => out.affiliate)
+    affiliateBps(action).length > 0
   );
 }
 

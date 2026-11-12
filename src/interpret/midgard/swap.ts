@@ -257,13 +257,18 @@ function stuckSwap(bundle: RawBundle, protocol: Protocol): { activities: Activit
   }
 
   const txid = input.txID ?? "";
+  // A queued swap had its affiliate cut taken already, so the whole deposit was given up (docs/specs/fees.md)
+  const cut = isSwapAfterCut(action, protocol)
+    ? depositBeforeCut(inputCoin, affiliateBps(action), inboundCoin(bundle, txid, inputCoin.asset), txid)
+    : undefined;
+  const sentCoin = cut?.coin ?? inputCoin;
   const sent: Leg = {
     direction: "out",
     wallet: input.address,
     asset: toAsset(inputCoin.asset),
-    amount: parseAmount(inputCoin.amount, protocol.decimals(inputCoin.asset)),
+    amount: parseAmount(sentCoin.amount, protocol.decimals(inputCoin.asset)),
     role: "principal",
-    basis: "observed",
+    basis: cut?.basis ?? "observed",
     txid,
   };
   const gas = inboundGas(txid, bundle, input.address, inputCoin.asset, protocol);
@@ -283,6 +288,7 @@ function stuckSwap(bundle: RawBundle, protocol: Protocol): { activities: Activit
       },
     ],
     issues: [
+      ...(cut?.issues ?? []),
       {
         kind: "warning",
         message:

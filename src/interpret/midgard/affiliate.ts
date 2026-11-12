@@ -16,8 +16,8 @@ export function inboundCoin(bundle: Pick<RawBundle, "thornodeTxs">, txid: string
     ?.tx?.coins?.find((coin) => coin.asset.toUpperCase() === asset.toUpperCase());
 }
 
-// The affiliate's share of an amount: amount × bps / 10000 rounded half up, as THORNode and Mayanode work it out now
-// (common.GetSafeShare); older versions rounded half to even, which differs only on an exact half
+// The affiliate's share of an amount: amount × bps / 10000 rounded to the nearest unit, as THORNode and Mayanode work
+// it out (common.GetSafeShare). An exact half rounds up, or to even (halfEven), depending on the version and the fee.
 export function affiliateCut(amount: bigint, bps: bigint, halfEven = false): bigint {
   const share = (amount * bps + 5000n) / 10000n;
   const exactHalf = (amount * bps) % 10000n === 5000n;
@@ -79,13 +79,15 @@ export function depositBeforeCut(
   }
 
   if (derived === undefined) {
+    const total = bps.reduce((sum, b) => sum + b, 0n);
+    const estimate = total > 0n && total < 10000n ? (BigInt(listed.amount) * 10000n) / (10000n - total) : undefined;
     return {
-      coin: listed,
-      basis: "observed",
+      coin: estimate === undefined ? listed : { asset: listed.asset, amount: estimate.toString() },
+      basis: estimate === undefined ? "observed" : "default",
       issues: [
         {
           kind: "warning",
-          message: `deposit ${txid}: no amount less an affiliate fee of ${bps.join("/")} bps leaves Midgard's ${listed.amount}, so Midgard's amount is exported; check the amount sent`,
+          message: `deposit ${txid}: no amount less an affiliate fee of ${bps.join("/")} bps leaves Midgard's ${listed.amount} exactly, so ${estimate === undefined ? "Midgard's amount" : `the nearest estimate, ${estimate},`} is exported; check the amount sent`,
         },
       ],
     };

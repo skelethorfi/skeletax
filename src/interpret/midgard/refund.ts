@@ -3,10 +3,11 @@ import type { Activity, Leg } from "../../domain/Activity.ts";
 import { formatAmount, parseAmount } from "../../domain/Amount.ts";
 import { toAsset } from "../../domain/Asset.ts";
 import type { Issue } from "../../domain/Issue.ts";
-import { getActionDate, oneCoin } from "../../sources/thorchain/MidgardUtils.ts";
+import { getActionDate, isSwapAfterCut, oneCoin } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
 import { inboundGas } from "./gas.ts";
+import { inboundCoin } from "./affiliate.ts";
 
 // A refund (docs/specs/fees.md): the wallet sent an amount in, and the protocol returned all or part of
 // it, or, for a stuck one still pending, nothing yet (docs/specs/pending.md). Two refunds are not the wallet's own and give no activity: the refund of an affiliate's cut, which
@@ -57,12 +58,18 @@ export function interpretRefund(bundle: RawBundle, protocol: Protocol): { activi
     action.out.find((out) => out.txID && out.address?.toLowerCase() === returnWallet.toLowerCase()) ??
     action.out.find((out) => out.txID)
   )?.txID;
+  // A swap that failed once queued was refunded from its deposit less the affiliate cut, which Midgard lists as the
+  // input; THORNode's inbound shows the whole deposit. One rejected on deposit lost no cut, so with no inbound Midgard's
+  // amount stays (docs/specs/fees.md).
+  const afterCut = isSwapAfterCut(action, protocol);
+  const inbound = afterCut ? inboundCoin(bundle, txid, inputCoin.asset) : undefined;
+  const sentAmount = inbound && BigInt(inbound.amount) > BigInt(inputCoin.amount) ? inbound.amount : inputCoin.amount;
   const legs: Leg[] = [
     {
       direction: "out",
       wallet: input.address,
       asset: inputAsset,
-      amount: parseAmount(inputCoin.amount, decimals),
+      amount: parseAmount(sentAmount, decimals),
       role: "principal",
       basis: "observed",
       txid,
@@ -85,6 +92,15 @@ export function interpretRefund(bundle: RawBundle, protocol: Protocol): { activi
   const reason = ((action.metadata.refund as any)?.reason ?? "").replace(/[\n\t]/g, " ").trim();
   // The source exports a pending refund only once it is stuck (docs/specs/pending.md)
   const issues: Issue[] = [
+    ...(afterCut && !inbound
+      ? [
+          {
+            kind: "warning" as const,
+            message:
+              "refund of a native swap with an affiliate fee, with no THORNode inbound: if it failed once queued, its affiliate cut was kept and no row has it; check the amount sent",
+          },
+        ]
+      : []),
     ...(action.status === "pending"
       ? [
           {
