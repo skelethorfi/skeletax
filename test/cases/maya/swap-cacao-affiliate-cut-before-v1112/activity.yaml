@@ -1,0 +1,59 @@
+id: maya-midgard/swap.EC7C144072D4D37E4C44E57D027AD825F2CC8C5ED3AFD53EE5858777F0F99DAC
+protocol: maya
+kind: swap
+status: success
+time: 2024-09-29T20:52:40.184Z
+memo: =:BTC.BTC:bc1q4d8sjutpqktp4cgwv5a77s04qtmuykfps3c3cv::wr:100
+legs:
+  - direction: out
+    wallet: maya1faj99admwwk8x5c8x78e4jpxpwecalptt7juyj
+    asset:
+      notation: MAYA.CACAO
+      kind: native
+    role: principal
+    basis: default
+    txid: EC7C144072D4D37E4C44E57D027AD825F2CC8C5ED3AFD53EE5858777F0F99DAC
+    amount: "1700"
+    decimals: 10
+  - direction: in
+    wallet: bc1q4d8sjutpqktp4cgwv5a77s04qtmuykfps3c3cv
+    asset:
+      notation: BTC.BTC
+      kind: native
+    role: principal
+    basis: observed
+    txid: 55D6C69534309588780059826F0D1DF3E6548D89673C33C946B8AE6244964838
+    amount: "0.01569485"
+    decimals: 8
+  - direction: out
+    wallet: maya1faj99admwwk8x5c8x78e4jpxpwecalptt7juyj
+    asset:
+      notation: MAYA.CACAO
+      kind: native
+    role: gas
+    basis: default
+    txid: EC7C144072D4D37E4C44E57D027AD825F2CC8C5ED3AFD53EE5858777F0F99DAC
+    amount: "0.2"
+    decimals: 10
+prices:
+  - asset:
+      notation: MAYA.CACAO
+      kind: native
+    usd: "0.6192421644729171"
+    source: midgard:swap.inPriceUSD
+  - asset:
+      notation: BTC.BTC
+      kind: native
+    usd: "66291.09780831927"
+    source: midgard:swap.outPriceUSD
+  - asset:
+      notation: MAYA.CACAO
+      kind: native
+    usd: "0.6192421644729171"
+    source: maya-midgard:history.cacao
+  - asset:
+      notation: BTC.BTC
+      kind: native
+    usd: "66345.91092315229"
+    source: maya-midgard:history.depths
+details: {}

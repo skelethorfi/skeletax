@@ -7,6 +7,7 @@ import {
   isAddAfterCut,
   isSwapAfterCut,
   SWAP_CUT_BEFORE_HEIGHT,
+  TRADE_CUT_FROM_HEIGHT,
 } from "../src/sources/thorchain/MidgardUtils.ts";
 import { MAYA, THORCHAIN } from "../src/domain/Protocol.ts";
 
@@ -15,6 +16,13 @@ describe("affiliateCut", () => {
     assert.equal(affiliateCut(2500n, 30n), 8n); // 7.5
     assert.equal(affiliateCut(2499n, 30n), 7n); // 7.497
     assert.equal(affiliateCut(1000025578345n, 15n), 1500038368n);
+  });
+
+  test("or half to even, as older versions did", () => {
+    assert.equal(affiliateCut(2500n, 30n, true), 8n); // 7.5 → 8
+    assert.equal(affiliateCut(500n, 30n, true), 2n); // 1.5 → 2
+    assert.equal(affiliateCut(2500n, 10n, true), 2n); // 2.5 → 2
+    assert.equal(amountBeforeCut(2498n, [10n]), 2500n);
   });
 });
 
@@ -51,6 +59,20 @@ describe("depositBeforeCut", () => {
     assert.deepEqual(result, { coin: { asset: "THOR.RUNE", amount: "1000025578345" }, basis: "observed", issues: [] });
   });
 
+  test("no warning when the inbound coin less the cut is Midgard's amount, or is Midgard's amount itself", () => {
+    const tie = depositBeforeCut(
+      { asset: "THOR.RUNE", amount: "2492" },
+      [30n],
+      { asset: "THOR.RUNE", amount: "2500" },
+      "TX",
+    );
+    assert.deepEqual(tie.issues, []);
+    assert.equal(tie.coin.amount, "2500");
+    const whole = depositBeforeCut(listed, [15n], { asset: "THOR.RUNE", amount: listed.amount }, "TX");
+    assert.deepEqual(whole.issues, []);
+    assert.equal(whole.coin.amount, listed.amount);
+  });
+
   test("the inbound coin wins over the gross-up, with a warning when they differ", () => {
     const result = depositBeforeCut(listed, [15n], { asset: "THOR.RUNE", amount: "1000100000000" }, "TX");
     assert.equal(result.coin.amount, "1000100000000");
@@ -69,39 +91,70 @@ describe("depositBeforeCut", () => {
 });
 
 describe("which actions Midgard lists after the cut", () => {
-  const swap = (height: number, affiliateFee: string, affiliateOut = false, address = "thor1wallet") =>
+  const swap = (
+    height: number,
+    memo: string,
+    opts: { affiliateOut?: boolean; address?: string; asset?: string } = {},
+  ) =>
     ({
       type: "swap",
       height: String(height),
-      in: [{ address, coins: [{ asset: "THOR.RUNE", amount: "1" }], txID: "TX" }],
+      in: [
+        {
+          address: opts.address ?? "thor1wallet",
+          coins: [{ asset: opts.asset ?? "THOR.RUNE", amount: "1" }],
+          txID: "TX",
+        },
+      ],
       out: [
         { address: "0xdest", coins: [], txID: "" },
-        ...(affiliateOut ? [{ address: "thor1aff", coins: [], txID: "", affiliate: true }] : []),
+        ...(opts.affiliateOut ? [{ address: "thor1aff", coins: [], txID: "", affiliate: true }] : []),
       ],
-      metadata: { swap: { affiliateFee } },
+      metadata: { swap: { memo, affiliateFee: memo.split(":")[5] ?? "" } },
     }) as unknown as Action;
+  const thorCutoff = SWAP_CUT_BEFORE_HEIGHT[THORCHAIN.id];
+  const mayaCutoff = SWAP_CUT_BEFORE_HEIGHT[MAYA.id];
+  const memo = "=:ETH.ETH:0xdest:0:t:30";
 
-  test("a native THORChain swap with a fee before v3.0.0, with no affiliate output", () => {
-    assert.equal(isSwapAfterCut(swap(SWAP_CUT_BEFORE_HEIGHT - 1, "30"), THORCHAIN), true);
+  test("a native swap with a fee before the protocol's cutoff, with no affiliate output", () => {
+    assert.equal(isSwapAfterCut(swap(thorCutoff - 1, memo), THORCHAIN), true);
+    assert.equal(
+      isSwapAfterCut(swap(mayaCutoff - 1, memo, { address: "maya1wallet", asset: "MAYA.CACAO" }), MAYA),
+      true,
+    );
   });
 
-  test("not from v3.0.0, nor with an affiliate output, a zero fee, an L1 deposit or on Maya", () => {
-    assert.equal(isSwapAfterCut(swap(SWAP_CUT_BEFORE_HEIGHT, "30"), THORCHAIN), false);
-    assert.equal(isSwapAfterCut(swap(100, "30", true), THORCHAIN), false);
-    assert.equal(isSwapAfterCut(swap(100, "0"), THORCHAIN), false);
-    assert.equal(isSwapAfterCut(swap(100, "30", false, "bc1wallet"), THORCHAIN), false);
-    assert.equal(isSwapAfterCut(swap(100, "30", false, "maya1wallet"), MAYA), false);
+  test("not from the cutoff, nor with an affiliate output, a zero fee or an L1 deposit", () => {
+    assert.equal(isSwapAfterCut(swap(thorCutoff, memo), THORCHAIN), false);
+    assert.equal(isSwapAfterCut(swap(mayaCutoff, memo, { address: "maya1wallet", asset: "MAYA.CACAO" }), MAYA), false);
+    assert.equal(isSwapAfterCut(swap(100, memo, { affiliateOut: true }), THORCHAIN), false);
+    assert.equal(isSwapAfterCut(swap(100, "=:ETH.ETH:0xdest:0:t:0"), THORCHAIN), false);
+    assert.equal(isSwapAfterCut(swap(100, memo, { address: "bc1wallet", asset: "BTC.BTC" }), THORCHAIN), false);
+  });
+
+  test("a trade asset only from THORNode v2.137.0: before it the trade account kept the cut", () => {
+    assert.equal(isSwapAfterCut(swap(TRADE_CUT_FROM_HEIGHT - 1, memo, { asset: "BTC~BTC" }), THORCHAIN), false);
+    assert.equal(isSwapAfterCut(swap(TRADE_CUT_FROM_HEIGHT, memo, { asset: "BTC~BTC" }), THORCHAIN), true);
   });
 
   test("an add with a fee, at any height", () => {
-    const add = (affiliateFee: string) =>
-      ({ type: "addLiquidity", metadata: { addLiquidity: { affiliateFee } } }) as unknown as Action;
-    assert.equal(isAddAfterCut(add("100")), true);
-    assert.equal(isAddAfterCut(add("0")), false);
-    assert.equal(isAddAfterCut(add("")), false);
+    const add = (memo: string) =>
+      ({ type: "addLiquidity", metadata: { addLiquidity: { memo, affiliateFee: "" } } }) as unknown as Action;
+    assert.equal(isAddAfterCut(add("+:BTC.BTC:bc1paired:wr:100")), true);
+    assert.equal(isAddAfterCut(add("+:BTC.BTC:bc1paired:wr:0")), false);
+    assert.equal(isAddAfterCut(add("+:BTC.BTC:bc1paired")), false);
   });
 
-  test("several affiliates' fees", () => {
-    assert.deepEqual(affiliateBps(swap(100, "10/25")), [10n, 25n]);
+  test("several affiliates' fees, read from the memo (Midgard's affiliateFee holds one fee only)", () => {
+    const action = swap(100, "=:ETH.ETH:0xdest:0:a/b:10/25");
+    (action.metadata as any).swap.affiliateFee = "";
+    assert.deepEqual(affiliateBps(action), [10n, 25n]);
+  });
+
+  test("a fee with no affiliate named is no cut; Midgard's affiliateFee when the memo has none", () => {
+    assert.deepEqual(affiliateBps(swap(100, "=:ETH.ETH:0xdest:0::30")), []);
+    const action = swap(100, "");
+    (action.metadata as any).swap.affiliateFee = "20";
+    assert.deepEqual(affiliateBps(action), [20n]);
   });
 });

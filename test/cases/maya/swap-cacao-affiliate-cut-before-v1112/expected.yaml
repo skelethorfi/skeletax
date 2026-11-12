@@ -1,0 +1,29 @@
+wallet: maya1faj99admwwk8x5c8x78e4jpxpwecalptt7juyj
+timestamp: 2024-09-29T20:52:40.184Z
+type: bridge-trade-out
+baseCurrency: CACAO
+baseAmount: "1700"
+quoteCurrency: BTC
+quoteAmount: "0.01569485"
+feeCurrency: CACAO
+feeAmount: "0.2"
+from: maya1faj99admwwk8x5c8x78e4jpxpwecalptt7juyj
+to: mayaprotocol
+blockchain: Mayachain
+referencePricePerUnit: "0.6192421644729171"
+referencePriceCurrency: USD
+description: 1/2 - Swap 1700 CACAO to 0.01569485 BTC; EC7C144072D4D37E4C44E57D027AD825F2CC8C5ED3AFD53EE5858777F0F99DAC
+id: 2024-09-29T20:52:40.184Z.out.549b6007866d
+---
+wallet: bc1q4d8sjutpqktp4cgwv5a77s04qtmuykfps3c3cv
+timestamp: 2024-09-29T20:52:50.184Z
+type: bridge-trade-in
+baseCurrency: BTC
+baseAmount: "0.01569485"
+from: mayaprotocol
+to: bc1q4d8sjutpqktp4cgwv5a77s04qtmuykfps3c3cv
+blockchain: BTC
+referencePricePerUnit: "66291.09780831927"
+referencePriceCurrency: USD
+description: 2/2 - Swap 1700 CACAO to 0.01569485 BTC; EC7C144072D4D37E4C44E57D027AD825F2CC8C5ED3AFD53EE5858777F0F99DAC; paid out in 55D6C69534309588780059826F0D1DF3E6548D89673C33C946B8AE6244964838
+id: 2024-09-29T20:52:40.184Z.in.28eaab690984

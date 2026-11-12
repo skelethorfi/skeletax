@@ -1,0 +1,83 @@
+{
+  "description": "swap success: [MAYA.CACAO] -> [BTC.BTC]",
+  "source": "midgard",
+  "protocol": "maya",
+  "wallet": "maya1faj99admwwk8x5c8x78e4jpxpwecalptt7juyj",
+  "data": {
+    "date": "1727643160184035764",
+    "height": "7990564",
+    "in": [
+      {
+        "address": "maya1faj99admwwk8x5c8x78e4jpxpwecalptt7juyj",
+        "coins": [
+          {
+            "amount": "16830000000000",
+            "asset": "MAYA.CACAO"
+          }
+        ],
+        "txID": "EC7C144072D4D37E4C44E57D027AD825F2CC8C5ED3AFD53EE5858777F0F99DAC"
+      }
+    ],
+    "metadata": {
+      "swap": {
+        "affiliateAddress": "wr",
+        "affiliateFee": "100",
+        "inPriceUSD": "0.6192421644729171",
+        "isStreamingSwap": false,
+        "liquidityFee": "2664751816",
+        "memo": "=:BTC.BTC:bc1q4d8sjutpqktp4cgwv5a77s04qtmuykfps3c3cv::wr:100",
+        "networkFees": [
+          {
+            "amount": "5678",
+            "asset": "BTC.BTC"
+          }
+        ],
+        "outPriceUSD": "66291.09780831927",
+        "streamingSwapMeta": {
+          "count": "1",
+          "depositedCoin": {
+            "amount": "0",
+            "asset": ""
+          },
+          "inCoin": {
+            "amount": "0",
+            "asset": ""
+          },
+          "interval": "0",
+          "lastHeight": "0",
+          "outCoin": {
+            "amount": "0",
+            "asset": ""
+          },
+          "outEstimation": "1571345",
+          "quantity": "1"
+        },
+        "swapSlip": "7",
+        "swapTarget": "0"
+      }
+    },
+    "out": [
+      {
+        "address": "bc1q4d8sjutpqktp4cgwv5a77s04qtmuykfps3c3cv",
+        "coins": [
+          {
+            "amount": "1569485",
+            "asset": "BTC.BTC"
+          }
+        ],
+        "height": "7990581",
+        "txID": "55D6C69534309588780059826F0D1DF3E6548D89673C33C946B8AE6244964838"
+      }
+    ],
+    "pools": [
+      "BTC.BTC"
+    ],
+    "status": "success",
+    "type": "swap"
+  },
+  "nativeFee": "2000000000",
+  "usdPrices": {
+    "BTC.BTC": "66345.91092315229",
+    "MAYA.CACAO": "0.6192421644729171"
+  }
+}
