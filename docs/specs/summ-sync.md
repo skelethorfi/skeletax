@@ -997,7 +997,7 @@ it, and only `Bulk delete removed N` shows it: N must equal the entry's legs, or
 Summ also refuses a delete over MCP that does not give `expectedCount`, the number of actions the
 selection matches: apply gives the number of actions it just read, so a selection Summ resolves to
 another number is refused and nothing is deleted. The refusal stops the run as a failed write; the
-next run reads the actions afresh and deletes them.
+next run reads the actions afresh and checks them again before it deletes.
 
 Never by a filter. A receive or send Summ made up to pair the deleted leg as a transfer (Made-up
 legs above) is named on the split's lines (`madeUp`), since nothing else names it once the leg is

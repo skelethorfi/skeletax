@@ -401,10 +401,11 @@ export async function applyPlan(
       const message = e instanceof Error ? e.message : String(e);
       log({ call: tool, ...tag, error: message });
       // Summ's refusal of a delete's action count asks to re-run with its count; apply never sends a count it did not
-      // just read, so the actions changed since that read: run apply again, which reads them afresh
-      const hint = /expectedCount/.test(message)
-        ? " (Summ refused the delete's action count: the actions changed since apply read them, and nothing was deleted. Run apply again, which reads them afresh; never delete by hand.)"
-        : "";
+      // just read, so the actions most likely changed since that read
+      const hint =
+        "expectedCount" in args && /expectedCount/.test(message)
+          ? " (Summ refused the delete's action count, so nothing was deleted: the actions probably changed since apply read them. Run apply again, which reads them afresh; if it is refused again, pull and plan. Never delete by hand.)"
+          : "";
       throw new ApplyStop("write-failed", `${entry}: ${message}${hint}`, entry);
     }
   };

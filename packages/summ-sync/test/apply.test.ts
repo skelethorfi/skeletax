@@ -389,6 +389,7 @@ test("Summ refusing a delete's action count stops the run with nothing deleted; 
   });
   assert.deepEqual([...summ.actions.keys()], ["d"]);
   assert.equal(log.at(-1)?.operation, "delete");
+  assert.match(String(log.at(-1)?.error), /expectedCount/);
   const again = await run(summ, planFile({ delete: [del()] }), { approveDeletes: true });
   assert.equal(again.result.deleted, 1);
   assert.deepEqual([...summ.actions.keys()], []);
