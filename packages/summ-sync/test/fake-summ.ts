@@ -299,6 +299,12 @@ export class FakeSumm implements ToolCaller {
         return `Bulk ignore updated ${ids.length} action.\nThe changes are saved.\nRequested Action IDs: ${ids.join(", ")}\nAffected Action IDs (rebuilt — these replace the requested ids, and grouping can change the count): ${named.join(", ")}\nBulk Edit ID: ignore${++this.n}abcdef\n`;
       });
     }
+    // Like Summ: a delete over MCP must give the number of actions it selects
+    const matched = ids.filter((id) => this.actions.has(id)).length;
+    if (args.expectedCount !== matched)
+      throw new Error(
+        `Nothing deleted: the selection matches ${matched} actions. Confirm this count with the user, then re-run with expectedCount: ${matched}.`,
+      );
     this.writes.push({ kind: "delete", legs: legs.map((l) => l._id) });
     return this.write(() => {
       for (const id of ids) this.actions.delete(id);

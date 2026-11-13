@@ -727,8 +727,9 @@ export async function applyPlan(
 
   async function remove(key: string, entry: DeleteEntry, actions: Map<string, Found>) {
     if (!write) return;
-    // By the actions just inspected, which hold only the entry's legs: never by a filter
-    const args = { actionIds: [...actions.keys()], operation: { type: "delete" } };
+    // By the actions just inspected, which hold only the entry's legs: never by a filter. Summ refuses a delete over
+    // MCP unless it is told how many actions the selection matches: the ones just inspected.
+    const args = { actionIds: [...actions.keys()], operation: { type: "delete" }, expectedCount: actions.size };
     const tag = {
       operation: "delete",
       entry: key,

@@ -375,7 +375,7 @@ test("a delete looks its legs up by _id and deletes only the actions that hold n
   const { result, log } = await run(summ, planFile({ delete: [del()] }), { approveDeletes: true });
   assert.equal(result.deleted, 1);
   const call = summ.calls.find((c) => c.name === "bulk_edit_transactions");
-  assert.deepEqual(call?.args, { actionIds: ["d"], operation: { type: "delete" } });
+  assert.deepEqual(call?.args, { actionIds: ["d"], operation: { type: "delete" }, expectedCount: 1 });
   assert.deepEqual([...summ.actions.keys()], ["unrelated"]);
   assert.equal(log[0].operation, "delete");
 });
