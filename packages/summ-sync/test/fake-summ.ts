@@ -71,6 +71,8 @@ export class FakeSumm implements ToolCaller {
   failAfterWrite: number | "all" | null = null;
   /** The nth write (1 on) fails and does not land. */
   failBeforeWrite: number | null = null;
+  /** The next delete matches this many more actions than requested, as when they changed since apply read them. */
+  deleteCountShift = 0;
   /** A batch of Summ's own at every step. */
   batchEveryStep = false;
   dieAt: number | null = null;
@@ -300,7 +302,8 @@ export class FakeSumm implements ToolCaller {
       });
     }
     // Like Summ: a delete over MCP must give the number of actions it selects
-    const matched = ids.filter((id) => this.actions.has(id)).length;
+    const matched = ids.filter((id) => this.actions.has(id)).length + this.deleteCountShift;
+    this.deleteCountShift = 0;
     if (args.expectedCount !== matched)
       throw new Error(
         `Nothing deleted: the selection matches ${matched} actions. Confirm this count with the user, then re-run with expectedCount: ${matched}.`,

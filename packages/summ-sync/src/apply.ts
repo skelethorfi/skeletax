@@ -400,7 +400,12 @@ export async function applyPlan(
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       log({ call: tool, ...tag, error: message });
-      throw new ApplyStop("write-failed", `${entry}: ${message}`, entry);
+      // Summ's refusal of a delete's action count asks to re-run with its count; apply never sends a count it did not
+      // just read, so the actions changed since that read: run apply again, which reads them afresh
+      const hint = /expectedCount/.test(message)
+        ? " (Summ refused the delete's action count: the actions changed since apply read them, and nothing was deleted. Run apply again, which reads them afresh; never delete by hand.)"
+        : "";
+      throw new ApplyStop("write-failed", `${entry}: ${message}${hint}`, entry);
     }
   };
 
