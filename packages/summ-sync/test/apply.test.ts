@@ -375,9 +375,24 @@ test("a delete looks its legs up by _id and deletes only the actions that hold n
   const { result, log } = await run(summ, planFile({ delete: [del()] }), { approveDeletes: true });
   assert.equal(result.deleted, 1);
   const call = summ.calls.find((c) => c.name === "bulk_edit_transactions");
-  assert.deepEqual(call?.args, { actionIds: ["d"], operation: { type: "delete" } });
+  assert.deepEqual(call?.args, { actionIds: ["d"], operation: { type: "delete" }, expectedCount: 1 });
   assert.deepEqual([...summ.actions.keys()], ["unrelated"]);
   assert.equal(log[0].operation, "delete");
+});
+
+test("Summ refusing a delete's action count stops the run with nothing deleted; the next run deletes", async () => {
+  const summ = new FakeSumm();
+  summ.add("d", [{ _id: "leg-9", trade: "withdrawal", quantity: "1" }]);
+  summ.deleteCountShift = 1;
+  const { log } = await stops(summ, planFile({ delete: [del()] }), /expectedCount: 2.*Run apply again/s, {
+    approveDeletes: true,
+  });
+  assert.deepEqual([...summ.actions.keys()], ["d"]);
+  assert.equal(log.at(-1)?.operation, "delete");
+  assert.match(String(log.at(-1)?.error), /expectedCount/);
+  const again = await run(summ, planFile({ delete: [del()] }), { approveDeletes: true });
+  assert.equal(again.result.deleted, 1);
+  assert.deepEqual([...summ.actions.keys()], []);
 });
 
 test("a dry run saves no pre-image", async () => {

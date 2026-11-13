@@ -400,7 +400,13 @@ export async function applyPlan(
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       log({ call: tool, ...tag, error: message });
-      throw new ApplyStop("write-failed", `${entry}: ${message}`, entry);
+      // Summ's refusal of a delete's action count asks to re-run with its count; apply never sends a count it did not
+      // just read, so the actions most likely changed since that read
+      const hint =
+        "expectedCount" in args && /expectedCount/.test(message)
+          ? " (Summ refused the delete's action count, so nothing was deleted: the actions probably changed since apply read them. Run apply again, which reads them afresh; if it is refused again, pull and plan. Never delete by hand.)"
+          : "";
+      throw new ApplyStop("write-failed", `${entry}: ${message}${hint}`, entry);
     }
   };
 
@@ -727,8 +733,9 @@ export async function applyPlan(
 
   async function remove(key: string, entry: DeleteEntry, actions: Map<string, Found>) {
     if (!write) return;
-    // By the actions just inspected, which hold only the entry's legs: never by a filter
-    const args = { actionIds: [...actions.keys()], operation: { type: "delete" } };
+    // By the actions just inspected, which hold only the entry's legs: never by a filter. Summ refuses a delete over
+    // MCP unless it is told how many actions the selection matches: the ones just inspected.
+    const args = { actionIds: [...actions.keys()], operation: { type: "delete" }, expectedCount: actions.size };
     const tag = {
       operation: "delete",
       entry: key,
