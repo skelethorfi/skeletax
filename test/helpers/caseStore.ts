@@ -143,7 +143,9 @@ function recordsOf(input: GoldenCaseInput): Map<string, any> {
   }
 
   if (input.tcyClaim) {
-    add("tcy-claim", `${action.in[0].address}.${action.height}`, input.tcyClaim);
+    const { synths, ...claim } = input.tcyClaim;
+    add("tcy-claim", `${action.in[0].address}.${action.height}`, claim);
+    add("tcy-claim-synths", `${action.in[0].address}.${action.height}`, synths);
   }
 
   const start = bucketStart(getActionDate(action));
@@ -220,6 +222,8 @@ class CaseRecords {
         return { pool, ...bucket, assetPriceUSD: "" };
       case "tcy-claim":
         return { claims: [], savers: [], loans: [] };
+      case "tcy-claim-synths":
+        return [];
       default:
         throw new Error(`No stand-in for ${source} ${key}`);
     }

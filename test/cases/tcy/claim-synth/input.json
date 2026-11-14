@@ -1,0 +1,213 @@
+{
+  "description": "tcy_claim success: [] -> [THOR.TCY]",
+  "source": "midgard",
+  "wallet": "thor1a427q3v96psuj4fnughdw8glt5r7j38lj7rkp8",
+  "data": {
+    "date": "1746546250915776536",
+    "height": "21007457",
+    "in": [
+      {
+        "address": "thor1a427q3v96psuj4fnughdw8glt5r7j38lj7rkp8",
+        "coins": [],
+        "txID": "181E3E1299A518F3569689F2C6C1F8DA7062505BD5C582E7D383E28D9EE787FE"
+      }
+    ],
+    "metadata": {
+      "tcy": {
+        "memo": "tcy:thor1a427q3v96psuj4fnughdw8glt5r7j38lj7rkp8"
+      }
+    },
+    "out": [
+      {
+        "address": "thor1a427q3v96psuj4fnughdw8glt5r7j38lj7rkp8",
+        "coins": [
+          {
+            "amount": "248087407",
+            "asset": "THOR.TCY"
+          }
+        ],
+        "txID": "181E3E1299A518F3569689F2C6C1F8DA7062505BD5C582E7D383E28D9EE787FE"
+      }
+    ],
+    "pools": [],
+    "status": "success",
+    "type": "tcy_claim"
+  },
+  "usdPrices": {
+    "ETH.VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D": "0.27643816512462294",
+    "THOR.RUNE": "1.2071158644546014",
+    "THOR.TCY": "0.25599210688372726"
+  },
+  "tcyClaim": {
+    "claims": [
+      {
+        "asset": "ETH.TGT-0X108A850856DB3F85D0269A2693D896B394C80325",
+        "amount": "454502397"
+      },
+      {
+        "asset": "BCH.BCH",
+        "amount": "148242065"
+      },
+      {
+        "asset": "ETH.USDP-0X8E870D67F660D95D5BE530380D0EC0BD388289E1",
+        "amount": "52627375"
+      },
+      {
+        "asset": "ETH.YFI-0X0BC529C00C6401AEF6D220BE8C6EA1667F6AD93E",
+        "amount": "26435473"
+      },
+      {
+        "asset": "DOGE.DOGE",
+        "amount": "693406047"
+      },
+      {
+        "asset": "ETH.USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",
+        "amount": "363877277"
+      },
+      {
+        "asset": "ETH.FLIP-0X826180541412D574CF1336D22C0C0A287822678A",
+        "amount": "114865193"
+      },
+      {
+        "asset": "ETH.SNX-0XC011A73EE8576FB46F5E1C5751CA3B9FE0AF2A6F",
+        "amount": "213490692"
+      },
+      {
+        "asset": "ETH.XRUNE-0X69FA0FEE221AD11012BAB0FDB45D444D3D2CE71C",
+        "amount": "261373147"
+      },
+      {
+        "asset": "ETH.ETH",
+        "amount": "145388365"
+      },
+      {
+        "asset": "ETH.GUSD-0X056FD409E1D7A124BD7017459DFEA2F387B6D5CD",
+        "amount": "197413569"
+      },
+      {
+        "asset": "ETH.FOX-0XC770EEFAD204B5180DF6A14EE197D99D808EE52D",
+        "amount": "7514610"
+      },
+      {
+        "asset": "ETH.VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D",
+        "amount": "248087407"
+      },
+      {
+        "asset": "AVAX.AVAX",
+        "amount": "375497133"
+      },
+      {
+        "asset": "ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7",
+        "amount": "22441606"
+      },
+      {
+        "asset": "BSC.BNB",
+        "amount": "312577495"
+      },
+      {
+        "asset": "ETH.WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599",
+        "amount": "423294884"
+      }
+    ],
+    "savers": [],
+    "loans": [],
+    "synths": [
+      {
+        "asset": "AVAX/AVAX",
+        "amount": "10778900"
+      },
+      {
+        "asset": "BCH/BCH",
+        "amount": "345777"
+      },
+      {
+        "asset": "BNB/AVA-645",
+        "amount": "1421579539"
+      },
+      {
+        "asset": "BNB/BNB",
+        "amount": "2672780"
+      },
+      {
+        "asset": "BNB/BTCB-1DE",
+        "amount": "11930"
+      },
+      {
+        "asset": "BNB/BUSD-BD1",
+        "amount": "1243099429"
+      },
+      {
+        "asset": "BNB/ETH-1C9",
+        "amount": "471110"
+      },
+      {
+        "asset": "BNB/TWT-8C2",
+        "amount": "147304534"
+      },
+      {
+        "asset": "BSC/BNB",
+        "amount": "455927"
+      },
+      {
+        "asset": "DOGE/DOGE",
+        "amount": "1996811244"
+      },
+      {
+        "asset": "ETH/ETH",
+        "amount": "44000"
+      },
+      {
+        "asset": "ETH/FLIP-0X826180541412D574CF1336D22C0C0A287822678A",
+        "amount": "170401130"
+      },
+      {
+        "asset": "ETH/FOX-0XC770EEFAD204B5180DF6A14EE197D99D808EE52D",
+        "amount": "164334521"
+      },
+      {
+        "asset": "ETH/GUSD-0X056FD409E1D7A124BD7017459DFEA2F387B6D5CD",
+        "amount": "199997700"
+      },
+      {
+        "asset": "ETH/SNX-0XC011A73EE8576FB46F5E1C5751CA3B9FE0AF2A6F",
+        "amount": "137864859"
+      },
+      {
+        "asset": "ETH/TGT-0X108A850856DB3F85D0269A2693D896B394C80325",
+        "amount": "40324474826"
+      },
+      {
+        "asset": "ETH/UOS-0XD13C7342E1EF687C5AD21B27C2B65D772CAB5C8C",
+        "amount": "631777710"
+      },
+      {
+        "asset": "ETH/USDC-0XA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48",
+        "amount": "363718137"
+      },
+      {
+        "asset": "ETH/USDP-0X8E870D67F660D95D5BE530380D0EC0BD388289E1",
+        "amount": "52669044"
+      },
+      {
+        "asset": "ETH/USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7",
+        "amount": "22443248"
+      },
+      {
+        "asset": "ETH/VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D",
+        "amount": "1108589249"
+      },
+      {
+        "asset": "ETH/WBTC-0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599",
+        "amount": "4101"
+      },
+      {
+        "asset": "ETH/XRUNE-0X69FA0FEE221AD11012BAB0FDB45D444D3D2CE71C",
+        "amount": "57468519386"
+      },
+      {
+        "asset": "ETH/YFI-0X0BC529C00C6401AEF6D220BE8C6EA1667F6AD93E",
+        "amount": "4404"
+      }
+    ]
+  }
+}

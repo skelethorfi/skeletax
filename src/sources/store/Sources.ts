@@ -231,6 +231,9 @@ export interface ListSource {
 // no savers or loan event followed the collapse. It has no date of its own: it is filed by the claim's.
 export const TCY_CLAIM_RULES: RecordRules<TcyClaimData> = {};
 
+// A THORChain address's synth balances in the block before its TCY claim: final once fetched
+export const TCY_CLAIM_SYNTHS_RULES: RecordRules<{ asset: string; amount: string }[]> = {};
+
 // Maya's native fee at a height (docs/specs/maya.md, Fees): final once fetched, since a past height's setting
 // does not change. It has no date of its own: it is filed by the action's.
 export const MAYANODE_FEE_RULES: RecordRules<NativeFee> = {};
@@ -260,5 +263,6 @@ export const SOURCES: { [source: string]: ListSource | { kind: "record"; rules: 
   "evm-receipt": { kind: "record", rules: EVM_RECEIPT_RULES },
   "evm-payout": { kind: "record", rules: EVM_PAYOUT_RULES },
   "tcy-claim": { kind: "record", rules: TCY_CLAIM_RULES },
+  "tcy-claim-synths": { kind: "record", rules: TCY_CLAIM_SYNTHS_RULES },
   "mayanode-fee": { kind: "record", rules: MAYANODE_FEE_RULES },
 };

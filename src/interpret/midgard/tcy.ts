@@ -31,8 +31,9 @@ const leg = (
 
 // A TCY claim: TCY paid, staked, to a THORChain wallet for an address that held a claim. The native fee applies only
 // when the claim was sent from that same wallet; otherwise it was paid on another chain. What the claim was for
-// comes from the claim list and the claiming address's positions (docs/specs/thorfi-collapse.md): a savers position is
-// given up for the TCY, so it is the position leg out; anything else is the TCY alone.
+// comes from the claim list and the claiming address's positions (docs/specs/thorfi-collapse.md): a savers position, or
+// a synth the address held (frozen with ThorFi), is given up for the TCY, so it is a leg out; anything else is the TCY
+// alone.
 export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Interpretation {
   const action = bundle.data as Action;
   const input = action.in[0];
@@ -41,20 +42,21 @@ export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Interp
   const tcy = oneCoin(output, "TCY claim");
   const issues: Issue[] = [];
   const kind = claimKind(bundle, tcy.amount, issues);
+  const givenUp = (asset: Leg["asset"], amount: string): Leg => ({
+    direction: "out",
+    wallet: input.address,
+    asset,
+    amount: parseAmount(amount, DECIMALS),
+    role: "principal",
+    basis: "observed",
+    txid,
+  });
   const position: Leg[] =
     kind.for === "savers"
-      ? [
-          {
-            direction: "out",
-            wallet: input.address,
-            asset: toPositionAsset(kind.asset.replace(".", "/")),
-            amount: parseAmount(kind.units, DECIMALS),
-            role: "principal",
-            basis: "observed",
-            txid,
-          },
-        ]
-      : [];
+      ? [givenUp(toPositionAsset(kind.asset.replace(".", "/")), kind.units)]
+      : kind.for === "synth"
+        ? [givenUp(toAsset(kind.synth), kind.amount)]
+        : [];
 
   return {
     activities: [
@@ -65,19 +67,41 @@ export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Interp
         [
           ...position,
           leg("in", output.address, tcy, txid),
-          ...(input.address === output.address ? [{ ...nativeGas(output.address, protocol), txid }] : []),
+          ...(input.address === output.address && paysTheFee(bundle, tcy.amount)
+            ? [{ ...nativeGas(output.address, protocol), txid }]
+            : []),
         ],
-        { claimedFor: input.address, ...(kind.for === "savers" ? { claimFor: "savers", asset: kind.asset } : {}) },
+        {
+          claimedFor: input.address,
+          ...(kind.for === "savers" || kind.for === "synth" ? { claimFor: kind.for, asset: kind.asset } : {}),
+        },
       ),
     ],
     issues,
   };
 }
 
-type ClaimKind = { for: "savers"; asset: string; units: string } | { for: "other" };
+// A claim tx pays every entry of the address at once, one action each, but the wallet paid the native fee once: on the
+// entry whose asset sorts first. Without the claim list's entries, every action carries it, as before.
+function paysTheFee(bundle: RawBundle, amount: string): boolean {
+  const claims = bundle.tcyClaim?.claims ?? [];
+  const entry = claims.find((claim) => claim.amount === amount);
+
+  if (claims.length < 2 || !entry) {
+    return true;
+  }
+
+  return claims.every((claim) => claim.asset >= entry.asset);
+}
+
+type ClaimKind =
+  | { for: "savers"; asset: string; units: string }
+  | { for: "synth"; asset: string; synth: string; amount: string }
+  | { for: "other" };
 
 // The entry a claim action paid is the one with its amount; a savers position in that asset makes it a savers
-// claim, an open loan with that asset as collateral a loan claim, and both share the entry
+// claim, an open loan with that asset as collateral a loan claim, and both share the entry. With neither, a synth of
+// that asset the claiming THORChain address held in the block before makes it a synth claim: the whole holding.
 function claimKind(bundle: RawBundle, amount: string, issues: Issue[]): ClaimKind {
   const data = bundle.tcyClaim;
 
@@ -119,7 +143,13 @@ function claimKind(bundle: RawBundle, amount: string, issues: Issue[]): ClaimKin
     return { for: "other" };
   }
 
-  return hasSavers ? { for: "savers", asset: entry.asset, units } : { for: "other" };
+  if (hasSavers) {
+    return { for: "savers", asset: entry.asset, units };
+  }
+
+  const synthAsset = entry.asset.replace(".", "/");
+  const synth = data.synths?.find((held) => same(held.asset, synthAsset) && BigInt(held.amount) > 0n);
+  return synth ? { for: "synth", asset: entry.asset, synth: synth.asset, amount: synth.amount } : { for: "other" };
 }
 
 // Staking TCY sends it from the wallet; unstaking returns it. Both pay the native fee.

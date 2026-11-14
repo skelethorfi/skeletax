@@ -1,0 +1,41 @@
+id: midgard/tcy_claim.181E3E1299A518F3569689F2C6C1F8DA7062505BD5C582E7D383E28D9EE787FE
+protocol: thorchain
+kind: tcy.claim
+status: success
+time: 2025-05-06T15:44:10.915Z
+legs:
+  - direction: out
+    wallet: thor1a427q3v96psuj4fnughdw8glt5r7j38lj7rkp8
+    asset:
+      notation: ETH/VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D
+      kind: synth
+    role: principal
+    basis: observed
+    txid: 181E3E1299A518F3569689F2C6C1F8DA7062505BD5C582E7D383E28D9EE787FE
+    amount: "11.08589249"
+    decimals: 8
+  - direction: in
+    wallet: thor1a427q3v96psuj4fnughdw8glt5r7j38lj7rkp8
+    asset:
+      notation: THOR.TCY
+      kind: native
+    role: principal
+    basis: observed
+    txid: 181E3E1299A518F3569689F2C6C1F8DA7062505BD5C582E7D383E28D9EE787FE
+    amount: "2.48087407"
+    decimals: 8
+prices:
+  - asset:
+      notation: ETH/VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D
+      kind: synth
+    usd: "0.27643816512462294"
+    source: midgard:history.depths
+  - asset:
+      notation: THOR.TCY
+      kind: native
+    usd: "0.25599210688372726"
+    source: midgard:history.depths
+details:
+  claimedFor: thor1a427q3v96psuj4fnughdw8glt5r7j38lj7rkp8
+  claimFor: synth
+  asset: ETH.VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D
