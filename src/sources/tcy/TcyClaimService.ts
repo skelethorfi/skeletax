@@ -66,7 +66,8 @@ export class TcyClaimService {
       (await this.midgard(`/v2/balance/${address}?height=${height - 1}`))?.coins ?? [];
     return {
       data: coins
-        .filter((coin) => coin.asset.includes("/") && BigInt(coin.amount) > 0n)
+        // A synth is '<chain>/<asset>'; 'x/…' is a Cosmos denom (e.g. x/ruji), not a synth
+        .filter((coin) => coin.asset.includes("/") && !/^x\//i.test(coin.asset) && BigInt(coin.amount) > 0n)
         .map((coin) => ({ asset: coin.asset.toUpperCase(), amount: String(coin.amount) })),
       url: `${API_URLS.midgard}/v2/balance/${address}?height=${height - 1}`,
     };

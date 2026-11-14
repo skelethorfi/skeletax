@@ -7,7 +7,8 @@ import { toAsset, toPositionAsset } from "../../domain/Asset.ts";
 import { getActionDate, oneCoin, onlyCoin } from "../../sources/thorchain/MidgardUtils.ts";
 import { getDistributionDate, type TcyDistributionItem } from "../../sources/tcy/TcyDistributionService.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
-import { getBundleKey, type RawBundle } from "../../sources/RawBundle.ts";
+import { getBundleKey, getBundleSourceName, type RawBundle } from "../../sources/RawBundle.ts";
+import { midgardActionBaseKey } from "../../sources/store/Sources.ts";
 import { nativeGas } from "./bond.ts";
 
 // TCY amounts are reported with 8 decimals
@@ -41,6 +42,7 @@ export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Interp
   const txid = output.txID ?? "";
   const tcy = oneCoin(output, "TCY claim");
   const issues: Issue[] = [];
+  const first = isFirstEntry(bundle, tcy.amount);
   const kind = claimKind(bundle, tcy.amount, issues);
   const givenUp = (asset: Leg["asset"], amount: string): Leg => ({
     direction: "out",
@@ -58,40 +60,41 @@ export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Interp
         ? [givenUp(toAsset(kind.synth), kind.amount)]
         : [];
 
-  return {
-    activities: [
-      activity(
-        bundle,
-        protocol,
-        "tcy.claim",
-        [
-          ...position,
-          leg("in", output.address, tcy, txid),
-          ...(input.address === output.address && paysTheFee(bundle, tcy.amount)
-            ? [{ ...nativeGas(output.address, protocol), txid }]
-            : []),
-        ],
-        {
-          claimedFor: input.address,
-          ...(kind.for === "savers" || kind.for === "synth" ? { claimFor: kind.for, asset: kind.asset } : {}),
-        },
-      ),
+  const claim = activity(
+    bundle,
+    protocol,
+    "tcy.claim",
+    [
+      ...position,
+      leg("in", output.address, tcy, txid),
+      ...(input.address === output.address && first ? [{ ...nativeGas(output.address, protocol), txid }] : []),
     ],
+    {
+      claimedFor: input.address,
+      ...(kind.for === "savers" || kind.for === "synth" ? { claimFor: kind.for, asset: kind.asset } : {}),
+    },
+  );
+
+  return {
+    // The first entry is named by the key without its amount, as every claim was before entries had keys of their
+    // own (claimAmount): the row IDs of single-entry claims stay the same
+    activities: [first ? { ...claim, id: `${getBundleSourceName(bundle)}/${midgardActionBaseKey(action)}` } : claim],
     issues,
   };
 }
 
 // A claim tx pays every entry of the address at once, one action each, but the wallet paid the native fee once: on the
-// entry whose asset sorts first. Without the claim list's entries, every action carries it, as before.
-function paysTheFee(bundle: RawBundle, amount: string): boolean {
-  const claims = bundle.tcyClaim?.claims ?? [];
-  const entry = claims.find((claim) => claim.amount === amount);
+// entry whose asset sorts first (an entry of amount 0 pays nothing and has no action). Without the claim list's
+// entries, every action is the first, as before.
+function isFirstEntry(bundle: RawBundle, amount: string): boolean {
+  const claims = (bundle.tcyClaim?.claims ?? []).filter((claim) => BigInt(claim.amount) > 0n);
 
-  if (claims.length < 2 || !entry) {
+  if (claims.length < 2 || !claims.some((claim) => claim.amount === amount)) {
     return true;
   }
 
-  return claims.every((claim) => claim.asset >= entry.asset);
+  const firstAsset = claims.map((claim) => claim.asset).sort()[0];
+  return claims.some((claim) => claim.asset === firstAsset && claim.amount === amount);
 }
 
 type ClaimKind =
@@ -109,7 +112,17 @@ function claimKind(bundle: RawBundle, amount: string, issues: Issue[]): ClaimKin
     return { for: "other" };
   }
 
-  const entry = data.claims.find((claim) => claim.amount === amount);
+  const entries = data.claims.filter((claim) => claim.amount === amount);
+
+  if (entries.length > 1) {
+    issues.push({
+      kind: "warning",
+      message: `TCY claim of ${amount}: ${entries.length} claim-list entries of the address have that amount (${entries.map((claim) => claim.asset).join(", ")}), so which one it paid is not known; exported as a receive`,
+    });
+    return { for: "other" };
+  }
+
+  const entry = entries[0];
 
   if (!entry) {
     issues.push({

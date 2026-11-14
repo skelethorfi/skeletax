@@ -20,7 +20,14 @@ import type { NativeFee } from "../maya/MayanodeService.ts";
 // (also by pool), and Maya's donate adds. A FIN trade also adds a hash of the attributes that tell its fill apart:
 // one call can fill at several price levels, each a trade event of the same tx.
 export function midgardActionKey(action: Action): string {
-  return [midgardActionBaseKey(action), fillHash(action)].filter(Boolean).join(".");
+  return [midgardActionBaseKey(action), fillHash(action), claimAmount(action)].filter(Boolean).join(".");
+}
+
+// A TCY claim tx pays every claim-list entry of the address, one action each with the same txid
+// (docs/specs/thorfi-collapse.md): the TCY amount tells them apart. Their activities keep the key without it for
+// the entry that pays the fee, so the row IDs of single-entry claims exported before stay the same.
+export function claimAmount(action: Action): string | undefined {
+  return (action.type as string) === "tcy_claim" ? action.out[0]?.coins?.[0]?.amount : undefined;
 }
 
 // The key without a FIN trade's fill hash: what a FIN swap's activity, and so its row IDs, are named by. Only the

@@ -574,9 +574,17 @@ export class RecordStore {
     origin: Origin,
   ): Map<string, Stored<T>> {
     const stored = new Map<string, Stored<T>>();
+    const seen = new Map<string, string>();
 
     for (const item of items) {
       const key = keyOf(item);
+
+      // Midgard can list two actions nothing tells apart (a TCY claim tx paying two equal dust entries): one record
+      if (seen.get(key) === JSON.stringify(item)) {
+        continue;
+      }
+
+      seen.set(key, JSON.stringify(item));
 
       if (stored.has(key)) {
         throw new Error(`${source} ${wallet}: two records with the key ${key}`);

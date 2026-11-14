@@ -106,6 +106,10 @@ at that time:
   received, at `THOR.TCY`'s pool price, divided by the units given up.
 - RUNEPool and Rujira merge positions follow the same rule (RUNE, or the coin
   merged).
+- **A synth given up in a TCY claim** (`thorfi-collapse.md`, Synths) follows it
+  too: the TCY received, at its pool price, divided by the synth units. The
+  synth was frozen, so its pool's price no longer says what it was worth; the
+  TCY paid for it is the proceeds.
 
 If any of those assets has no price, or the action is not `success`, the
 token row has none. The price

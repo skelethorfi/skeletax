@@ -63,8 +63,10 @@ asset (`eth.vthor` for synth `ETH/VTHOR`), paid to the THORChain address that
 held it. The synth stays in the wallet after the claim, worth nothing, until a
 later THORNode upgrade burns it (v3.20.0's ADR-028 writedown burned the whole
 synth supply of some pools); that burn gives no row, since the holding was
-given up at the claim. The claim covers the whole holding: in public claims the
-TCY paid per synth unit is the same ratio for every holder of a pool's synth.
+given up at the claim. The claim covers the whole holding: in the public vTHOR
+claims checked (five holders), the TCY paid per synth unit is the same ratio.
+The synth given up is valued at that TCY (`prices.md`), not at its pool's
+price.
 
 Why a claim is a disposal and not income: the TCY is what the protocol gave
 for a position it could no longer pay out. The position (or the collateral)
@@ -103,10 +105,22 @@ address's entry can also combine synths it held with a synth savers position
 in the same asset; the sources do not show that split, and such a claim is
 exported as a savers claim.)
 
-**The fee.** A claim sent from the THORChain wallet itself paid the native fee
-once for the tx, which pays every entry of the address, one action each. The
-fee goes on the action whose entry's asset sorts first; without the claim
-list's entries, on every action.
+**Several entries in one tx.** The actions of one claim tx share a txid, so
+each is stored under a key with its TCY amount (`tcy_claim.<txid>.<amount>`).
+Two actions nothing tells apart (equal dust entries) are stored once, so the
+export holds that amount once. An action is matched to its entry by amount;
+when two entries of the address have its amount, which one it paid is not
+known, and it is a `Receive` with a warning. A claim sent from the THORChain
+wallet itself paid the native fee once for the tx: the fee goes on the action
+whose entry's asset sorts first (entries of amount 0 pay nothing and have no
+action). That action keeps the key without its amount for its row IDs, so a
+single-entry claim's rows keep the IDs they had; without the claim list's
+entries every action is treated as that one, as before.
+
+**Not handled.** A synth savers position and a held synth of one asset share
+one entry; the claim is exported as a savers claim and the held synth stays.
+Synths with no entry of their own, synths sent away before the claim, and
+synths received after it stay held in the export.
 
 The exporter stores this per claim (`tcy-claim`, and a THORChain address's
 synths as `tcy-claim-synths`, `snapshots.md`), so an

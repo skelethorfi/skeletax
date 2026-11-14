@@ -60,7 +60,8 @@ export function tcyClaimRows(activity: Activity, protocol: Protocol): SummRow[] 
 
   if (activity.details.claimFor === "synth") {
     const synth = named(position, protocol);
-    const trade = `Give up ${synth.amount} Synth ${synth.displayCurrency} for ${amount} TCY (TCY claim, ThorFi collapse)`;
+    const by = claimedFor && claimedFor !== tcy.wallet ? ` of address ${claimedFor}` : "";
+    const trade = `Give up ${synth.amount} Synth ${synth.displayCurrency}${by} for ${amount} TCY (TCY claim, ThorFi collapse)`;
     return [
       {
         wallet: position.wallet,

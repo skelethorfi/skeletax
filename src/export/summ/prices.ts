@@ -8,7 +8,8 @@ export const REFERENCE_PRICES = ["swaps", "all"] as const;
 export type ReferencePrices = (typeof REFERENCE_PRICES)[number];
 
 // The row with the USD price of its leg's asset at the activity's time, when it has none yet. A price helper never
-// gets one: it is there for Summ's own value. A position is valued by what went in or came out.
+// gets one: it is there for Summ's own value. A position is valued by what went in or came out, and so is what a TCY
+// claim gave up (a synth, frozen with ThorFi, is worth the TCY paid for it, not its pool's price).
 export function withReferencePrice(row: SummRow, activity: Activity): SummRow {
   if (row.referencePricePerUnit || !row.trace || row.trace.role === "price-helper") {
     return row;
@@ -17,7 +18,7 @@ export function withReferencePrice(row: SummRow, activity: Activity): SummRow {
   const item = legOf(activity, row.trace.role, row.trace.asset);
   const usd = !item
     ? undefined
-    : item.asset.kind === "position"
+    : item.asset.kind === "position" || (activity.kind === "tcy.claim" && item.direction === "out")
       ? positionPrice(activity, item)
       : priceOf(activity, item);
   return usd ? { ...row, referencePricePerUnit: usd, referencePriceCurrency: "USD" } : row;
