@@ -121,7 +121,10 @@ entries an action that matches none of them is not.
 **Not handled.** A synth savers position and a held synth of one asset share
 one entry; the claim is exported as a savers claim and the held synth stays.
 Synths with no entry of their own, synths sent away before the claim, and
-synths received after it stay held in the export.
+synths received after it stay held in the export. The holding given up is the
+one in the block before the claim, not at the claim list's snapshot: a synth
+received between the two is given up too (at the TCY's value; with no cost
+base when the export never saw it arrive).
 
 The exporter stores this per claim (`tcy-claim`, and a THORChain address's
 synths as `tcy-claim-synths`, `snapshots.md`), so an

@@ -77,9 +77,11 @@ lists/midgard/<wallet>.0.json                      the record keys one fetch of 
 An action or tx is shared: a swap between two wallets is stored once, and
 both wallets' lists point at it. A TCY distribution belongs to one wallet, so
 its key includes the wallet. One txid can have more than one action (e.g. a
-send and a swap); type and txid tell them apart, and only
-contract actions need their event. If two records of one wallet fetch ever
-share a key, the run stops rather than merge them.
+send and a swap); type and txid tell them apart, contract actions need their
+event, and a TCY claim tx's actions their TCY amount. If two records of one
+wallet fetch ever share a key, the run stops rather than merge them; the one
+exception is TCY claim actions identical in every field (equal claim-list
+entries), stored once (`thorfi-collapse.md`).
 
 Type and txid are unique within one wallet's actions, but not across wallets:
 one tx can give each of many members an action (Maya made LP positions for
