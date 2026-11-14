@@ -107,15 +107,16 @@ exported as a savers claim.)
 
 **Several entries in one tx.** The actions of one claim tx share a txid, so
 each is stored under a key with its TCY amount (`tcy_claim.<txid>.<amount>`).
-Two actions nothing tells apart (equal dust entries) are stored once, so the
-export holds that amount once. An action is matched to its entry by amount;
-when two entries of the address have its amount, which one it paid is not
-known, and it is a `Receive` with a warning. A claim sent from the THORChain
+Entries of equal amount give actions nothing tells apart (an action has no
+asset): they are stored once, and that action receives the TCY of all of them,
+as a `Receive` with a warning, since which asset each was for is not known. An
+action is otherwise matched to its entry by amount. A claim sent from the THORChain
 wallet itself paid the native fee once for the tx: the fee goes on the action
 whose entry's asset sorts first (entries of amount 0 pay nothing and have no
 action). That action keeps the key without its amount for its row IDs, so a
 single-entry claim's rows keep the IDs they had; without the claim list's
-entries every action is treated as that one, as before.
+entries every action is treated as that one, as before, and with several
+entries an action that matches none of them is not.
 
 **Not handled.** A synth savers position and a held synth of one asset share
 one entry; the claim is exported as a savers claim and the held synth stays.
@@ -132,5 +133,4 @@ replay of a run made before it existed gets nothing, and the claim is a
 
 `tcy/claim` (a claim for something other than savers or a loan: `Receive`
 and `StakingDeposit`), `tcy/claim-savers` (a DOGE savers position given up
-for TCY) and `tcy/claim-synth` (synth vTHOR given up for TCY, one of 17
-entries the tx paid, so without the fee).
+for TCY) and `tcy/claim-synth` (synth vTHOR given up for TCY, valued at the TCY).

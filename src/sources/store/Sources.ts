@@ -177,7 +177,12 @@ export function withoutCurrentValues<T>(value: T): T {
   return value;
 }
 
-export const MIDGARD_LIST: ListOptions<Action> = { keyOf: midgardActionKey, rules: MIDGARD_RULES };
+// A TCY claim tx paying two equal entries lists two actions nothing tells apart (docs/specs/thorfi-collapse.md)
+export const MIDGARD_LIST: ListOptions<Action> = {
+  keyOf: midgardActionKey,
+  rules: MIDGARD_RULES,
+  sameTwice: (action) => (action.type as string) === "tcy_claim",
+};
 
 // Only the txs before 2022-04 are used, and those do not change: a complete stored list is fetched again only by
 // --refetch-all (docs/specs/sends.md)

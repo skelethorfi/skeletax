@@ -44,6 +44,8 @@ export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Interp
   const issues: Issue[] = [];
   const first = isFirstEntry(bundle, tcy.amount);
   const kind = claimKind(bundle, tcy.amount, issues);
+  const received =
+    kind.for === "other" && kind.times ? { ...tcy, amount: String(BigInt(tcy.amount) * BigInt(kind.times)) } : tcy;
   const givenUp = (asset: Leg["asset"], amount: string): Leg => ({
     direction: "out",
     wallet: input.address,
@@ -66,7 +68,7 @@ export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Interp
     "tcy.claim",
     [
       ...position,
-      leg("in", output.address, tcy, txid),
+      leg("in", output.address, received, txid),
       ...(input.address === output.address && first ? [{ ...nativeGas(output.address, protocol), txid }] : []),
     ],
     {
@@ -85,11 +87,11 @@ export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Interp
 
 // A claim tx pays every entry of the address at once, one action each, but the wallet paid the native fee once: on the
 // entry whose asset sorts first (an entry of amount 0 pays nothing and has no action). Without the claim list's
-// entries, every action is the first, as before.
+// entries, or with one, every action is the first, as before; with several, an action that matches none is not.
 function isFirstEntry(bundle: RawBundle, amount: string): boolean {
   const claims = (bundle.tcyClaim?.claims ?? []).filter((claim) => BigInt(claim.amount) > 0n);
 
-  if (claims.length < 2 || !claims.some((claim) => claim.amount === amount)) {
+  if (claims.length < 2) {
     return true;
   }
 
@@ -100,7 +102,8 @@ function isFirstEntry(bundle: RawBundle, amount: string): boolean {
 type ClaimKind =
   | { for: "savers"; asset: string; units: string }
   | { for: "synth"; asset: string; synth: string; amount: string }
-  | { for: "other" };
+  // times: the actions of so many equal entries, kept as one record
+  | { for: "other"; times?: number };
 
 // The entry a claim action paid is the one with its amount; a savers position in that asset makes it a savers
 // claim, an open loan with that asset as collateral a loan claim, and both share the entry. With neither, a synth of
@@ -117,9 +120,9 @@ function claimKind(bundle: RawBundle, amount: string, issues: Issue[]): ClaimKin
   if (entries.length > 1) {
     issues.push({
       kind: "warning",
-      message: `TCY claim of ${amount}: ${entries.length} claim-list entries of the address have that amount (${entries.map((claim) => claim.asset).join(", ")}), so which one it paid is not known; exported as a receive`,
+      message: `TCY claim of ${amount}: ${entries.length} claim-list entries of the address have that amount (${entries.map((claim) => claim.asset).join(", ")}). Their actions are alike and kept as one, which receives the TCY of all ${entries.length}; which asset each was for is not known, so it is a receive`,
     });
-    return { for: "other" };
+    return { for: "other", times: entries.length };
   }
 
   const entry = entries[0];

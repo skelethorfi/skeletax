@@ -1,41 +1,56 @@
-id: midgard/tcy_claim.181E3E1299A518F3569689F2C6C1F8DA7062505BD5C582E7D383E28D9EE787FE.248087407
+id: midgard/tcy_claim.93900891EC939A8BB83009B062A5D08C6F5141D98C87DDAE5CF3F8D2C0F75725
 protocol: thorchain
 kind: tcy.claim
 status: success
-time: 2025-05-06T15:44:10.915Z
+time: 2025-05-08T06:03:47.277Z
 legs:
   - direction: out
-    wallet: thor1a427q3v96psuj4fnughdw8glt5r7j38lj7rkp8
+    wallet: thor1sahcuggqken05u25yfad73aycqu2w05457jm9p
     asset:
       notation: ETH/VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D
       kind: synth
     role: principal
     basis: observed
-    txid: 181E3E1299A518F3569689F2C6C1F8DA7062505BD5C582E7D383E28D9EE787FE
-    amount: "11.08589249"
+    txid: 93900891EC939A8BB83009B062A5D08C6F5141D98C87DDAE5CF3F8D2C0F75725
+    amount: "151.21614613"
     decimals: 8
   - direction: in
-    wallet: thor1a427q3v96psuj4fnughdw8glt5r7j38lj7rkp8
+    wallet: thor1sahcuggqken05u25yfad73aycqu2w05457jm9p
     asset:
       notation: THOR.TCY
       kind: native
     role: principal
     basis: observed
-    txid: 181E3E1299A518F3569689F2C6C1F8DA7062505BD5C582E7D383E28D9EE787FE
-    amount: "2.48087407"
+    txid: 93900891EC939A8BB83009B062A5D08C6F5141D98C87DDAE5CF3F8D2C0F75725
+    amount: "33.84014717"
+    decimals: 8
+  - direction: out
+    wallet: thor1sahcuggqken05u25yfad73aycqu2w05457jm9p
+    asset:
+      notation: THOR.RUNE
+      kind: native
+    role: gas
+    basis: default
+    txid: 93900891EC939A8BB83009B062A5D08C6F5141D98C87DDAE5CF3F8D2C0F75725
+    amount: "0.02"
     decimals: 8
 prices:
   - asset:
       notation: ETH/VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D
       kind: synth
-    usd: "0.27643816512462294"
+    usd: "0.30803445912657285"
     source: midgard:history.depths
   - asset:
       notation: THOR.TCY
       kind: native
-    usd: "0.25599210688372726"
+    usd: "0.26758470761322967"
     source: midgard:history.depths
+  - asset:
+      notation: THOR.RUNE
+      kind: native
+    usd: "1.2998494602104655"
+    source: midgard:history.rune
 details:
-  claimedFor: thor1a427q3v96psuj4fnughdw8glt5r7j38lj7rkp8
+  claimedFor: thor1sahcuggqken05u25yfad73aycqu2w05457jm9p
   claimFor: synth
   asset: ETH.VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D
