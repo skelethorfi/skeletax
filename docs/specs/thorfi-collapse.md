@@ -125,8 +125,10 @@ matches none of them is not.
 **The claim tx and its fee.** The claim is one tx: a deposit with the memo
 `tcy:<thor address>`, from the address that holds the claim, which pays every
 entry of that address. Sent from a THORChain wallet, it paid the native fee
-once: a `Fee` row of its own (the fee of the tx, not of any entry), and no fee
-on the claim's rows. Sent from an L1 address, it is a send on that chain, whose
+once: a `Fee` row of its own (the fee of the tx, not of any entry, valued at
+RUNE's price), and no fee on the claim's rows. Coins sent with such a deposit go
+to the Reserve (THORNode's deposit handler); the claim does not use them, and
+the exporter warns, since no row has them. Sent from an L1 address, it is a send on that chain, whose
 gas (and the coins it carried, which the claim does not use) are that chain's:
 no row here, as for the L1 side of any claim; Midgard lists no coins for it.
 An L1 address can hold several entries too: an EVM address is one address on

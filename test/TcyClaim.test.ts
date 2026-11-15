@@ -4,7 +4,7 @@ import { interpret } from "../src/interpret/registry.ts";
 import type { RawBundle } from "../src/sources/RawBundle.ts";
 import type { TcyClaimData } from "../src/sources/tcy/TcyClaimService.ts";
 import { THORCHAIN } from "../src/domain/Protocol.ts";
-import { readCaseInput, toBundle } from "../src/fixtures/GoldenCase.ts";
+import { readCaseInput, runCaseLayers, toBundle } from "../src/fixtures/GoldenCase.ts";
 import { TcyClaimService } from "../src/sources/tcy/TcyClaimService.ts";
 import { RecordStore } from "../src/sources/store/RecordStore.ts";
 import { MIDGARD_LIST, midgardActionBaseKey, midgardActionKey } from "../src/sources/store/Sources.ts";
@@ -222,5 +222,30 @@ describe("the actions of one claim tx (docs/specs/thorfi-collapse.md)", () => {
       store.list("midgard", "w", async () => ({ data: [send, send], url: "" }), MIDGARD_LIST),
       /two records with the key/,
     );
+  });
+});
+
+describe("the claim tx's fee row (docs/specs/thorfi-collapse.md, The claim tx and its fee)", () => {
+  const input = readCaseInput("test/cases/tcy/claim-synth");
+  const rune = input.usdPrices?.["THOR.RUNE"];
+  const rows = (tcyClaim: TcyClaimData) => runCaseLayers({ ...input, tcyClaim }).rows as Record<string, string>[];
+
+  test("a receive claim from the THORChain wallet: the fee row first, at RUNE's price, and no fee on the claim's rows", () => {
+    const out = rows({ claims: [vthor], savers: [], loans: [], synths: [] });
+    assert.deepEqual(
+      out.map((row) => row.type),
+      ["fee", "receive", "staking-deposit"],
+    );
+    assert.deepEqual([out[0].baseCurrency, out[0].baseAmount, out[0].referencePricePerUnit], ["RUNE", "0.02", rune]);
+    assert.equal(
+      out.slice(1).some((row) => row.feeAmount),
+      false,
+    );
+  });
+
+  test("a synth claim: the synth valued at the TCY, the fee at RUNE", () => {
+    const out = rows({ claims: [vthor], savers: [], loans: [], synths: [heldVthor] });
+    assert.equal(out[0].referencePricePerUnit, rune);
+    assert.notEqual(out.find((row) => row.type === "bridge-trade-out")?.referencePricePerUnit, rune);
   });
 });

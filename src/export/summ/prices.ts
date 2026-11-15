@@ -18,7 +18,8 @@ export function withReferencePrice(row: SummRow, activity: Activity): SummRow {
   const item = legOf(activity, row.trace.role, row.trace.asset);
   const usd = !item
     ? undefined
-    : item.asset.kind === "position" || (activity.kind === "tcy.claim" && item.direction === "out")
+    : item.asset.kind === "position" ||
+        (activity.kind === "tcy.claim" && item.direction === "out" && item.role === "principal")
       ? positionPrice(activity, item)
       : priceOf(activity, item);
   return usd ? { ...row, referencePricePerUnit: usd, referencePriceCurrency: "USD" } : row;

@@ -43,6 +43,13 @@ export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Interp
   const tcy = oneCoin(output, "TCY claim");
   const issues: Issue[] = [];
   const first = isFirstEntry(bundle, tcy.amount);
+  // THORNode sends the coins of a claim deposit to the Reserve: the claim does not use them
+  if (input.coins.length > 0 && input.address.toLowerCase().startsWith(protocol.nativeAddressPrefix)) {
+    issues.push({
+      kind: "warning",
+      message: `TCY claim deposit carried ${input.coins.map((coin) => `${coin.amount} ${coin.asset}`).join(", ")}, which THORNode sends to the Reserve; no row has it: enter it by hand`,
+    });
+  }
   const kind = claimKind(bundle, tcy.amount, issues);
   const received =
     kind.for === "other" && kind.times ? { ...tcy, amount: String(BigInt(tcy.amount) * BigInt(kind.times)) } : tcy;

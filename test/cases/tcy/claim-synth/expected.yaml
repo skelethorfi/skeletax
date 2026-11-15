@@ -7,7 +7,7 @@ from: thor1sahcuggqken05u25yfad73aycqu2w05457jm9p
 to: thorchain
 blockchain: THORChain
 description: "Fee: TCY claim tx (it pays every claim-list entry of address thor1sahcuggqken05u25yfad73aycqu2w05457jm9p); 93900891EC939A8BB83009B062A5D08C6F5141D98C87DDAE5CF3F8D2C0F75725"
-referencePricePerUnit: "452.755294303656"
+referencePricePerUnit: "1.2998494602104655"
 referencePriceCurrency: USD
 id: 2025-05-08T06:03:47.277Z.gas.5b4b44f7d278
 ---
