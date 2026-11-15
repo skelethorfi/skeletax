@@ -1,32 +1,32 @@
 {
   "description": "tcy_claim success: [] -> [THOR.TCY]",
   "source": "midgard",
-  "wallet": "thor1sahcuggqken05u25yfad73aycqu2w05457jm9p",
+  "wallet": "thor1nxvxgfdhlv4ea40pnw7s7t3pel4r4fr8vftmue",
   "data": {
-    "date": "1746684227277629730",
-    "height": "21024691",
+    "date": "1746641698931293777",
+    "height": "21019259",
     "in": [
       {
-        "address": "thor1sahcuggqken05u25yfad73aycqu2w05457jm9p",
+        "address": "thor1nxvxgfdhlv4ea40pnw7s7t3pel4r4fr8vftmue",
         "coins": [],
-        "txID": "93900891EC939A8BB83009B062A5D08C6F5141D98C87DDAE5CF3F8D2C0F75725"
+        "txID": "D9F29AB526FB6EA54B03CBCAE07AA56C1CD03856019775C5DFCACCC69C015C6E"
       }
     ],
     "metadata": {
       "tcy": {
-        "memo": "tcy:thor1sahcuggqken05u25yfad73aycqu2w05457jm9p"
+        "memo": "tcy:thor1nxvxgfdhlv4ea40pnw7s7t3pel4r4fr8vftmue"
       }
     },
     "out": [
       {
-        "address": "thor1sahcuggqken05u25yfad73aycqu2w05457jm9p",
+        "address": "thor1nxvxgfdhlv4ea40pnw7s7t3pel4r4fr8vftmue",
         "coins": [
           {
-            "amount": "3384014717",
+            "amount": "6358541635",
             "asset": "THOR.TCY"
           }
         ],
-        "txID": "93900891EC939A8BB83009B062A5D08C6F5141D98C87DDAE5CF3F8D2C0F75725"
+        "txID": "D9F29AB526FB6EA54B03CBCAE07AA56C1CD03856019775C5DFCACCC69C015C6E"
       }
     ],
     "pools": [],
@@ -34,23 +34,23 @@
     "type": "tcy_claim"
   },
   "usdPrices": {
-    "ETH.VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D": "0.30803445912657285",
-    "THOR.RUNE": "1.2998494602104655",
-    "THOR.TCY": "0.26758470761322967"
+    "BTC.BTC": "96234.00949075272",
+    "THOR.RUNE": "1.2298846989745618",
+    "THOR.TCY": "0.26363423340352143"
   },
   "tcyClaim": {
     "claims": [
       {
-        "asset": "ETH.VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D",
-        "amount": "3384014717"
+        "asset": "BTC.BTC",
+        "amount": "6358541635"
       }
     ],
     "savers": [],
     "loans": [],
     "synths": [
       {
-        "asset": "ETH/VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D",
-        "amount": "15121614613"
+        "asset": "BTC/BTC",
+        "amount": "61629"
       }
     ]
   }

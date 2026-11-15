@@ -101,8 +101,8 @@ function synthClaimWith(tcyClaim: TcyClaimData | undefined): RawBundle {
   return tcyClaim ? { ...bundle, tcyClaim } : bundle;
 }
 
-const vthor = { asset: "ETH.VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D", amount: "3384014717" };
-const heldVthor = { asset: "ETH/VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D", amount: "15121614613" };
+const btc = { asset: "BTC.BTC", amount: "6358541635" };
+const heldBtc = { asset: "BTC/BTC", amount: "61629" };
 const avax = { asset: "AVAX.AVAX", amount: "26435473" };
 
 describe("TCY claim for a synth the address held (docs/specs/thorfi-collapse.md, Synths)", () => {
@@ -111,56 +111,53 @@ describe("TCY claim for a synth the address held (docs/specs/thorfi-collapse.md,
     claim(tcyClaim).activities[0].legs.map((leg) => `${leg.direction} ${leg.role} ${leg.asset.notation}`);
 
   test("the whole holding of the entry's synth is given up for the TCY", () => {
-    assert.deepEqual(legs({ claims: [vthor], savers: [], loans: [], synths: [heldVthor] }), [
-      `out principal ${heldVthor.asset}`,
+    assert.deepEqual(legs({ claims: [btc], savers: [], loans: [], synths: [heldBtc] }), [
+      `out principal ${heldBtc.asset}`,
       "in principal THOR.TCY",
       "out gas THOR.RUNE",
     ]);
   });
 
   test("a synth of another asset, no synth record, or a savers position of the asset: not a synth claim", () => {
-    const other = { asset: "BTC/BTC", amount: "5" };
-    assert.deepEqual(legs({ claims: [vthor], savers: [], loans: [], synths: [other] }), [
+    const other = { asset: "ETH/ETH", amount: "5" };
+    assert.deepEqual(legs({ claims: [btc], savers: [], loans: [], synths: [other] }), [
       "in principal THOR.TCY",
       "out gas THOR.RUNE",
     ]);
-    assert.deepEqual(legs({ claims: [vthor], savers: [], loans: [] }), ["in principal THOR.TCY", "out gas THOR.RUNE"]);
-    const saversOfIt = [{ asset: "ETH.VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D", units: "7" }];
+    assert.deepEqual(legs({ claims: [btc], savers: [], loans: [] }), ["in principal THOR.TCY", "out gas THOR.RUNE"]);
+    const saversOfIt = [{ asset: "BTC.BTC", units: "7" }];
+    assert.equal(legs({ claims: [btc], savers: saversOfIt, loans: [], synths: [heldBtc] })[0], "out principal BTC/BTC");
     assert.equal(
-      legs({ claims: [vthor], savers: saversOfIt, loans: [], synths: [heldVthor] })[0],
-      "out principal ETH/VTHOR-0X815C23ECA83261B6EC689B60CC4A58B54BC24D8D",
-    );
-    assert.equal(
-      claim({ claims: [vthor], savers: saversOfIt, loans: [], synths: [heldVthor] }).activities[0].legs[0].asset.kind,
+      claim({ claims: [btc], savers: saversOfIt, loans: [], synths: [heldBtc] }).activities[0].legs[0].asset.kind,
       "position",
     );
   });
 
   test("of several entries, only the one whose asset sorts first pays the fee and keeps the key without its amount", () => {
-    const entries = { claims: [vthor, avax], savers: [], loans: [], synths: [heldVthor] };
+    const entries = { claims: [btc, avax], savers: [], loans: [], synths: [heldBtc] };
     const { activities } = claim(entries);
     assert.equal(
       activities[0].legs.some((leg) => leg.role === "gas"),
       false,
     );
-    assert.match(activities[0].id, /\.3384014717$/);
-    const firstOnly = claim({ ...entries, claims: [vthor, { ...avax, amount: "0" }] }).activities[0];
+    assert.match(activities[0].id, /\.6358541635$/);
+    const firstOnly = claim({ ...entries, claims: [btc, { ...avax, amount: "0" }] }).activities[0];
     assert.equal(
       firstOnly.legs.some((leg) => leg.role === "gas"),
       true,
     );
-    assert.doesNotMatch(firstOnly.id, /\.3384014717$/);
+    assert.doesNotMatch(firstOnly.id, /\.6358541635$/);
   });
 
   test("two entries of the claim's amount: one action for both, receiving the TCY of both, with a warning", () => {
-    const twin = { asset: "ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7", amount: vthor.amount };
-    const { activities, issues } = claim({ claims: [vthor, twin], savers: [], loans: [], synths: [heldVthor] });
+    const twin = { asset: "ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7", amount: btc.amount };
+    const { activities, issues } = claim({ claims: [btc, twin], savers: [], loans: [], synths: [heldBtc] });
     const principal = activities[0].legs.filter((leg) => leg.role === "principal");
     assert.deepEqual(
       principal.map((leg) => leg.direction),
       ["in"],
     );
-    assert.equal(principal[0].amount.base, 2n * BigInt(vthor.amount));
+    assert.equal(principal[0].amount.base, 2n * BigInt(btc.amount));
     assert.deepEqual(
       issues.map((issue) => issue.kind),
       ["warning"],
@@ -168,12 +165,12 @@ describe("TCY claim for a synth the address held (docs/specs/thorfi-collapse.md,
   });
 
   test("with several entries, an action that matches none is not the first: no fee, its own key", () => {
-    const { activities } = claim({ claims: [{ ...vthor, amount: "1" }, avax], savers: [], loans: [], synths: [] });
+    const { activities } = claim({ claims: [{ ...btc, amount: "1" }, avax], savers: [], loans: [], synths: [] });
     assert.equal(
       activities[0].legs.some((leg) => leg.role === "gas"),
       false,
     );
-    assert.match(activities[0].id, /\.3384014717$/);
+    assert.match(activities[0].id, /\.6358541635$/);
   });
 });
 
@@ -231,7 +228,7 @@ describe("the claim tx's fee row (docs/specs/thorfi-collapse.md, The claim tx an
   const rows = (tcyClaim: TcyClaimData) => runCaseLayers({ ...input, tcyClaim }).rows as Record<string, string>[];
 
   test("a receive claim from the THORChain wallet: the fee row first, at RUNE's price, and no fee on the claim's rows", () => {
-    const out = rows({ claims: [vthor], savers: [], loans: [], synths: [] });
+    const out = rows({ claims: [btc], savers: [], loans: [], synths: [] });
     assert.deepEqual(
       out.map((row) => row.type),
       ["fee", "receive", "staking-deposit"],
@@ -244,10 +241,10 @@ describe("the claim tx's fee row (docs/specs/thorfi-collapse.md, The claim tx an
   });
 
   test("a synth claim: the synth valued at the TCY, the fee at RUNE", () => {
-    const out = rows({ claims: [vthor], savers: [], loans: [], synths: [heldVthor] });
+    const out = rows({ claims: [btc], savers: [], loans: [], synths: [heldBtc] });
     assert.equal(out[0].referencePricePerUnit, rune);
     const tcyPrice = Number(input.usdPrices?.["THOR.TCY"]);
-    const expected = (Number(vthor.amount) * tcyPrice) / Number(heldVthor.amount);
+    const expected = (Number(btc.amount) * tcyPrice) / Number(heldBtc.amount);
     const given = Number(out.find((row) => row.type === "bridge-trade-out")?.referencePricePerUnit);
     assert.ok(Math.abs(given - expected) < expected * 1e-9, `${given} ≈ ${expected}`);
   });

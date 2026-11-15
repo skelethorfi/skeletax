@@ -23,7 +23,7 @@ export interface TcyClaimData {
   // Midgard borrower: a pool per collateral asset (none when the address never borrowed)
   loans: { collateralAsset: string; collateralDeposited: string; collateralWithdrawn: string }[];
   // A THORChain address's synths in the block before the claim (Midgard's balance at that height), synth notation
-  // ('ETH/VTHOR-0X…'); absent for an L1 address, and for a run replayed from before it was kept
+  // ('BTC/BTC', 'ETH/USDC-0X…'); absent for an L1 address, and for a run replayed from before it was kept
   synths?: { asset: string; amount: string }[];
 }
 

@@ -59,15 +59,15 @@ tcy_claim}`, with the amount in TCY (8 decimals). Some address and asset
 | Distributions to staked TCY, stake, unstake | `activity.md`                                                                                                                                                                                                                                                                                                                             | exported                                    |
 
 **Synths.** A synth held in a wallet was frozen too: with `BurnSynths` set it
-could not be swapped back, and the claim list holds an entry for it in its
-asset (`eth.vthor` for synth `ETH/VTHOR`), paid to the THORChain address that
-held it. The synth stays in the wallet after the claim, worth nothing, until a
-later THORNode upgrade burns it (v3.20.0's ADR-028 writedown burned the whole
-synth supply of some pools); that burn gives no row, since the holding was
-given up at the claim. The claim covers the whole holding: in the public vTHOR
-claims checked (five holders), the TCY paid per synth unit is the same ratio.
-The synth given up is valued at that TCY (`prices.md`), not at its pool's
-price.
+could not be swapped back, and the claim list holds an entry for it in its asset
+(`btc.btc` for synth `BTC/BTC`), paid to the THORChain address that held it. The
+synth stays in the wallet after the claim, worth nothing, and a later THORNode
+upgrade may burn it (v3.20.0's ADR-028 writedown burned the whole synth supply
+of some pools); such a burn gives no row, since the holding was given up at the
+claim. The claim covers the whole holding: its TCY is the holding's dollar value
+at the freeze, one TCY per dollar (e.g. 0.00061629 synth BTC for 63.58541635
+TCY; stablecoin synths almost one to one). The synth given up is valued at that
+TCY (`prices.md`), not at its pool's price.
 
 Why a claim is a disposal and not income: the TCY is what the protocol gave
 for a position it could no longer pay out. The position (or the collateral)
@@ -153,6 +153,6 @@ replay of a run made before it existed gets nothing, and the claim is a
 
 `tcy/claim` (a claim for something other than savers or a loan: `Receive`
 and `StakingDeposit`), `tcy/claim-savers` (a DOGE savers position given up
-for TCY), `tcy/claim-synth` (synth vTHOR given up for TCY, valued at the TCY,
+for TCY), `tcy/claim-synth` (synth BTC given up for TCY, valued at the TCY,
 with the claim tx's `Fee` row) and `tcy/claim-several-*` (the four entries of
 one claim tx: synth DAI, ETH, LUSD and TGT; the fee row once, on DAI).
