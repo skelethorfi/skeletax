@@ -246,6 +246,9 @@ describe("the claim tx's fee row (docs/specs/thorfi-collapse.md, The claim tx an
   test("a synth claim: the synth valued at the TCY, the fee at RUNE", () => {
     const out = rows({ claims: [vthor], savers: [], loans: [], synths: [heldVthor] });
     assert.equal(out[0].referencePricePerUnit, rune);
-    assert.notEqual(out.find((row) => row.type === "bridge-trade-out")?.referencePricePerUnit, rune);
+    const tcyPrice = Number(input.usdPrices?.["THOR.TCY"]);
+    const expected = (Number(vthor.amount) * tcyPrice) / Number(heldVthor.amount);
+    const given = Number(out.find((row) => row.type === "bridge-trade-out")?.referencePricePerUnit);
+    assert.ok(Math.abs(given - expected) < expected * 1e-9, `${given} ≈ ${expected}`);
   });
 });
