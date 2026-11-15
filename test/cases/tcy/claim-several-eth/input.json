@@ -1,0 +1,80 @@
+{
+  "description": "tcy_claim success: [] -> [THOR.TCY]",
+  "source": "midgard",
+  "wallet": "thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj",
+  "data": {
+    "date": "1746938556210157191",
+    "height": "21054823",
+    "in": [
+      {
+        "address": "thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj",
+        "coins": [],
+        "txID": "D1BC0D36962B407A868103127006ED7AABBDA38FFE268647D1A2EA3725FFDB2E"
+      }
+    ],
+    "metadata": {
+      "tcy": {
+        "memo": "tcy:thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj"
+      }
+    },
+    "out": [
+      {
+        "address": "thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj",
+        "coins": [
+          {
+            "amount": "7599846368",
+            "asset": "THOR.TCY"
+          }
+        ],
+        "txID": "D1BC0D36962B407A868103127006ED7AABBDA38FFE268647D1A2EA3725FFDB2E"
+      }
+    ],
+    "pools": [],
+    "status": "success",
+    "type": "tcy_claim"
+  },
+  "usdPrices": {
+    "ETH.ETH": "2538.83556694652",
+    "THOR.TCY": "0.28709454017367575"
+  },
+  "tcyClaim": {
+    "claims": [
+      {
+        "asset": "ETH.ETH",
+        "amount": "7599846368"
+      },
+      {
+        "asset": "ETH.DAI-0X6B175474E89094C44DA98B954EEDEAC495271D0F",
+        "amount": "2298880"
+      },
+      {
+        "asset": "ETH.LUSD-0X5F98805A4E8BE255A32880FDEC7F6728C6568BA0",
+        "amount": "2274993"
+      },
+      {
+        "asset": "ETH.TGT-0X108A850856DB3F85D0269A2693D896B394C80325",
+        "amount": "25923"
+      }
+    ],
+    "savers": [],
+    "loans": [],
+    "synths": [
+      {
+        "asset": "ETH/DAI-0X6B175474E89094C44DA98B954EEDEAC495271D0F",
+        "amount": "2300000"
+      },
+      {
+        "asset": "ETH/ETH",
+        "amount": "2300000"
+      },
+      {
+        "asset": "ETH/LUSD-0X5F98805A4E8BE255A32880FDEC7F6728C6568BA0",
+        "amount": "2300000"
+      },
+      {
+        "asset": "ETH/TGT-0X108A850856DB3F85D0269A2693D896B394C80325",
+        "amount": "2300000"
+      }
+    ]
+  }
+}

@@ -17,7 +17,30 @@ function feeIfAny(activity: Activity, protocol: Protocol): Pick<SummRow, "feeCur
 // A claim: the TCY received, then staked, since a claim stakes it (docs/specs/thorfi-collapse.md). A savers claim
 // gives up the position for the TCY: the position returned, a price helper of the TCY for its value, and the TCY
 // received as what the position paid out. A synth claim gives up the synth held for the TCY, as a trade.
+// The claim tx paid the native fee once, whichever entries it paid (docs/specs/thorfi-collapse.md, The claim tx and its fee): its own
+// row, on the action that carries the gas leg, and none on the claim's rows
 export function tcyClaimRows(activity: Activity, protocol: Protocol): SummRow[] {
+  const gas = findLeg(activity, "gas");
+  const fee: SummRow[] = gas
+    ? [
+        {
+          wallet: gas.wallet,
+          timestamp: activity.time,
+          type: SummRowType.Fee,
+          baseCurrency: parseMidgardAsset(gas.asset.notation, protocol).currency,
+          baseAmount: formatAmount(gas.amount),
+          from: gas.wallet,
+          to: protocol.counterparty,
+          blockchain: protocol.blockchain,
+          trace: legTrace(gas),
+          description: `Fee: TCY claim tx (it pays every claim-list entry of address ${activity.details.claimedFor}); ${gas.txid ?? ""}`,
+        },
+      ]
+    : [];
+  return [...fee, ...claimRows(activity, protocol)];
+}
+
+function claimRows(activity: Activity, protocol: Protocol): SummRow[] {
   const tcy = leg(activity, "principal", "in");
   const position = findLeg(activity, "principal", "out");
   const amount = formatAmount(tcy.amount);
@@ -47,7 +70,6 @@ export function tcyClaimRows(activity: Activity, protocol: Protocol): SummRow[] 
         type: SummRowType.Receive,
         baseCurrency: currency,
         baseAmount: amount,
-        ...feeIfAny(activity, protocol),
         from: protocol.counterparty,
         to: tcy.wallet,
         blockchain: protocol.blockchain,
@@ -71,7 +93,6 @@ export function tcyClaimRows(activity: Activity, protocol: Protocol): SummRow[] 
         baseAmount: synth.amount,
         quoteCurrency: currency,
         quoteAmount: amount,
-        ...feeIfAny(activity, protocol),
         from: position.wallet,
         to: protocol.counterparty,
         blockchain: protocol.blockchain,
@@ -106,7 +127,6 @@ export function tcyClaimRows(activity: Activity, protocol: Protocol): SummRow[] 
       type: SummRowType.ReturnLpToken,
       baseCurrency: token,
       baseAmount: formatAmount(position.amount),
-      ...feeIfAny(activity, protocol),
       from: position.wallet,
       to: protocol.counterparty,
       blockchain: protocol.blockchain,

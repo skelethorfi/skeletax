@@ -1,0 +1,53 @@
+wallet: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+timestamp: 2025-05-11T04:42:36.210Z
+type: fee
+baseCurrency: RUNE
+baseAmount: "0.02"
+from: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+to: thorchain
+blockchain: THORChain
+description: "Fee: TCY claim tx (it pays every claim-list entry of address thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj); D1BC0D36962B407A868103127006ED7AABBDA38FFE268647D1A2EA3725FFDB2E"
+referencePricePerUnit: "0.32999794825723"
+referencePriceCurrency: USD
+id: 2025-05-11T04:42:36.210Z.gas.7faee3b18683
+---
+wallet: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+timestamp: 2025-05-11T04:42:36.210Z
+type: bridge-trade-out
+baseCurrency: ThorSynth.ETH.DAI
+baseAmount: "0.023"
+quoteCurrency: TCY
+quoteAmount: "0.0229888"
+from: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+to: thorchain
+blockchain: THORChain
+description: 1/3 - Give up 0.023 Synth ETH/DAI for 0.0229888 TCY (TCY claim, ThorFi collapse); D1BC0D36962B407A868103127006ED7AABBDA38FFE268647D1A2EA3725FFDB2E
+referencePricePerUnit: "0.286954737614983"
+referencePriceCurrency: USD
+id: 2025-05-11T04:42:36.210Z.out.1b528ccaa830
+---
+wallet: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+timestamp: 2025-05-11T04:42:46.210Z
+type: bridge-trade-in
+baseCurrency: TCY
+baseAmount: "0.0229888"
+from: thorchain
+to: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+blockchain: THORChain
+description: 2/3 - Give up 0.023 Synth ETH/DAI for 0.0229888 TCY (TCY claim, ThorFi collapse); D1BC0D36962B407A868103127006ED7AABBDA38FFE268647D1A2EA3725FFDB2E
+referencePricePerUnit: "0.28709454017367575"
+referencePriceCurrency: USD
+id: 2025-05-11T04:42:36.210Z.in.1a1c930d77e5
+---
+wallet: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+timestamp: 2025-05-11T04:42:56.210Z
+type: staking-deposit
+baseCurrency: TCY
+baseAmount: "0.0229888"
+from: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+to: thorchain
+blockchain: THORChain
+description: 3/3 - Stake 0.0229888 TCY claimed (a claim stakes it); D1BC0D36962B407A868103127006ED7AABBDA38FFE268647D1A2EA3725FFDB2E
+referencePricePerUnit: "0.28709454017367575"
+referencePriceCurrency: USD
+id: 2025-05-11T04:42:36.210Z.stake.8b0e9147794b

@@ -1,0 +1,56 @@
+id: midgard/tcy_claim.D1BC0D36962B407A868103127006ED7AABBDA38FFE268647D1A2EA3725FFDB2E
+protocol: thorchain
+kind: tcy.claim
+status: success
+time: 2025-05-11T04:42:36.210Z
+legs:
+  - direction: out
+    wallet: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+    asset:
+      notation: ETH/DAI-0X6B175474E89094C44DA98B954EEDEAC495271D0F
+      kind: synth
+    role: principal
+    basis: observed
+    txid: D1BC0D36962B407A868103127006ED7AABBDA38FFE268647D1A2EA3725FFDB2E
+    amount: "0.023"
+    decimals: 8
+  - direction: in
+    wallet: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+    asset:
+      notation: THOR.TCY
+      kind: native
+    role: principal
+    basis: observed
+    txid: D1BC0D36962B407A868103127006ED7AABBDA38FFE268647D1A2EA3725FFDB2E
+    amount: "0.0229888"
+    decimals: 8
+  - direction: out
+    wallet: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+    asset:
+      notation: THOR.RUNE
+      kind: native
+    role: gas
+    basis: default
+    txid: D1BC0D36962B407A868103127006ED7AABBDA38FFE268647D1A2EA3725FFDB2E
+    amount: "0.02"
+    decimals: 8
+prices:
+  - asset:
+      notation: ETH/DAI-0X6B175474E89094C44DA98B954EEDEAC495271D0F
+      kind: synth
+    usd: "1.0011342803477912"
+    source: midgard:history.depths
+  - asset:
+      notation: THOR.TCY
+      kind: native
+    usd: "0.28709454017367575"
+    source: midgard:history.depths
+  - asset:
+      notation: THOR.RUNE
+      kind: native
+    usd: "1.7203009864071501"
+    source: midgard:history.rune
+details:
+  claimedFor: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+  claimFor: synth
+  asset: ETH.DAI-0X6B175474E89094C44DA98B954EEDEAC495271D0F

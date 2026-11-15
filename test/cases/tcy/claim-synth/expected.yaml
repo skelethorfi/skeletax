@@ -1,12 +1,23 @@
 wallet: thor1sahcuggqken05u25yfad73aycqu2w05457jm9p
 timestamp: 2025-05-08T06:03:47.277Z
+type: fee
+baseCurrency: RUNE
+baseAmount: "0.02"
+from: thor1sahcuggqken05u25yfad73aycqu2w05457jm9p
+to: thorchain
+blockchain: THORChain
+description: "Fee: TCY claim tx (it pays every claim-list entry of address thor1sahcuggqken05u25yfad73aycqu2w05457jm9p); 93900891EC939A8BB83009B062A5D08C6F5141D98C87DDAE5CF3F8D2C0F75725"
+referencePricePerUnit: "452.755294303656"
+referencePriceCurrency: USD
+id: 2025-05-08T06:03:47.277Z.gas.5b4b44f7d278
+---
+wallet: thor1sahcuggqken05u25yfad73aycqu2w05457jm9p
+timestamp: 2025-05-08T06:03:47.277Z
 type: bridge-trade-out
 baseCurrency: ThorSynth.ETH.VTHOR
 baseAmount: "151.21614613"
 quoteCurrency: TCY
 quoteAmount: "33.84014717"
-feeCurrency: RUNE
-feeAmount: "0.02"
 from: thor1sahcuggqken05u25yfad73aycqu2w05457jm9p
 to: thorchain
 blockchain: THORChain
