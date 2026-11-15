@@ -20,7 +20,14 @@ import type { NativeFee } from "../maya/MayanodeService.ts";
 // (also by pool), and Maya's donate adds. A FIN trade also adds a hash of the attributes that tell its fill apart:
 // one call can fill at several price levels, each a trade event of the same tx.
 export function midgardActionKey(action: Action): string {
-  return [midgardActionBaseKey(action), fillHash(action)].filter(Boolean).join(".");
+  return [midgardActionBaseKey(action), fillHash(action), claimAmount(action)].filter(Boolean).join(".");
+}
+
+// A TCY claim tx pays every claim-list entry of the address, one action each with the same txid
+// (docs/specs/thorfi-collapse.md): the TCY amount tells them apart. Their activities keep the key without it for
+// the entry that pays the fee, so the row IDs of single-entry claims exported before stay the same.
+export function claimAmount(action: Action): string | undefined {
+  return (action.type as string) === "tcy_claim" ? action.out[0]?.coins?.[0]?.amount : undefined;
 }
 
 // The key without a FIN trade's fill hash: what a FIN swap's activity, and so its row IDs, are named by. Only the
@@ -170,7 +177,12 @@ export function withoutCurrentValues<T>(value: T): T {
   return value;
 }
 
-export const MIDGARD_LIST: ListOptions<Action> = { keyOf: midgardActionKey, rules: MIDGARD_RULES };
+// A TCY claim tx paying two equal entries lists two actions nothing tells apart (docs/specs/thorfi-collapse.md)
+export const MIDGARD_LIST: ListOptions<Action> = {
+  keyOf: midgardActionKey,
+  rules: MIDGARD_RULES,
+  sameTwice: (action) => (action.type as string) === "tcy_claim",
+};
 
 // Only the txs before 2022-04 are used, and those do not change: a complete stored list is fetched again only by
 // --refetch-all (docs/specs/sends.md)
@@ -231,6 +243,9 @@ export interface ListSource {
 // no savers or loan event followed the collapse. It has no date of its own: it is filed by the claim's.
 export const TCY_CLAIM_RULES: RecordRules<TcyClaimData> = {};
 
+// A THORChain address's synth balances in the block before its TCY claim: final once fetched
+export const TCY_CLAIM_SYNTHS_RULES: RecordRules<{ asset: string; amount: string }[]> = {};
+
 // Maya's native fee at a height (docs/specs/maya.md, Fees): final once fetched, since a past height's setting
 // does not change. It has no date of its own: it is filed by the action's.
 export const MAYANODE_FEE_RULES: RecordRules<NativeFee> = {};
@@ -260,5 +275,6 @@ export const SOURCES: { [source: string]: ListSource | { kind: "record"; rules: 
   "evm-receipt": { kind: "record", rules: EVM_RECEIPT_RULES },
   "evm-payout": { kind: "record", rules: EVM_PAYOUT_RULES },
   "tcy-claim": { kind: "record", rules: TCY_CLAIM_RULES },
+  "tcy-claim-synths": { kind: "record", rules: TCY_CLAIM_SYNTHS_RULES },
   "mayanode-fee": { kind: "record", rules: MAYANODE_FEE_RULES },
 };

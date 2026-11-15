@@ -78,7 +78,8 @@ Each row's `ID` column says what the row is, never its amounts or wording:
 <role>|<asset>`: the action's store record key (source, type, txid, and
   the contract event or members where they tell actions apart,
   `snapshots.md`; a FIN swap's without its fill hash, `rujira.md`, FIN
-  fills), the row's wallet, the role, and the leg's asset as the source
+  fills; a TCY claim's first entry without its amount,
+  `thorfi-collapse.md`), the row's wallet, the role, and the leg's asset as the source
   names it (`BTC.BTC`, whatever the CSV calls it). Twelve hex digits
   only have to tell apart the rows that share a time and role.
 

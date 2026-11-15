@@ -3,7 +3,7 @@ import { formatAmount } from "../../domain/Amount.ts";
 import { type SummRow, SummRowType } from "./csv/index.ts";
 import { parseMidgardAsset } from "../../sources/thorchain/MidgardUtils.ts";
 import type { Protocol } from "../../domain/Protocol.ts";
-import { findLeg, leg, legTrace, plusSeconds } from "./common.ts";
+import { findLeg, leg, legTrace, named, plusSeconds } from "./common.ts";
 import { getLpTokenName } from "./ThorchainUtils.ts";
 
 // The fee columns from the gas leg, or no fee columns at all when there is none (as these rows always had)
@@ -16,8 +16,31 @@ function feeIfAny(activity: Activity, protocol: Protocol): Pick<SummRow, "feeCur
 
 // A claim: the TCY received, then staked, since a claim stakes it (docs/specs/thorfi-collapse.md). A savers claim
 // gives up the position for the TCY: the position returned, a price helper of the TCY for its value, and the TCY
-// received as what the position paid out.
+// received as what the position paid out. A synth claim gives up the synth held for the TCY, as a trade.
+// The claim tx paid the native fee once, whichever entries it paid (docs/specs/thorfi-collapse.md, The claim tx and its fee): its own
+// row, on the action that carries the gas leg, and none on the claim's rows
 export function tcyClaimRows(activity: Activity, protocol: Protocol): SummRow[] {
+  const gas = findLeg(activity, "gas");
+  const fee: SummRow[] = gas
+    ? [
+        {
+          wallet: gas.wallet,
+          timestamp: activity.time,
+          type: SummRowType.Fee,
+          baseCurrency: parseMidgardAsset(gas.asset.notation, protocol).currency,
+          baseAmount: formatAmount(gas.amount),
+          from: gas.wallet,
+          to: protocol.counterparty,
+          blockchain: protocol.blockchain,
+          trace: legTrace(gas),
+          description: `Fee: TCY claim tx (it pays every claim-list entry of address ${activity.details.claimedFor}); ${gas.txid ?? ""}`,
+        },
+      ]
+    : [];
+  return [...fee, ...claimRows(activity, protocol)];
+}
+
+function claimRows(activity: Activity, protocol: Protocol): SummRow[] {
   const tcy = leg(activity, "principal", "in");
   const position = findLeg(activity, "principal", "out");
   const amount = formatAmount(tcy.amount);
@@ -47,7 +70,6 @@ export function tcyClaimRows(activity: Activity, protocol: Protocol): SummRow[] 
         type: SummRowType.Receive,
         baseCurrency: currency,
         baseAmount: amount,
-        ...feeIfAny(activity, protocol),
         from: protocol.counterparty,
         to: tcy.wallet,
         blockchain: protocol.blockchain,
@@ -55,6 +77,45 @@ export function tcyClaimRows(activity: Activity, protocol: Protocol): SummRow[] 
         description: `1/2 - Claim ${amount} TCY for address ${claimedFor}; ${txid}`,
       },
       staked,
+    ];
+  }
+
+  if (activity.details.claimFor === "synth") {
+    const synth = named(position, protocol);
+    const by = claimedFor && claimedFor !== tcy.wallet ? ` of address ${claimedFor}` : "";
+    const trade = `Give up ${synth.amount} Synth ${synth.displayCurrency}${by} for ${amount} TCY (TCY claim, ThorFi collapse)`;
+    return [
+      {
+        wallet: position.wallet,
+        timestamp: time,
+        type: SummRowType.BridgeTradeOut,
+        baseCurrency: synth.currency,
+        baseAmount: synth.amount,
+        quoteCurrency: currency,
+        quoteAmount: amount,
+        from: position.wallet,
+        to: protocol.counterparty,
+        blockchain: protocol.blockchain,
+        trace: legTrace(position),
+        description: `1/3 - ${trade}; ${txid}`,
+      },
+      {
+        wallet: tcy.wallet,
+        timestamp: plusSeconds(time, 10),
+        type: SummRowType.BridgeTradeIn,
+        baseCurrency: currency,
+        baseAmount: amount,
+        from: protocol.counterparty,
+        to: tcy.wallet,
+        blockchain: protocol.blockchain,
+        trace: legTrace(tcy),
+        description: `2/3 - ${trade}; ${txid}`,
+      },
+      {
+        ...staked,
+        timestamp: plusSeconds(time, 20),
+        description: `3/3 - Stake ${amount} TCY claimed (a claim stakes it); ${txid}`,
+      },
     ];
   }
 
@@ -66,7 +127,6 @@ export function tcyClaimRows(activity: Activity, protocol: Protocol): SummRow[] 
       type: SummRowType.ReturnLpToken,
       baseCurrency: token,
       baseAmount: formatAmount(position.amount),
-      ...feeIfAny(activity, protocol),
       from: position.wallet,
       to: protocol.counterparty,
       blockchain: protocol.blockchain,

@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { API_URLS } from "../../config/apiUrls.ts";
 import { http } from "../http.ts";
 import { RecordStore } from "../store/RecordStore.ts";
-import { TCY_CLAIM_RULES } from "../store/Sources.ts";
+import { TCY_CLAIM_RULES, TCY_CLAIM_SYNTHS_RULES } from "../store/Sources.ts";
 
 // THORNode's claim list, as embedded since TCY was added (thornode c979858d8; unchanged since), and its SHA-256:
 // a fixed list of {asset, address, tcy_claim}. THORNode serves no past heights through the public gateway, and
@@ -22,6 +22,9 @@ export interface TcyClaimData {
   savers: { asset: string; units: string }[];
   // Midgard borrower: a pool per collateral asset (none when the address never borrowed)
   loans: { collateralAsset: string; collateralDeposited: string; collateralWithdrawn: string }[];
+  // A THORChain address's synths in the block before the claim (Midgard's balance at that height), synth notation
+  // ('BTC/BTC', 'ETH/USDC-0X…'); absent for an L1 address, and for a run replayed from before it was kept
+  synths?: { asset: string; amount: string }[];
 }
 
 export class TcyClaimService {
@@ -38,13 +41,36 @@ export class TcyClaimService {
       return undefined;
     }
 
-    return this.store.record(
-      "tcy-claim",
-      `${address}.${height}`,
-      () => this.fetchClaim(address),
-      TCY_CLAIM_RULES,
+    const key = `${address}.${height}`;
+    const claim = await this.store.record("tcy-claim", key, () => this.fetchClaim(address), TCY_CLAIM_RULES, date);
+
+    // Synths a THORChain address held are frozen with ThorFi and can be what a claim was for: kept as their own
+    // record, so claims stored before it get it too
+    if (!address.toLowerCase().startsWith("thor1") || this.store.addedSinceReplay("tcy-claim-synths")) {
+      return claim;
+    }
+
+    const synths = await this.store.record(
+      "tcy-claim-synths",
+      key,
+      () => this.fetchSynths(address, height),
+      TCY_CLAIM_SYNTHS_RULES,
       date,
     );
+    return { ...claim, synths };
+  }
+
+  // The address's synth balances in the block before the claim
+  private async fetchSynths(address: string, height: number) {
+    const coins: { asset: string; amount: string }[] =
+      (await this.midgard(`/v2/balance/${address}?height=${height - 1}`))?.coins ?? [];
+    return {
+      data: coins
+        // A synth is '<chain>/<asset>'; 'x/…' is a Cosmos denom (e.g. x/ruji), not a synth
+        .filter((coin) => coin.asset.includes("/") && !/^x\//i.test(coin.asset) && BigInt(coin.amount) > 0n)
+        .map((coin) => ({ asset: coin.asset.toUpperCase(), amount: String(coin.amount) })),
+      url: `${API_URLS.midgard}/v2/balance/${address}?height=${height - 1}`,
+    };
   }
 
   private async fetchClaim(address: string) {

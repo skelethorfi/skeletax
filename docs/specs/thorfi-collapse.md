@@ -52,9 +52,22 @@ tcy_claim}`, with the amount in TCY (8 decimals). Some address and asset
 | Freeze of a position (January 2025)         | none: nothing moved, and the position is still held                                                                                                                                                                                                                                                                                       | –                                           |
 | TCY claim for a savers position             | a disposal of the position for the TCY, at the claim tx: `ReturnLpToken` of the position's units (`ThorSavers.<chain>.<asset>`, in the wallet that holds it), the `Spam` price helper of the TCY (its value for the token, as for any withdrawal, `liquidity.md`), and `RemoveLiquidity` of the TCY in the THORChain wallet (`savers.md`) | exported                                    |
 | TCY claim for a loan's collateral           | the end of the loan: collateral never returned, debt never repaid, TCY for the net of the two (`loans.md`)                                                                                                                                                                                                                                | planned (today a `Receive`, with a warning) |
-| TCY claim for anything else (e.g. a synth)  | `Receive` of the TCY                                                                                                                                                                                                                                                                                                                      | exported                                    |
+| TCY claim for a synth the address held      | a trade of the synth for the TCY, at the claim tx: `BridgeTradeOut` of the whole holding (`ThorSynth.<chain>.<asset>`, quote the TCY) and `BridgeTradeIn` of the TCY, in the THORChain wallet                                                                                                                                             | exported                                    |
+| TCY claim for anything else                 | `Receive` of the TCY                                                                                                                                                                                                                                                                                                                      | exported                                    |
+| The claim tx's fee, sent from THORChain     | a `Fee` row of the native fee, once per claim tx, whatever entries it paid                                                                                                                                                                                                                                                                | exported                                    |
 | The TCY staked at the claim                 | `StakingDeposit` of the TCY, in the THORChain wallet, after every claim's rows, so a later unstake (`StakingWithdrawal`) returns TCY that was deposited                                                                                                                                                                                   | exported                                    |
 | Distributions to staked TCY, stake, unstake | `activity.md`                                                                                                                                                                                                                                                                                                                             | exported                                    |
+
+**Synths.** A synth held in a wallet was frozen too: with `BurnSynths` set it
+could not be swapped back, and the claim list holds an entry for it in its asset
+(`btc.btc` for synth `BTC/BTC`), paid to the THORChain address that held it. The
+synth stays in the wallet after the claim, worth nothing, and a later THORNode
+upgrade may burn it (v3.20.0's ADR-028 writedown burned the whole synth supply
+of some pools); such a burn gives no row, since the holding was given up at the
+claim. The claim covers the whole holding: its TCY is the holding's dollar value
+at the freeze, one TCY per dollar (e.g. 0.00061629 synth BTC for 63.58541635
+TCY; stablecoin synths almost one to one). The synth given up is valued at that
+TCY (`prices.md`), not at its pool's price.
 
 Why a claim is a disposal and not income: the TCY is what the protocol gave
 for a position it could no longer pay out. The position (or the collateral)
@@ -85,12 +98,53 @@ with that asset as collateral, not withdrawn (Midgard's
 `/v2/borrower/<address>`, `loans.md`), makes it a loan claim. No savers or
 loan event followed the collapse, so both are the positions at the claim.
 Both at once share one entry: the claim is exported as a `Receive` with a
-warning, since the source does not say how much was for each. (A THORChain
+warning, since the source does not say how much was for each. With neither,
+a synth of the entry's asset that the claiming THORChain address held in the
+block before the claim (Midgard's `/v2/balance/<address>?height=`, which lists
+synths) makes it a synth claim, for the whole holding. (A THORChain
 address's entry can also combine synths it held with a synth savers position
 in the same asset; the sources do not show that split, and such a claim is
 exported as a savers claim.)
 
-The exporter stores this per claim (`tcy-claim`, `snapshots.md`), so an
+**Several entries in one tx.** The actions of one claim tx share a txid, so
+each is stored under a key with its TCY amount (`tcy_claim.<txid>.<amount>`).
+Entries of equal amount give actions nothing tells apart (an action has no
+asset): they are stored once, and that action receives the TCY of all of them,
+as a `Receive` with a warning, since which asset each was for is not known. An
+action is otherwise matched to its entry by amount. On chain each entry is its
+own payment: THORNode moves that entry's TCY from the claiming module to the
+staking module and emits a `tcy_claim` event with its asset and amount, so each
+entry's rows carry the TCY the chain paid for it, and nothing is apportioned
+here. The action whose entry's asset sorts first (entries of amount 0 pay
+nothing and have no action) stands for the claim tx: it keeps the key without
+its amount for its row IDs, so a single-entry claim's rows keep the IDs they
+had, and it carries the tx's fee. Without the claim list's entries every action
+is treated as that one, as before, and with several entries an action that
+matches none of them is not.
+
+**The claim tx and its fee.** The claim is one tx: a deposit with the memo
+`tcy:<thor address>`, from the address that holds the claim, which pays every
+entry of that address. Sent from a THORChain wallet, it paid the native fee
+once: a `Fee` row of its own (the fee of the tx, not of any entry, valued at
+RUNE's price), and no fee on the claim's rows. Coins sent with such a deposit go to the Reserve (THORNode's deposit handler)
+and the claim does not use them; Midgard's action lists no coins for it, so the
+export does not see them (a claim interface sends none). Sent from an L1 address, it is a send on that chain, whose
+gas (and the coins it carried, which the claim does not use) are that chain's:
+no row here, as for the L1 side of any claim; Midgard lists no coins for it.
+An L1 address can hold several entries too: an EVM address is one address on
+ETH, AVAX and BSC, and savers vaults held tokens (e.g. `ETH.USDC`) beside gas
+assets.
+
+**Not handled.** A synth savers position and a held synth of one asset share
+one entry; the claim is exported as a savers claim and the held synth stays.
+Synths with no entry of their own, synths sent away before the claim, and
+synths received after it stay held in the export. The holding given up is the
+one in the block before the claim, not at the claim list's snapshot: a synth
+received between the two is given up too (at the TCY's value; with no cost
+base when the export never saw it arrive).
+
+The exporter stores this per claim (`tcy-claim`, and a THORChain address's
+synths as `tcy-claim-synths`, `snapshots.md`), so an
 `--offline` run over a period with a claim needs one run online first; a
 replay of a run made before it existed gets nothing, and the claim is a
 `Receive`.
@@ -98,5 +152,7 @@ replay of a run made before it existed gets nothing, and the claim is a
 ## Golden cases
 
 `tcy/claim` (a claim for something other than savers or a loan: `Receive`
-and `StakingDeposit`) and `tcy/claim-savers` (a DOGE savers position given up
-for TCY).
+and `StakingDeposit`), `tcy/claim-savers` (a DOGE savers position given up
+for TCY), `tcy/claim-synth` (synth BTC given up for TCY, valued at the TCY,
+with the claim tx's `Fee` row) and `tcy/claim-several-*` (the four entries of
+one claim tx: synth DAI, ETH, LUSD and TGT; the fee row once, on DAI).

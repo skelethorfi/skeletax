@@ -1,0 +1,40 @@
+wallet: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+timestamp: 2025-05-11T04:42:36.210Z
+type: bridge-trade-out
+baseCurrency: ThorSynth.ETH.TGT
+baseAmount: "0.023"
+quoteCurrency: TCY
+quoteAmount: "0.00025923"
+from: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+to: thorchain
+blockchain: THORChain
+description: 1/3 - Give up 0.023 Synth ETH/TGT for 0.00025923 TCY (TCY claim, ThorFi collapse); D1BC0D36962B407A868103127006ED7AABBDA38FFE268647D1A2EA3725FFDB2E
+referencePricePerUnit: "0.00323580511518356"
+referencePriceCurrency: USD
+id: 2025-05-11T04:42:36.210Z.out.d3d8e1653059
+---
+wallet: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+timestamp: 2025-05-11T04:42:46.210Z
+type: bridge-trade-in
+baseCurrency: TCY
+baseAmount: "0.00025923"
+from: thorchain
+to: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+blockchain: THORChain
+description: 2/3 - Give up 0.023 Synth ETH/TGT for 0.00025923 TCY (TCY claim, ThorFi collapse); D1BC0D36962B407A868103127006ED7AABBDA38FFE268647D1A2EA3725FFDB2E
+referencePricePerUnit: "0.28709454017367575"
+referencePriceCurrency: USD
+id: 2025-05-11T04:42:36.210Z.in.ae843afaaad7
+---
+wallet: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+timestamp: 2025-05-11T04:42:56.210Z
+type: staking-deposit
+baseCurrency: TCY
+baseAmount: "0.00025923"
+from: thor1wcfpmxtykqsv5nzvnexu0zp8aclgnh7czzs3vj
+to: thorchain
+blockchain: THORChain
+description: 3/3 - Stake 0.00025923 TCY claimed (a claim stakes it); D1BC0D36962B407A868103127006ED7AABBDA38FFE268647D1A2EA3725FFDB2E
+referencePricePerUnit: "0.28709454017367575"
+referencePriceCurrency: USD
+id: 2025-05-11T04:42:36.210Z.stake.3b66e8c33cfa

@@ -4,9 +4,10 @@ import { interpret } from "../src/interpret/registry.ts";
 import type { RawBundle } from "../src/sources/RawBundle.ts";
 import type { TcyClaimData } from "../src/sources/tcy/TcyClaimService.ts";
 import { THORCHAIN } from "../src/domain/Protocol.ts";
-import { readCaseInput, toBundle } from "../src/fixtures/GoldenCase.ts";
+import { readCaseInput, runCaseLayers, toBundle } from "../src/fixtures/GoldenCase.ts";
 import { TcyClaimService } from "../src/sources/tcy/TcyClaimService.ts";
 import { RecordStore } from "../src/sources/store/RecordStore.ts";
+import { MIDGARD_LIST, midgardActionBaseKey, midgardActionKey } from "../src/sources/store/Sources.ts";
 import { http } from "../src/sources/http.ts";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -91,5 +92,160 @@ describe("TCY claim list", () => {
     } finally {
       (http as any).get = get;
     }
+  });
+});
+
+// The synth claim case (a THORChain address that held synths), with what the claim was for replaced
+function synthClaimWith(tcyClaim: TcyClaimData | undefined): RawBundle {
+  const { tcyClaim: _, ...bundle } = toBundle(readCaseInput("test/cases/tcy/claim-synth"));
+  return tcyClaim ? { ...bundle, tcyClaim } : bundle;
+}
+
+const btc = { asset: "BTC.BTC", amount: "6358541635" };
+const heldBtc = { asset: "BTC/BTC", amount: "61629" };
+const avax = { asset: "AVAX.AVAX", amount: "26435473" };
+
+describe("TCY claim for a synth the address held (docs/specs/thorfi-collapse.md, Synths)", () => {
+  const claim = (tcyClaim: TcyClaimData | undefined) => interpret(synthClaimWith(tcyClaim), THORCHAIN);
+  const legs = (tcyClaim: TcyClaimData | undefined) =>
+    claim(tcyClaim).activities[0].legs.map((leg) => `${leg.direction} ${leg.role} ${leg.asset.notation}`);
+
+  test("the whole holding of the entry's synth is given up for the TCY", () => {
+    assert.deepEqual(legs({ claims: [btc], savers: [], loans: [], synths: [heldBtc] }), [
+      `out principal ${heldBtc.asset}`,
+      "in principal THOR.TCY",
+      "out gas THOR.RUNE",
+    ]);
+  });
+
+  test("a synth of another asset, no synth record, or a savers position of the asset: not a synth claim", () => {
+    const other = { asset: "ETH/ETH", amount: "5" };
+    assert.deepEqual(legs({ claims: [btc], savers: [], loans: [], synths: [other] }), [
+      "in principal THOR.TCY",
+      "out gas THOR.RUNE",
+    ]);
+    assert.deepEqual(legs({ claims: [btc], savers: [], loans: [] }), ["in principal THOR.TCY", "out gas THOR.RUNE"]);
+    const saversOfIt = [{ asset: "BTC.BTC", units: "7" }];
+    assert.equal(legs({ claims: [btc], savers: saversOfIt, loans: [], synths: [heldBtc] })[0], "out principal BTC/BTC");
+    assert.equal(
+      claim({ claims: [btc], savers: saversOfIt, loans: [], synths: [heldBtc] }).activities[0].legs[0].asset.kind,
+      "position",
+    );
+  });
+
+  test("of several entries, only the one whose asset sorts first pays the fee and keeps the key without its amount", () => {
+    const entries = { claims: [btc, avax], savers: [], loans: [], synths: [heldBtc] };
+    const { activities } = claim(entries);
+    assert.equal(
+      activities[0].legs.some((leg) => leg.role === "gas"),
+      false,
+    );
+    assert.match(activities[0].id, /\.6358541635$/);
+    const firstOnly = claim({ ...entries, claims: [btc, { ...avax, amount: "0" }] }).activities[0];
+    assert.equal(
+      firstOnly.legs.some((leg) => leg.role === "gas"),
+      true,
+    );
+    assert.doesNotMatch(firstOnly.id, /\.6358541635$/);
+  });
+
+  test("two entries of the claim's amount: one action for both, receiving the TCY of both, with a warning", () => {
+    const twin = { asset: "ETH.USDT-0XDAC17F958D2EE523A2206206994597C13D831EC7", amount: btc.amount };
+    const { activities, issues } = claim({ claims: [btc, twin], savers: [], loans: [], synths: [heldBtc] });
+    const principal = activities[0].legs.filter((leg) => leg.role === "principal");
+    assert.deepEqual(
+      principal.map((leg) => leg.direction),
+      ["in"],
+    );
+    assert.equal(principal[0].amount.base, 2n * BigInt(btc.amount));
+    assert.deepEqual(
+      issues.map((issue) => issue.kind),
+      ["warning"],
+    );
+  });
+
+  test("with several entries, an action that matches none is not the first: no fee, its own key", () => {
+    const { activities } = claim({ claims: [{ ...btc, amount: "1" }, avax], savers: [], loans: [], synths: [] });
+    assert.equal(
+      activities[0].legs.some((leg) => leg.role === "gas"),
+      false,
+    );
+    assert.match(activities[0].id, /\.6358541635$/);
+  });
+});
+
+describe("the actions of one claim tx (docs/specs/thorfi-collapse.md)", () => {
+  const action = synthClaimWith(undefined).data as any;
+  const paying = (amount: string) => ({
+    ...action,
+    out: [{ ...action.out[0], coins: [{ ...action.out[0].coins[0], amount }] }],
+  });
+
+  test("each entry's action has its own key, by its TCY amount", () => {
+    assert.notEqual(midgardActionKey(paying("1")), midgardActionKey(paying("2")));
+    assert.match(midgardActionKey(paying("1")), /^tcy_claim\.[0-9A-F]{64}\.1$/);
+  });
+
+  test("a wallet's list stores each entry once, and two actions nothing tells apart as one", async () => {
+    const store = new RecordStore(mkdtempSync(join(tmpdir(), "tc-ct-tcy-claim-")));
+    const listed = await store.list(
+      "midgard",
+      "thor1-user-wallet-11111",
+      async () => ({ data: [paying("99"), paying("99"), paying("100")], url: "" }),
+      MIDGARD_LIST,
+    );
+    assert.equal(listed.length, 2);
+  });
+  test("a store whose list has a claim under its old key lists it once", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tc-ct-tcy-claim-"));
+    const oldKey = (item: any) => midgardActionBaseKey(item);
+    await new RecordStore(dir).list("midgard", "w", async () => ({ data: [paying("5")], url: "" }), {
+      ...MIDGARD_LIST,
+      keyOf: oldKey,
+    });
+    const listed = await new RecordStore(dir).list(
+      "midgard",
+      "w",
+      async () => ({ data: [paying("5")], url: "" }),
+      MIDGARD_LIST,
+    );
+    assert.equal(listed.length, 1);
+  });
+
+  test("other actions listed twice still stop the run", async () => {
+    const store = new RecordStore(mkdtempSync(join(tmpdir(), "tc-ct-tcy-claim-")));
+    const send = { ...paying("5"), type: "send" };
+    await assert.rejects(
+      store.list("midgard", "w", async () => ({ data: [send, send], url: "" }), MIDGARD_LIST),
+      /two records with the key/,
+    );
+  });
+});
+
+describe("the claim tx's fee row (docs/specs/thorfi-collapse.md, The claim tx and its fee)", () => {
+  const input = readCaseInput("test/cases/tcy/claim-synth");
+  const rune = input.usdPrices?.["THOR.RUNE"];
+  const rows = (tcyClaim: TcyClaimData) => runCaseLayers({ ...input, tcyClaim }).rows as Record<string, string>[];
+
+  test("a receive claim from the THORChain wallet: the fee row first, at RUNE's price, and no fee on the claim's rows", () => {
+    const out = rows({ claims: [btc], savers: [], loans: [], synths: [] });
+    assert.deepEqual(
+      out.map((row) => row.type),
+      ["fee", "receive", "staking-deposit"],
+    );
+    assert.deepEqual([out[0].baseCurrency, out[0].baseAmount, out[0].referencePricePerUnit], ["RUNE", "0.02", rune]);
+    assert.equal(
+      out.slice(1).some((row) => row.feeAmount),
+      false,
+    );
+  });
+
+  test("a synth claim: the synth valued at the TCY, the fee at RUNE", () => {
+    const out = rows({ claims: [btc], savers: [], loans: [], synths: [heldBtc] });
+    assert.equal(out[0].referencePricePerUnit, rune);
+    const tcyPrice = Number(input.usdPrices?.["THOR.TCY"]);
+    const expected = (Number(btc.amount) * tcyPrice) / Number(heldBtc.amount);
+    const given = Number(out.find((row) => row.type === "bridge-trade-out")?.referencePricePerUnit);
+    assert.ok(Math.abs(given - expected) < expected * 1e-9, `${given} ≈ ${expected}`);
   });
 });

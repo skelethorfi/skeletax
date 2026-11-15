@@ -1,0 +1,57 @@
+{
+  "description": "tcy_claim success: [] -> [THOR.TCY]",
+  "source": "midgard",
+  "wallet": "thor1nxvxgfdhlv4ea40pnw7s7t3pel4r4fr8vftmue",
+  "data": {
+    "date": "1746641698931293777",
+    "height": "21019259",
+    "in": [
+      {
+        "address": "thor1nxvxgfdhlv4ea40pnw7s7t3pel4r4fr8vftmue",
+        "coins": [],
+        "txID": "D9F29AB526FB6EA54B03CBCAE07AA56C1CD03856019775C5DFCACCC69C015C6E"
+      }
+    ],
+    "metadata": {
+      "tcy": {
+        "memo": "tcy:thor1nxvxgfdhlv4ea40pnw7s7t3pel4r4fr8vftmue"
+      }
+    },
+    "out": [
+      {
+        "address": "thor1nxvxgfdhlv4ea40pnw7s7t3pel4r4fr8vftmue",
+        "coins": [
+          {
+            "amount": "6358541635",
+            "asset": "THOR.TCY"
+          }
+        ],
+        "txID": "D9F29AB526FB6EA54B03CBCAE07AA56C1CD03856019775C5DFCACCC69C015C6E"
+      }
+    ],
+    "pools": [],
+    "status": "success",
+    "type": "tcy_claim"
+  },
+  "usdPrices": {
+    "BTC.BTC": "96234.00949075272",
+    "THOR.RUNE": "1.2298846989745618",
+    "THOR.TCY": "0.26363423340352143"
+  },
+  "tcyClaim": {
+    "claims": [
+      {
+        "asset": "BTC.BTC",
+        "amount": "6358541635"
+      }
+    ],
+    "savers": [],
+    "loans": [],
+    "synths": [
+      {
+        "asset": "BTC/BTC",
+        "amount": "61629"
+      }
+    ]
+  }
+}

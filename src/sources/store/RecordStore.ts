@@ -76,6 +76,9 @@ export interface ListOptions<T> {
   // A best-effort source: a failed fetch is passed to this instead of failing the run, which carries on with the
   // stored lists of the wallet (none: an empty list). stored: whether there are any. It may rethrow.
   onFetchError?: (error: unknown, stored: boolean) => void;
+  // Items that may be listed twice with nothing to tell them apart, kept as one record (e.g. a TCY claim tx's equal
+  // entries); any other key listed twice stops the run
+  sameTwice?: (item: T) => boolean;
 }
 
 // What a fetch did: the record's first copy, a new copy, or the same as the latest copy
@@ -569,14 +572,21 @@ export class RecordStore {
     source: string,
     wallet: string,
     items: T[],
-    { keyOf, rules = {} }: ListOptions<T>,
+    { keyOf, rules = {}, sameTwice }: ListOptions<T>,
     incomplete: string | undefined,
     origin: Origin,
   ): Map<string, Stored<T>> {
     const stored = new Map<string, Stored<T>>();
+    const seen = new Map<string, string>();
 
     for (const item of items) {
       const key = keyOf(item);
+
+      if (sameTwice?.(item) && seen.get(key) === JSON.stringify(item)) {
+        continue;
+      }
+
+      seen.set(key, JSON.stringify(item));
 
       if (stored.has(key)) {
         throw new Error(`${source} ${wallet}: two records with the key ${key}`);
