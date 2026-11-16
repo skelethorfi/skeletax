@@ -19,8 +19,6 @@ export interface V1Tx {
   // The first message: its type ('MsgDeposit', 'MsgSend'), signer, memo and coins
   type: string;
   signer: string;
-  // A send's recipient
-  to?: string;
   memo: string;
   coins: { asset: string; amount: string }[];
   // Its events, keys and values decoded (the archive gives them base64 for older blocks)
@@ -69,7 +67,6 @@ export function toV1Tx(response: any): V1Tx {
         .split(".")
         .pop() ?? "",
     signer: message.signer ?? message.from_address ?? "",
-    ...(message.to_address ? { to: message.to_address } : {}),
     memo: message.memo ?? response.tx?.body?.memo ?? "",
     coins: coins.map((coin: any) => ({
       asset: String(coin.asset ?? coin.denom ?? "").toUpperCase(),
@@ -225,17 +222,7 @@ export function toViewblockTx(tx: V1Tx, time: number = Date.parse(tx.timestamp))
     memo: tx.memo,
     signer: tx.signer,
     input: { chain: "THOR", asset: assetName(coin?.asset ?? "RUNE"), amount: coin?.amount ?? "0" },
-    msgs:
-      tx.type === "MsgSend"
-        ? [
-            {
-              "@type": "/cosmos.bank.v1beta1.MsgSend",
-              from_address: tx.signer,
-              to_address: tx.to ?? "",
-              amount: tx.coins.map((c) => ({ denom: c.asset.toLowerCase(), amount: c.amount })),
-            },
-          ]
-        : [],
+    msgs: [],
     outbounds,
   };
 }

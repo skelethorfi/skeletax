@@ -42,7 +42,7 @@ describe("toV1Tx", () => {
     assert.equal(tx.events[2].attributes.recipient, RESERVE);
   });
 
-  test("reads a send's sender, recipient and coins", () => {
+  test("reads a send's sender and coins; a send is typed as one", () => {
     const tx = toV1Tx({
       txhash: "H2",
       height: "12000000",
@@ -62,11 +62,8 @@ describe("toV1Tx", () => {
       },
       events: [],
     });
-    assert.deepEqual(
-      [tx.type, tx.signer, tx.to, tx.coins],
-      ["MsgSend", SIGNER, "thor1-other", [{ asset: "RUNE", amount: "500" }]],
-    );
-    assert.deepEqual(toViewblockTx(tx).msgs[0].amount, [{ denom: "rune", amount: "500" }]);
+    assert.deepEqual([tx.type, tx.signer, tx.coins], ["MsgSend", SIGNER, [{ asset: "RUNE", amount: "500" }]]);
+    assert.deepEqual(toViewblockTx(tx).types, ["send"]);
   });
 });
 

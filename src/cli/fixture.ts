@@ -3,7 +3,9 @@ import os from "os";
 import path from "path";
 import { type Action, Configuration, DefaultApi } from "@xchainjs/xchain-midgard";
 import { THORNODE_V1_LAST_HEIGHT, ThornodeService } from "../sources/thorchain/ThornodeService.ts";
-import { ThornodeV1, toViewblockTx } from "../sources/thorchain/ThornodeV1.ts";
+import { atBlockTime, ThornodeV1 } from "../sources/thorchain/ThornodeV1.ts";
+import { selectSends } from "../sources/RawBundle.ts";
+import type { ViewblockTx } from "../sources/viewblock/index.ts";
 import { RecordStore } from "../sources/store/RecordStore.ts";
 import { MayanodeService } from "../sources/maya/MayanodeService.ts";
 import { CosmosTxService } from "../sources/thorchain/CosmosTxService.ts";
@@ -11,7 +13,7 @@ import { EvmReceipts } from "../sources/evm/EvmReceipts.ts";
 import { TcyClaimService } from "../sources/tcy/TcyClaimService.ts";
 import { Viewblock } from "../sources/viewblock/index.ts";
 import { MidgardService } from "../sources/thorchain/MidgardService.ts";
-import { MidgardSource } from "../sources/Source.ts";
+import { MidgardSource, ThornodeV1Source } from "../sources/Source.ts";
 import { PriceSource } from "../sources/Prices.ts";
 import { http } from "../sources/http.ts";
 import { execFileSync } from "child_process";
@@ -126,25 +128,40 @@ async function fetchInput(txid: string, protocol: Protocol, index?: number): Pro
   return toCaseInput(bundle, describeShape(getActionShape(action)));
 }
 
-// A THORChain v1 tx Midgard does not list (docs/specs/sends.md, Txs Midgard omits), as the exporter's ThornodeV1Source
-// gives it: in Viewblock's shape, at its block's time, exported for its signer
+// A THORChain v1 tx Midgard does not list (docs/specs/sends.md, Txs Midgard omits), as the exporter gives it: the
+// signer's v1 txs through ThornodeV1Source and selectSends (a withdrawal with the pending add it pays back), at their
+// blocks' times
 async function fetchV1Input(txid: string): Promise<GoldenCaseInput> {
   const store = new RecordStore(fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-fixture-")));
   const v1 = new ThornodeV1(store);
-  const tx = await v1.fetchTx(txid).catch(() => undefined);
+  const tx = await v1.fetchTx(txid).catch((error) => {
+    if (error?.response?.status === 404) {
+      return undefined;
+    }
+
+    throw error;
+  });
 
   if (!tx?.hash || tx.height > THORNODE_V1_LAST_HEIGHT) {
     throw new Error(`no Midgard action for txid ${mask(txid)}, and no THORChain v1 tx`);
   }
 
-  const block = await v1.getBlockTime(tx.height);
-  const data = toViewblockTx(tx, Date.parse(block.time));
-  return {
-    description: `A THORChain v1 tx Midgard does not list: ${data.types.join(" ")}, memo ${tx.memo || "(none)"}`,
-    source: "thornode-v1",
-    wallet: tx.signer,
-    data,
-  };
+  const bundles = await new ThornodeV1Source(v1).bundlesFor(tx.signer);
+  const bundle = selectSends(bundles).bundles.find((b) => (b.data as ViewblockTx).hash === tx.hash);
+
+  if (!bundle) {
+    throw new Error(`the THORChain v1 tx ${mask(txid)} gives no rows (docs/specs/sends.md, Txs Midgard omits)`);
+  }
+
+  for (const each of [bundle.data as ViewblockTx, ...(bundle.pendingAdd ? [bundle.pendingAdd] : [])]) {
+    atBlockTime(each, Date.parse((await v1.getBlockTime(each.height)).time));
+  }
+
+  const data = bundle.data as ViewblockTx;
+  return toCaseInput(
+    bundle,
+    `A THORChain v1 tx Midgard does not list: ${data.types.join(" ")}, memo ${tx.memo || "(none)"}`,
+  );
 }
 
 async function findSimilar(input: GoldenCaseInput, maxPages: number, privateData: PrivateData): Promise<Action[]> {

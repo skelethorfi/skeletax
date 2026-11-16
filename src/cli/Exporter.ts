@@ -247,6 +247,11 @@ export class Exporter {
   // archive lists a tx's time to the second; docs/specs/sends.md, Txs Midgard omits). Only those blocks are fetched
   private async withV1BlockTimes(bundles: RawBundle[]) {
     const v1Txs = new Set(bundles.filter((bundle) => bundle.source === "thornode-v1").map((bundle) => bundle.data));
+
+    if (v1Txs.size === 0) {
+      return;
+    }
+
     const kept = selectSends(dedupeBundles(bundles).bundles).bundles.filter(
       (bundle) => bundle.source === "thornode-v1",
     );
