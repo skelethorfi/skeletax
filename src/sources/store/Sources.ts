@@ -1,4 +1,5 @@
 import type { Action } from "@xchainjs/xchain-midgard";
+import type { V1BlockTime, V1Tx } from "../thorchain/ThornodeV1.ts";
 import crypto from "crypto";
 import type { TxStatusResponse } from "@xchainjs/xchain-thornode";
 import { type ListOptions, monthFolder, type RecordRules } from "./RecordStore.ts";
@@ -250,6 +251,13 @@ export const TCY_CLAIM_SYNTHS_RULES: RecordRules<{ asset: string; amount: string
 // does not change. It has no date of its own: it is filed by the action's.
 export const MAYANODE_FEE_RULES: RecordRules<NativeFee> = {};
 
+// THORChain v1's native txs of a wallet (docs/specs/sends.md, Txs Midgard omits): the v1 chain ended, so a complete
+// list is not fetched again
+export const V1_SENDS_LIST: ListOptions<V1Tx> = { keyOf: (tx) => tx.hash, fetchOnce: true };
+
+// A v1 block's time: final once fetched
+export const V1_BLOCK_TIME_RULES: RecordRules<V1BlockTime> = {};
+
 // The sources in a store: wallet lists, and records looked up one at a time (a THORNode tx status has no
 // date of its own: it is filed by the date of the action it was fetched for)
 export const SOURCES: { [source: string]: ListSource | { kind: "record"; rules: RecordRules<any> } } = {
@@ -276,5 +284,7 @@ export const SOURCES: { [source: string]: ListSource | { kind: "record"; rules: 
   "evm-payout": { kind: "record", rules: EVM_PAYOUT_RULES },
   "tcy-claim": { kind: "record", rules: TCY_CLAIM_RULES },
   "tcy-claim-synths": { kind: "record", rules: TCY_CLAIM_SYNTHS_RULES },
+  "thornode-v1-sends": { kind: "list", options: () => V1_SENDS_LIST },
+  "thornode-v1-block": { kind: "record", rules: V1_BLOCK_TIME_RULES },
   "mayanode-fee": { kind: "record", rules: MAYANODE_FEE_RULES },
 };
