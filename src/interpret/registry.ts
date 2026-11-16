@@ -16,6 +16,7 @@ import { interpretTrade } from "./midgard/trade.ts";
 import { interpretFailedDeposit } from "./midgard/failed.ts";
 import { interpretViewblockSend } from "./viewblock/send.ts";
 import { interpretPendingWithdraw } from "./viewblock/pending.ts";
+import { interpretNoopDeposit, interpretUnlistedV1Tx } from "./viewblock/v1.ts";
 import { isViewblockWithdraw, type ViewblockTx } from "../sources/viewblock/index.ts";
 import { interpretMayaDistribution } from "./maya/distribution.ts";
 
@@ -57,6 +58,10 @@ const REGISTRY: Record<string, Interpreter> = {
   // withdrawals of pending adds Midgard does not list either (docs/specs/fees.md, Pending adds that are withdrawn)
   "viewblock/send": interpretViewblockSend,
   "viewblock/withdraw": interpretPendingWithdraw,
+  // THORChain v1's txs Midgard does not list, from 2022-04 (docs/specs/sends.md, Txs Midgard omits)
+  "thornode-v1/withdraw": interpretPendingWithdraw,
+  "thornode-v1/noop": interpretNoopDeposit,
+  "thornode-v1/other": interpretUnlistedV1Tx,
   "tcy/distribution": activity(interpretTcyDistribution),
   "maya-distribution/payout": (bundle, protocol) => ({
     activities: interpretMayaDistribution(bundle, protocol),
@@ -94,6 +99,10 @@ export function getBundleType(bundle: RawBundle): { type: string; subtype?: stri
     }
     case "viewblock":
       return { type: isViewblockWithdraw(bundle.data as ViewblockTx) ? "withdraw" : "send" };
+    case "thornode-v1": {
+      const tx = bundle.data as ViewblockTx;
+      return { type: isViewblockWithdraw(tx) ? "withdraw" : tx.types.includes("noop") ? "noop" : "other" };
+    }
     case "tcy":
       return { type: "distribution" };
     case "maya-distribution":

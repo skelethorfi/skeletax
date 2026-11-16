@@ -12,10 +12,11 @@ Sends come from Midgard (`send` actions on THORChain). Midgard's history of
 sends is incomplete before the chain upgrade of March 2022, and THORNode no
 longer serves those txs, so Viewblock fills the gap:
 
-| Sends             | Source                                                              |
-| ----------------- | ------------------------------------------------------------------- |
-| From 2022-04-01   | Midgard                                                             |
-| Before 2022-04-01 | Midgard, plus each Viewblock send with a txid Midgard does not list |
+| Sends                    | Source                                                                                              |
+| ------------------------ | --------------------------------------------------------------------------------------------------- |
+| After 2024-09-04         | Midgard                                                                                             |
+| 2022-04-01 to 2024-09-04 | Midgard, plus each THORChain v1 tx the wallet signed that Midgard does not list (Txs Midgard omits) |
+| Before 2022-04-01        | Midgard, plus each Viewblock send with a txid Midgard does not list                                 |
 
 Viewblock is called only when a run exports a period that starts before
 2022-04-01. Its address listing gives every tx of the wallet; only sends
@@ -43,6 +44,38 @@ nothing Viewblock does ends a run; each case is a warning in the run summary
 The listing is paged until a page comes back empty or adds no new tx, or the
 `total` is reached: the `pages` it reports has been seen to stop short of its
 `total`.
+
+### Txs Midgard omits
+
+Midgard records what a native tx did, so a successful tx that did nothing
+leaves no action, and a pending add that is withdrawn is dropped with its
+withdrawal (`fees.md`, Pending adds that are withdrawn). Each still paid the
+native fee. THORChain's v1 archive (THORNode up to block 17,562,001, the
+2024-09-04 fork) indexes every successful native tx by its signer
+(`/cosmos/tx/v1beta1/txs?events=message.sender='<address>'`). Failed txs are
+not in that index; Midgard lists them (Failed sends, below). The current chain
+has no such index, so after the fork these txs are not exported.
+
+A run that exports a period from 2022-04-01 to the fork lists, for each
+THORChain wallet, every tx it signed on v1 (the `thornode-v1-sends` list,
+`snapshots.md`; fetched once, as v1 does not change). Txs before 2022-04-01
+are left to Viewblock, and a tx whose hash Midgard lists is dropped, so
+nothing gives a second row. Of the rest:
+
+| Tx                                                                                                                      | Gives                                                                                                        |
+| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| A `MsgDeposit` that did nothing: no THORChain event, and its only transfer is the native fee (0.02 RUNE) to the Reserve | one `Fee` row of 0.02 RUNE on the signer, to the protocol: `Fee: <action> that did nothing (<memo>); <txid>` |
+| A withdrawal (`-:`, `WD`, `WITHDRAW`) that pays back a pending add                                                      | the refund rows of `fees.md`, Pending adds that are withdrawn                                                |
+| An add (`+:`, `ADD`, `A`) alone                                                                                         | nothing: it is given with the withdrawal that pays it back                                                   |
+| Any other tx, a withdrawal with no pending add                                                                          | a warning to check it and enter it by hand, and no row                                                       |
+
+E.g. an `UNBOND` sent when the bond could not be unbonded, or a withdrawal
+sent again after the position was out, did nothing. The amounts are observed
+(the archive's events); the time is the block's, to the millisecond (a tx's
+listed time is to the second, so the run reads the block header of each tx
+that gives a row: `thornode-v1-block`). A store made before this source has
+no `thornode-v1-sends` list, so `--offline` on it fails until one online run
+fetches the lists.
 
 Maya sends (Maya's Midgard `send`, e.g. of `CACAO` or the MAYA token) are
 mapped the same way, from Maya's Midgard, with Maya's native fee (below).

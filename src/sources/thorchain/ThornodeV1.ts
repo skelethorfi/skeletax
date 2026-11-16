@@ -19,11 +19,17 @@ export interface V1Tx {
   // The first message: its type ('MsgDeposit', 'MsgSend'), signer, memo and coins
   type: string;
   signer: string;
+  // A send's recipient
+  to?: string;
   memo: string;
   coins: { asset: string; amount: string }[];
   // Its events, keys and values decoded (the archive gives them base64 for older blocks)
   events: { type: string; attributes: Record<string, string> }[];
 }
+
+// The day after the v1 chain's last block (the 2024-09-04 fork): a run that ends before the cutoff or starts from this
+// day reads none of its txs
+export const THORNODE_V1_UNTIL = "2024-09-05";
 
 // The archive answers at most this many txs a page
 const PAGE = 100;
@@ -63,6 +69,7 @@ export function toV1Tx(response: any): V1Tx {
         .split(".")
         .pop() ?? "",
     signer: message.signer ?? message.from_address ?? "",
+    ...(message.to_address ? { to: message.to_address } : {}),
     memo: message.memo ?? response.tx?.body?.memo ?? "",
     coins: coins.map((coin: any) => ({
       asset: String(coin.asset ?? coin.denom ?? "").toUpperCase(),
@@ -111,6 +118,12 @@ export class ThornodeV1 {
       V1_BLOCK_TIME_RULES,
       date,
     );
+  }
+
+  // One tx by hash, unstored (the fixture tool: the tx may be anyone's)
+  async fetchTx(hash: string): Promise<V1Tx> {
+    const response = (await http.get(`${API_URLS.thornodeArchive}/cosmos/tx/v1beta1/txs/${hash}`)).data;
+    return toV1Tx({ ...response.tx_response, tx: response.tx ?? response.tx_response?.tx });
   }
 
   private async fetchSends(address: string): Promise<{ data: V1Tx[]; incomplete?: string }> {
@@ -212,7 +225,25 @@ export function toViewblockTx(tx: V1Tx, time: number = Date.parse(tx.timestamp))
     memo: tx.memo,
     signer: tx.signer,
     input: { chain: "THOR", asset: assetName(coin?.asset ?? "RUNE"), amount: coin?.amount ?? "0" },
-    msgs: [],
+    msgs:
+      tx.type === "MsgSend"
+        ? [
+            {
+              "@type": "/cosmos.bank.v1beta1.MsgSend",
+              from_address: tx.signer,
+              to_address: tx.to ?? "",
+              amount: tx.coins.map((c) => ({ denom: c.asset.toLowerCase(), amount: c.amount })),
+            },
+          ]
+        : [],
     outbounds,
   };
+}
+
+// The tx at its block's time (ms since 1970), and its outbounds with it
+export function atBlockTime(tx: ViewblockTx, time: number): void {
+  tx.timestamp = time;
+  for (const outbound of tx.outbounds ?? []) {
+    outbound.timestamp = time;
+  }
 }

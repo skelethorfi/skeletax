@@ -8,7 +8,7 @@ import { runePoolRows, switchRows } from "./switch.ts";
 import { loanOpenRows, loanRepayRows } from "./loan.ts";
 import { tcyClaimRows, tcyDistributionRows, tcyStakeRows, thornameRows } from "./tcy.ts";
 import { rujiraStakeRows, rujiraTradeRows } from "./rujira.ts";
-import { failedDepositRows, sendRows } from "./send.ts";
+import { failedDepositRows, noopDepositRows, sendRows } from "./send.ts";
 import { mayaDistributionRows } from "./maya.ts";
 import { tradeRows } from "./trade.ts";
 import type { MayaLiquidityAuction } from "../../config/ITaxConfig.ts";
@@ -81,6 +81,8 @@ function toRows(activity: Activity, protocol: Protocol, treatment: Treatment): S
       return sendRows(activity, protocol, treatment.incomeFrom);
     case "deposit.failed":
       return failedDepositRows(activity, protocol);
+    case "deposit.noop":
+      return noopDepositRows(activity, protocol);
     case "tcy.claim":
       return tcyClaimRows(activity, protocol);
     case "tcy.stake":

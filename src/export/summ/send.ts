@@ -177,6 +177,27 @@ export function failedDepositRows(activity: Activity, protocol: Protocol): SummR
   ];
 }
 
+// A deposit that did nothing (docs/specs/sends.md, Txs Midgard omits): its native fee
+export function noopDepositRows(activity: Activity, protocol: Protocol): SummRow[] {
+  const gas = leg(activity, "gas");
+  const { currency, amount } = named(gas, protocol);
+
+  return [
+    {
+      wallet: gas.wallet,
+      timestamp: activity.time,
+      type: SummRowType.Fee,
+      baseCurrency: currency,
+      baseAmount: amount,
+      from: activity.details.from,
+      to: activity.details.to,
+      blockchain: protocol.blockchain,
+      trace: legTrace(gas),
+      description: `Fee: ${activity.details.action} that did nothing${activity.memo ? ` (${activity.memo})` : ""}; ${gas.txid ?? ""}`,
+    },
+  ];
+}
+
 function label(coin: Leg): string {
   const ticker = assetFromStringEx(coin.asset.notation).ticker;
   return coin.asset.kind === "synth" ? `Synth ${ticker}` : coin.asset.kind === "trade" ? `Trade ${ticker}` : ticker;

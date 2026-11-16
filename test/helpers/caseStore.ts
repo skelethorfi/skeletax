@@ -16,6 +16,7 @@ import { bucketStart } from "../../src/sources/thorchain/MidgardService.ts";
 import { getBundleKey } from "../../src/sources/RawBundle.ts";
 import { Exporter } from "../../src/cli/Exporter.ts";
 import { Viewblock } from "../../src/sources/viewblock/index.ts";
+import { ThornodeV1 } from "../../src/sources/thorchain/ThornodeV1.ts";
 import { MidgardService } from "../../src/sources/thorchain/MidgardService.ts";
 import { ThornodeService } from "../../src/sources/thorchain/ThornodeService.ts";
 import { CosmosTxService } from "../../src/sources/thorchain/CosmosTxService.ts";
@@ -42,7 +43,8 @@ export interface Case {
 // a hash of its own first (withOwnHash). A case is left out when it would clash with one kept: the same record of
 // the same wallet (e.g. an anonymised placeholder txid), another record under the same key with other data, or a
 // Viewblock send whose hash a Midgard case has, which the exporter drops as that action's inbound (docs/specs/sends.md).
-// Cases with prices go first. Maya cases are left out (THORChain's sources only), and so are withdrawn pending adds.
+// Cases with prices go first. Maya cases are left out (THORChain's sources only), and so are withdrawn pending adds and
+// THORChain v1 txs.
 export function thorchainCases(root: string): { cases: Case[]; skipped: string[] } {
   const all = findCaseDirs(root)
     .map((dir) => ({ name: path.relative(root, dir), input: readCaseInput(dir), expected: readCaseExpected(dir) }))
@@ -51,6 +53,9 @@ export function thorchainCases(root: string): { cases: Case[]; skipped: string[]
     // A withdrawn pending add's case gives its add (pendingAdd) as found; in the store the withdrawal would have to
     // find it in the Viewblock list, which the anonymised case cannot do (its add and withdrawal share a time)
     .filter((c) => !c.input.pendingAdd)
+    // A v1 case holds the tx as the exporter converts it (Viewblock's shape, at its block's time); the source lists
+    // the archive's txs, which the case does not keep
+    .filter((c) => c.input.source !== "thornode-v1")
     .map(withOwnHash);
   const midgardTxIds = new Set(
     all
@@ -304,6 +309,7 @@ export async function fillStore(configFile: string, cases: Case[], today: Date):
   exporter.evmReceipts = new EvmReceipts(store);
   exporter.tcyDistribution = new TcyDistributionService(store);
   exporter.tcyClaims = new TcyClaimService(store);
+  exporter.thornodeV1 = new ThornodeV1(store);
 
   if (exporter.otherMidgards.length > 0) {
     throw new Error("fillStore: THORChain only");

@@ -327,11 +327,15 @@ not serve them either (the current API and the v1 archive both start later).
 The paired THORChain wallet's Viewblock listing, read for sends before
 2022-04-01 (`sends.md`, Sources), has both: the add (filed under the paired
 address too) and the withdrawal it signed, with the payout's amount, asset,
-recipient and, on an L1, txid.
+recipient and, on an L1, txid. From 2022-04-01 to the 2024-09-04 fork,
+THORChain's v1 archive lists the txs the wallet signed (`sends.md`, Txs
+Midgard omits): a RUNE add and its withdrawal, with the payout from the
+withdrawal's `outbound` event. An L1 add is signed by the observers, not the
+wallet, so it is not in that list.
 
-**Which txs.** Only a Viewblock withdrawal (`types` `liquidity`,
-`withdraw`) dated before 2022-04-01 that Midgard does not list, signed by the
-wallet. It is paired with the latest Viewblock add before it to the same
+**Which txs.** Only a withdrawal (`types` `liquidity`, `withdraw`) that
+Midgard does not list, signed by the wallet: Viewblock's dated before
+2022-04-01, or a v1 tx from then on. It is paired with the latest add before it, from the same source, to the same
 pool (a token's contract may be shortened to its end, but a pool named
 without one is another pool), which
 Midgard does not list either, whose memo names the wallet (or is sent from
@@ -356,11 +360,10 @@ the protocol.
 | L1 side (an add of a BEP2 token) | `FailedOut` of the amount added with its L1 gas; `Fee` of sent − returned; `FailedIn` of the payout with its txid; `Fee` 0.02 RUNE on the THORChain wallet (the request) |
 | THORChain side (an add of RUNE)  | `FailedOut` of the RUNE added, fee 0.02 RUNE; `Fee` of sent − returned; `Fee` 0.02 RUNE (the request)                                                                    |
 
-**Limitation: pairs after 2022-04-01 are not exported.** A run reads
-Viewblock only for sends before 2022-04-01, so it has no record that a later
-pair exists. THORNode serves both txs by hash (the v1 archive up to
-2024-09-04), so reading them is not the gap; listing them is (THORNode's tx
-search by the signing wallet could). What is missing:
+**Limitation: some pairs are not exported.** A RUNE pair from 2022-04-01
+to the fork is exported from the v1 archive. Not exported: an L1 pair in that
+period (its withdrawal gives a warning: no add found), and any pair after the
+fork, as the current chain lists no tx by signer. What is missing:
 
 - THORChain side: the fees only, 0.06 RUNE per pair at the default native
   fees (the add's, the request's, and what the protocol kept). Apart from
@@ -372,9 +375,9 @@ search by the signing wallet could). What is missing:
   send it makes up, `summ-sync.md`); what the protocol kept and the request's
   fee on the THORChain wallet are missing either way.
 
-Until a source lists them, enter the rows above by hand in an extra folder of
-summ-sync (`packages/summ-sync/README.md`, `extraDirs`), with the times,
-wallets, types, currencies and amounts a run would give: the add's time on the
+Enter such a pair's rows by hand in an extra folder of summ-sync
+(`packages/summ-sync/README.md`, `extraDirs`), with the times, wallets,
+types, currencies and amounts a run would give: the add's time on the
 `FailedOut` and the kept `Fee`, the payout's on a `FailedIn`, the request's on
 its `Fee`. summ-sync reads a row's txids from its Description, so word it as a
 run does: `refund (<add txid>): pending add withdrawn (<withdrawal txid>)` on
@@ -382,8 +385,9 @@ the `FailedOut`, `refund (<add txid>): kept by thorchain, …` on the kept
 `Fee`, `refund (<add txid>): returned in <payout txid>` on a `FailedIn`, and
 `refund (<add txid>): fee of the withdrawal request <withdrawal txid>` on the
 request's `Fee`. Amounts and txids are observed (THORNode by hash); the 0.02
-RUNE fees are the default. A run that exports the pair later overtakes rows
-that match it exactly. A row that shares a txid, side and currency with a run
+RUNE fees are the default. A run that exports the pair later (a RUNE pair
+entered by hand before the v1 source) overtakes rows that match it exactly,
+to the millisecond. A row that shares a txid, side and currency with a run
 row but differs otherwise (even by a second) is held as an overlap, and
 neither is uploaded; one that does not share all three is uploaded beside the
 run's rows and counts twice.

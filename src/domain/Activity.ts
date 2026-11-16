@@ -27,6 +27,7 @@ export type ActivityKind =
   | "loan.repay"
   | "send"
   | "deposit.failed"
+  | "deposit.noop"
   | "tcy.claim"
   | "tcy.stake"
   | "tcy.unstake"
