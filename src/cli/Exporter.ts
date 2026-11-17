@@ -26,7 +26,6 @@ import {
   ViewblockSource,
 } from "../sources/Source.ts";
 import { atBlockTime, ThornodeV1, THORNODE_V1_UNTIL } from "../sources/thorchain/ThornodeV1.ts";
-import type { ViewblockTx } from "../sources/viewblock/ViewblockTx.ts";
 import { mapConcurrent } from "../utils/Concurrency.ts";
 import { MayaDistributionService } from "../sources/maya/MayaDistributionService.ts";
 import { ageInDays, inboundSends, type NotFinal, type PendingAge, pendingAge } from "../sources/Pending.ts";
@@ -42,6 +41,7 @@ import {
   getBundleSourceName,
   type RawBundle,
   selectSends,
+  v1TxsToTime,
   VIEWBLOCK_SENDS_BEFORE,
 } from "../sources/RawBundle.ts";
 import { type BundleResult, collectRows, runBundle } from "../pipeline/run.ts";
@@ -246,29 +246,11 @@ export class Exporter {
   // The v1 txs that give rows, and the pending adds paired with them, at their block's time to the millisecond (the
   // archive lists a tx's time to the second; docs/specs/sends.md, Txs Midgard omits)
   private async withV1BlockTimes(bundles: RawBundle[]) {
-    const v1Txs = new Set(bundles.filter((bundle) => bundle.source === "thornode-v1").map((bundle) => bundle.data));
-
-    if (v1Txs.size === 0) {
-      return;
-    }
-
-    const kept = selectSends(dedupeBundles(bundles).bundles).bundles.filter(
-      (bundle) => bundle.source === "thornode-v1",
-    );
-    // A deposit that did nothing, and a withdrawal with its pending add, dated in the run's periods (a day's margin
-    // either side, as for prices); the other kept txs only warn
     const day = 24 * 60 * 60 * 1000;
-    const from = new Date(this.config.fromDate).getTime() - day;
-    const to = new Date(this.config.toDate).getTime() + 2 * day;
-    const txs = new Set<ViewblockTx>(
-      kept
-        .filter((bundle) => bundle.pendingAdd || (bundle.data as ViewblockTx).types.includes("noop"))
-        .filter((bundle) => {
-          const time = (bundle.data as ViewblockTx).timestamp;
-          return time >= from && time < to;
-        })
-        .flatMap((bundle) => [bundle.data as ViewblockTx, ...(bundle.pendingAdd ? [bundle.pendingAdd] : [])])
-        .filter((tx) => v1Txs.has(tx)),
+    const txs = v1TxsToTime(
+      bundles,
+      new Date(this.config.fromDate).getTime() - day,
+      new Date(this.config.toDate).getTime() + 2 * day,
     );
     await mapConcurrent([...txs], BUNDLE_CONCURRENCY, async (tx) => {
       const block = await this.thornodeV1.getBlockTime(tx.height, new Date(tx.timestamp));

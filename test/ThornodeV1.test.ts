@@ -7,7 +7,7 @@ import { RecordStore, StoreMissError } from "../src/sources/store/RecordStore.ts
 import { SnapshotManifest } from "../src/sources/store/SnapshotManifest.ts";
 import assert from "node:assert/strict";
 import { atBlockTime, isNoopDeposit, ThornodeV1, toV1Tx, toViewblockTx } from "../src/sources/thorchain/ThornodeV1.ts";
-import { type RawBundle, selectSends } from "../src/sources/RawBundle.ts";
+import { type RawBundle, selectSends, v1TxsToTime } from "../src/sources/RawBundle.ts";
 import { runBundle } from "../src/pipeline/run.ts";
 import { THORCHAIN } from "../src/domain/Protocol.ts";
 import type { ViewblockTx } from "../src/sources/viewblock/index.ts";
@@ -507,5 +507,52 @@ describe("ThornodeV1.getBlockTime", () => {
     const v1 = new ThornodeV1(new RecordStore(dir, { fetch: "all" }));
     assert.equal((await v1.getBlockTime(9))?.time, "2023-09-01T10:00:00.5Z");
     assert.deepEqual(v1.warnings(), []);
+  });
+});
+
+describe("v1TxsToTime", () => {
+  test("takes each row-giving v1 tx by its own time: an add in the periods whose withdrawal is after them", () => {
+    const of = (data: ViewblockTx): RawBundle => ({
+      source: "thornode-v1",
+      protocol: "thorchain",
+      wallet: SIGNER,
+      data,
+      thornodeTxs: [],
+      cosmosTxs: [],
+    });
+    const add = {
+      ...toViewblockTx(
+        toV1Tx(
+          deposit(
+            "A1",
+            "+:BTC.BTC:bc1-pair",
+            [...feeEvents(), pending],
+            [{ asset: "THOR.RUNE", amount: "5000000000" }],
+          ),
+        ),
+      ),
+      timestamp: Date.parse("2023-06-29T10:00:00Z"),
+    };
+    const outbound = {
+      type: "outbound",
+      attributes: attributes({ chain: "THOR", to: SIGNER, coin: "4998000000 THOR.RUNE" }),
+    };
+    const withdraw = {
+      ...toViewblockTx(toV1Tx(deposit("W1", "-:BTC.BTC:10000", [...feeEvents(), outbound]))),
+      timestamp: Date.parse("2023-07-05T10:00:00Z"),
+    };
+    const noop = {
+      ...toViewblockTx(toV1Tx(deposit("N1", "UNBOND:thor1-node:100", feeEvents()))),
+      timestamp: Date.parse("2023-07-10T10:00:00Z"),
+    };
+    const other = {
+      ...toViewblockTx(toV1Tx(deposit("D1", "BOND:thor1-node", [...feeEvents(), { type: "bond", attributes: [] }]))),
+      timestamp: Date.parse("2023-06-10T10:00:00Z"),
+    };
+    const bundles = [of(add), of(withdraw), of(noop), of(other)];
+    const hashes = (from: string, to: string) =>
+      v1TxsToTime(bundles, Date.parse(from), Date.parse(to)).map((tx) => tx.hash);
+    assert.deepEqual(hashes("2023-06-01T00:00:00Z", "2023-07-02T00:00:00Z"), ["A1"]);
+    assert.deepEqual(hashes("2023-07-01T00:00:00Z", "2023-08-01T00:00:00Z"), ["W1", "N1"]);
   });
 });

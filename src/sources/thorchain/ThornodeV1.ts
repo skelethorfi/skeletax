@@ -103,7 +103,7 @@ export class ThornodeV1 {
         ? [
             `THORChain v1: could not fetch the time of ${this.blockWarnings.length} blocks; their txs' rows are at the ` +
               `second the archive listed, so a row entered by hand at the block's time is not overtaken ` +
-              `(docs/specs/sends.md, Txs Midgard omits): ${[...this.blockWarnings].sort().join(", ")}`,
+              `(docs/specs/sends.md, Txs Midgard omits): ${[...this.blockWarnings].sort((a, b) => parseInt(a) - parseInt(b)).join(", ")}`,
           ]
         : []),
     ];

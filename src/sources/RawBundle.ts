@@ -372,3 +372,21 @@ export function pendingAddOf(
     })
     .sort((a, b) => b.timestamp - a.timestamp)[0];
 }
+
+// The THORChain v1 txs whose rows the run dates in its periods [from, to) (ms), to be moved to their block's time
+// (docs/specs/sends.md, Txs Midgard omits): a deposit that did nothing, a withdrawal of a pending add and that add,
+// each by its own time (an add's rows are at the add's). The other kept v1 txs only warn
+export function v1TxsToTime(bundles: RawBundle[], from: number, to: number): ViewblockTx[] {
+  const v1Txs = new Set(bundles.filter((bundle) => bundle.source === "thornode-v1").map((bundle) => bundle.data));
+
+  if (v1Txs.size === 0) {
+    return [];
+  }
+
+  const txs = selectSends(dedupeBundles(bundles).bundles)
+    .bundles.filter((bundle) => bundle.source === "thornode-v1")
+    .filter((bundle) => bundle.pendingAdd || (bundle.data as ViewblockTx).types.includes("noop"))
+    .flatMap((bundle) => [bundle.data as ViewblockTx, ...(bundle.pendingAdd ? [bundle.pendingAdd] : [])])
+    .filter((tx) => v1Txs.has(tx) && tx.timestamp >= from && tx.timestamp < to);
+  return [...new Set(txs)];
+}
