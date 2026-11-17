@@ -18,6 +18,12 @@ const feeEvents = (encode = false) => [
   { type: "message", attributes: attributes({ sender: SIGNER }, encode) },
 ];
 
+// What a RUNE add that waits for its other side emits
+const pending = {
+  type: "pending_liquidity",
+  attributes: attributes({ pool: "BTC.BTC", type: "add", rune_amount: "5000000000" }),
+};
+
 // The archive's answer for a MsgDeposit, as /cosmos/tx/v1beta1/txs lists it
 const deposit = (hash: string, memo: string, events: any[], coins = [{ asset: "THOR.RUNE", amount: "0" }]) => ({
   txhash: hash,
@@ -115,8 +121,9 @@ describe("toViewblockTx", () => {
       },
     ]);
     assert.deepEqual(
-      toViewblockTx(toV1Tx(deposit("A1", "+:BTC.BTC", feeEvents(), [{ asset: "THOR.RUNE", amount: "5000000000" }])))
-        .types,
+      toViewblockTx(
+        toV1Tx(deposit("A1", "+:BTC.BTC", [...feeEvents(), pending], [{ asset: "THOR.RUNE", amount: "5000000000" }])),
+      ).types,
       ["liquidity", "add"],
     );
     assert.deepEqual(toViewblockTx(toV1Tx(deposit("N1", "UNBOND:thor1-node:100", feeEvents()))).types, [
@@ -180,7 +187,14 @@ describe("selectSends with THORChain v1 txs", () => {
   test("keeps a withdrawal of a pending add with that add, and no add alone; a deposit another wallet signed gives nothing", () => {
     const add = {
       ...toViewblockTx(
-        toV1Tx(deposit("A1", `+:BTC.BTC:bc1-pair`, feeEvents(), [{ asset: "THOR.RUNE", amount: "5000000000" }])),
+        toV1Tx(
+          deposit(
+            "A1",
+            `+:BTC.BTC:bc1-pair`,
+            [...feeEvents(), pending],
+            [{ asset: "THOR.RUNE", amount: "5000000000" }],
+          ),
+        ),
       ),
       timestamp: Date.parse("2023-09-01T10:00:00Z"),
     };
@@ -237,7 +251,14 @@ describe("a withdrawn pending add on THORChain v1", () => {
   test("gives the refund rows, as Viewblock's does", () => {
     const add = {
       ...toViewblockTx(
-        toV1Tx(deposit("A1", "+:BTC.BTC:bc1-pair", feeEvents(), [{ asset: "THOR.RUNE", amount: "5000000000" }])),
+        toV1Tx(
+          deposit(
+            "A1",
+            "+:BTC.BTC:bc1-pair",
+            [...feeEvents(), pending],
+            [{ asset: "THOR.RUNE", amount: "5000000000" }],
+          ),
+        ),
       ),
       timestamp: Date.parse("2023-09-01T10:00:00Z"),
     };
@@ -268,5 +289,74 @@ describe("a withdrawn pending add on THORChain v1", () => {
         ["fee", "RUNE", "0.02", ""],
       ],
     );
+  });
+});
+
+describe("THORChain v1 and Viewblock over a period that spans the cutoff", () => {
+  test("a tx both list from the cutoff on is kept once, from v1, paired with v1's add", () => {
+    const outbound = {
+      type: "outbound",
+      attributes: attributes({ chain: "THOR", to: SIGNER, coin: "4998000000 THOR.RUNE" }),
+    };
+    const add = () => ({
+      ...toViewblockTx(
+        toV1Tx(
+          deposit(
+            "A1",
+            "+:BTC.BTC:bc1-pair",
+            [...feeEvents(), pending],
+            [{ asset: "THOR.RUNE", amount: "5000000000" }],
+          ),
+        ),
+      ),
+      timestamp: Date.parse("2023-09-01T10:00:00Z"),
+    });
+    const withdraw = () => ({
+      ...toViewblockTx(toV1Tx(deposit("W1", "-:BTC.BTC:10000", [...feeEvents(), outbound]))),
+      timestamp: Date.parse("2023-09-02T10:00:00Z"),
+    });
+    const noop = () => toViewblockTx(toV1Tx(deposit("N1", "UNBOND:thor1-node:100", feeEvents())));
+    const of = (source: RawBundle["source"], data: ViewblockTx): RawBundle => ({
+      source,
+      protocol: "thorchain",
+      wallet: SIGNER,
+      data,
+      thornodeTxs: [],
+      cosmosTxs: [],
+    });
+    const v1Add = of("thornode-v1", add());
+    const kept = selectSends([
+      of("viewblock", add()),
+      of("viewblock", withdraw()),
+      of("viewblock", noop()),
+      v1Add,
+      of("thornode-v1", withdraw()),
+      of("thornode-v1", noop()),
+    ]).bundles;
+    assert.deepEqual(
+      kept.map((b) => [b.source, (b.data as ViewblockTx).hash, b.pendingAdd?.hash]),
+      [
+        ["thornode-v1", "W1", "A1"],
+        ["thornode-v1", "N1", undefined],
+      ],
+    );
+    assert.equal(kept[0].pendingAdd, v1Add.data);
+  });
+});
+
+describe("an add or a withdrawal that did nothing", () => {
+  test("is a deposit that did nothing: one fee row", () => {
+    for (const memo of ["-:BTC.BTC:10000", "WITHDRAW:BTC.BTC:10000", "+:BTC.BTC"]) {
+      const data = toViewblockTx(toV1Tx(deposit("N1", memo, feeEvents())));
+      assert.deepEqual(data.types, ["deposit", "noop"], memo);
+      const [kept] = selectSends([
+        { source: "thornode-v1", protocol: "thorchain", wallet: SIGNER, data, thornodeTxs: [], cosmosTxs: [] },
+      ]).bundles;
+      assert.deepEqual(
+        runBundle(kept, THORCHAIN).rows.map((row) => [row.type, row.baseAmount]),
+        [["fee", "0.02"]],
+        memo,
+      );
+    }
   });
 });

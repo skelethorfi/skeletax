@@ -52,15 +52,18 @@ leaves no action, and a pending add that is withdrawn is dropped with its
 withdrawal (`fees.md`, Pending adds that are withdrawn). Each still paid the
 native fee. THORChain's v1 archive (THORNode up to block 17,562,001, the
 2024-09-04 fork) indexes every successful native tx by its signer
-(`/cosmos/tx/v1beta1/txs?events=message.sender='<address>'`). Failed txs are
-not in that index; Midgard lists them (Failed sends, below). The current chain
+(`/cosmos/tx/v1beta1/txs?events=message.sender='<address>'`). Only its
+successful txs are read; Midgard lists failed ones (Failed sends, below). The current chain
 has no such index, so after the fork these txs are not exported.
 
 A run that exports a period from 2022-04-01 to the fork lists, for each
 THORChain wallet, every tx it signed on v1 (the `thornode-v1-sends` list,
 `snapshots.md`; fetched once, as v1 does not change). Txs before 2022-04-01
-are left to Viewblock, and a tx whose hash Midgard lists is dropped, so
-nothing gives a second row. Of the rest:
+are left to Viewblock, and Viewblock's copies of later txs are dropped (a
+period that spans the cutoff reads both); a tx whose hash Midgard lists is
+dropped too, so nothing gives a second row. A deposit that did nothing is one
+even when its memo asks for an add or a withdrawal (one sent again after the
+position was out). Of the rest:
 
 | Tx                                                                                                                      | Gives                                                                                                        |
 | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
@@ -73,9 +76,18 @@ E.g. an `UNBOND` sent when the bond could not be unbonded, or a withdrawal
 sent again after the position was out, did nothing. The amounts are observed
 (the archive's events); the time is the block's, to the millisecond (a tx's
 listed time is to the second, so the run reads the block header of each tx
-that gives a row: `thornode-v1-block`). A store made before this source has
-no `thornode-v1-sends` list, so `--offline` on it fails until one online run
-fetches the lists.
+that gives a row: `thornode-v1-block`).
+
+The archive is best-effort, as Viewblock is: nothing it does ends a run, and
+each case is a warning in the run summary.
+
+| Case                                  | The run                                                                                                                                           |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A wallet's complete list is stored    | uses it and does not fetch it again (v1 does not change); `--refetch-all` fetches it again                                                        |
+| The listing ends short of its `total` | keeps what was listed, marked short, and fetches it again on the next default run                                                                 |
+| A list cannot be fetched              | uses the list stored by an earlier run; with none, the wallet's deposits that did nothing and withdrawn pending adds are missing                  |
+| A block time cannot be read           | that tx's rows keep the listed time, to the second, so a row entered by hand at the block's time is not overtaken (summ-sync holds it as overlap) |
+| `--offline` with no list stored       | the wallet is not fetched, as for every source (`run-summary.md`, Not fetched): a store made before this source needs one online run              |
 
 Maya sends (Maya's Midgard `send`, e.g. of `CACAO` or the MAYA token) are
 mapped the same way, from Maya's Midgard, with Maya's native fee (below).

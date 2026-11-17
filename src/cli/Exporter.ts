@@ -107,6 +107,8 @@ export class Exporter {
   notFinal: NotFinal[] = [];
   // Wallets skipped because a source failed for them, filled by collectBundles
   notFetched: NotFetched[] = [];
+  // THORChain v1 txs whose block time could not be read, filled by collectBundles
+  private blockTimeWarnings: string[] = [];
   private readonly today: Date;
   private readonly store: RecordStore;
 
@@ -260,10 +262,23 @@ export class Exporter {
         .flatMap((bundle) => [bundle.data as ViewblockTx, ...(bundle.pendingAdd ? [bundle.pendingAdd] : [])])
         .filter((tx) => v1Txs.has(tx)),
     );
+    const failed: string[] = [];
     await mapConcurrent([...txs], BUNDLE_CONCURRENCY, async (tx) => {
-      const block = await this.thornodeV1.getBlockTime(tx.height, new Date(tx.timestamp));
-      atBlockTime(tx, Date.parse(block.time));
+      try {
+        const block = await this.thornodeV1.getBlockTime(tx.height, new Date(tx.timestamp));
+        atBlockTime(tx, Date.parse(block.time));
+      } catch (error) {
+        failed.push(`${tx.hash} (${error instanceof Error ? error.message : String(error)})`);
+      }
     });
+
+    // Its rows keep the listed time, to the second: a row entered by hand at the block's time is not overtaken
+    if (failed.length > 0) {
+      this.blockTimeWarnings.push(
+        `THORChain v1: could not read the block time of ${failed.length} txs; their rows are at the second the archive ` +
+          `listed (docs/specs/sends.md, Txs Midgard omits): ${failed.join(", ")}`,
+      );
+    }
   }
 
   // Lists the skipped wallets in the run's folder for summ-sync; nothing is written when every wallet was fetched
@@ -388,6 +403,7 @@ export class Exporter {
     this.endWarnings.push(...distributors.warnings);
     // Viewblock is best-effort: what it could not give is said here, not fatal (docs/specs/sends.md)
     this.endWarnings.push(...this.viewblock.warnings());
+    this.endWarnings.push(...this.thornodeV1.warnings(), ...this.blockTimeWarnings);
 
     return rows;
   }

@@ -152,11 +152,10 @@ export function selectSends(bundles: RawBundle[]): {
   const isOutbound = (bundle: RawBundle) =>
     midgardSend(bundle) && (actionOutbounds.has(sendTxid(bundle)) || actionInbounds.has(payoutFor(bundle) ?? ""));
   // Viewblock's txs before the cutoff; THORChain v1's from it on (docs/specs/sends.md, Txs Midgard omits)
-  const v1Hashes = new Set(
-    bundles.filter((bundle) => bundle.source === "thornode-v1").map((bundle) => (bundle.data as ViewblockTx).hash),
-  );
+  // (by the tx itself, not its hash: both list a tx of a period that spans the cutoff)
+  const v1Txs = new Set(bundles.filter((bundle) => bundle.source === "thornode-v1").map((bundle) => bundle.data));
   const unlisted = (tx: ViewblockTx) =>
-    !listed.has(tx.hash.toUpperCase()) && (v1Hashes.has(tx.hash) ? tx.timestamp >= cutoff : tx.timestamp < cutoff);
+    !listed.has(tx.hash.toUpperCase()) && (v1Txs.has(tx) ? tx.timestamp >= cutoff : tx.timestamp < cutoff);
   // A withdrawal of a pending add is kept with that add (docs/specs/fees.md, Pending adds that are withdrawn)
   const viewblockTxs = bundles.filter((bundle) => bundle.source === "viewblock" || bundle.source === "thornode-v1");
   // Each add pays back one withdrawal: the earliest withdrawals pair first

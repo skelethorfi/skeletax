@@ -335,7 +335,7 @@ wallet, so it is not in that list.
 
 **Which txs.** Only a withdrawal (`types` `liquidity`, `withdraw`) that
 Midgard does not list, signed by the wallet: Viewblock's dated before
-2022-04-01, or a v1 tx from then on. It is paired with the latest add before it, from the same source, to the same
+2022-04-01, or a v1 tx from then on. It is paired with the latest add before it (Viewblock's before 2022-04-01, v1's from then on) to the same
 pool (a token's contract may be shortened to its end, but a pool named
 without one is another pool), which
 Midgard does not list either, whose memo names the wallet (or is sent from

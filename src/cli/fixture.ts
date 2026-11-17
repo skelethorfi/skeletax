@@ -130,7 +130,8 @@ async function fetchInput(txid: string, protocol: Protocol, index?: number): Pro
 
 // A THORChain v1 tx Midgard does not list (docs/specs/sends.md, Txs Midgard omits), as the exporter gives it: the
 // signer's v1 txs through ThornodeV1Source and selectSends (a withdrawal with the pending add it pays back), at their
-// blocks' times
+// blocks' times. Unlike a run, it reads no Midgard list, so an add Midgard lists (one completed later) can still pair:
+// check a pair's add against Midgard before saving the case
 async function fetchV1Input(txid: string): Promise<GoldenCaseInput> {
   const store = new RecordStore(fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-fixture-")));
   const v1 = new ThornodeV1(store);

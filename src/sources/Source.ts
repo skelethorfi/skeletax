@@ -422,16 +422,19 @@ export class ThornodeV1Source implements Source {
     }
 
     const txs = await this.v1.getSends(wallet);
-    return txs
-      .filter((tx) => tx.timestamp >= VIEWBLOCK_SENDS_BEFORE)
-      .map((tx) => ({
-        source: "thornode-v1",
-        protocol: THORCHAIN.id,
-        wallet,
-        data: toViewblockTx(tx),
-        thornodeTxs: [],
-        cosmosTxs: [],
-      }));
+    return (
+      txs
+        // Successful txs from the cutoff on (Viewblock's before it; Midgard lists failed txs)
+        .filter((tx) => tx.code === 0 && tx.timestamp >= VIEWBLOCK_SENDS_BEFORE)
+        .map((tx) => ({
+          source: "thornode-v1",
+          protocol: THORCHAIN.id,
+          wallet,
+          data: toViewblockTx(tx),
+          thornodeTxs: [],
+          cosmosTxs: [],
+        }))
+    );
   }
 }
 

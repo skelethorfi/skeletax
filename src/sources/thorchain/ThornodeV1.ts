@@ -81,10 +81,18 @@ export function toV1Tx(response: any): V1Tx {
   };
 }
 
+// The archive is best-effort, as Viewblock is (docs/specs/sends.md, Txs Midgard omits): a failure is a warning for
+// the run summary, not the end of the run
 export class ThornodeV1 {
   private store: RecordStore;
+  private listWarnings: string[] = [];
   constructor(store: RecordStore) {
     this.store = store;
+  }
+
+  // What the run should say about the archive: lists that could not be fetched or came back short
+  warnings(): string[] {
+    return [...this.listWarnings];
   }
 
   // Every successful native tx the address signed on the v1 chain, through the store (fetched once)
@@ -94,12 +102,22 @@ export class ThornodeV1 {
     }
 
     const url = `${API_URLS.thornodeArchive}/cosmos/tx/v1beta1/txs?events=message.sender='${address}'`;
-    return this.store.list(
-      "thornode-v1-sends",
-      address,
-      async () => ({ ...(await this.fetchSends(address)), url }),
-      V1_SENDS_LIST,
-    );
+    return this.store.list("thornode-v1-sends", address, async () => ({ ...(await this.fetchSends(address)), url }), {
+      ...V1_SENDS_LIST,
+      onIncomplete: (incomplete) =>
+        this.listWarnings.push(
+          `THORChain v1's list of the txs ${address} signed is short (${incomplete}); a deposit that did nothing or a ` +
+            "withdrawn pending add, which Midgard does not list, may be missing (docs/specs/sends.md, Txs Midgard omits)",
+        ),
+      onFetchError: (error, stored) =>
+        this.listWarnings.push(
+          `THORChain v1: could not list the txs ${address} signed (${reason(error)}); ` +
+            (stored
+              ? "using the list stored by an earlier run"
+              : "its deposits that did nothing and withdrawn pending adds from 2022-04-01, which Midgard does not list, are missing") +
+            " (docs/specs/sends.md, Txs Midgard omits)",
+        ),
+    });
   }
 
   // A block's time, through the store
@@ -125,6 +143,7 @@ export class ThornodeV1 {
 
   private async fetchSends(address: string): Promise<{ data: V1Tx[]; incomplete?: string }> {
     const txs: V1Tx[] = [];
+    let seen = 0;
 
     for (let page = 0; page < MAX_PAGES; page++) {
       const response = (
@@ -141,10 +160,12 @@ export class ThornodeV1 {
         toV1Tx({ ...tx, tx: response.txs?.[i] ?? tx.tx }),
       );
       txs.push(...listed.filter((tx: V1Tx) => tx.height <= THORNODE_V1_LAST_HEIGHT));
+      seen += listed.length;
       const total = Number(response.pagination?.total ?? 0);
 
-      if (listed.length < PAGE || (total && (page + 1) * PAGE >= total)) {
-        return { data: txs };
+      if (listed.length < PAGE || (total && seen >= total)) {
+        // A page that came back short of the total the archive reports
+        return total && seen < total ? { data: txs, incomplete: `${seen} of ${total} txs` } : { data: txs };
       }
     }
 
@@ -188,12 +209,13 @@ export function toViewblockTx(tx: V1Tx, time: number = Date.parse(tx.timestamp))
   const types =
     tx.type === "MsgSend"
       ? ["send"]
-      : ["+", "ADD", "A"].includes(action)
-        ? ["liquidity", "add"]
-        : ["-", "WD", "WITHDRAW"].includes(action)
-          ? ["liquidity", "withdraw"]
-          : isNoopDeposit(tx)
-            ? ["deposit", "noop"]
+      : // First: an add or a withdrawal that did nothing paid only its fee (a pending withdrawal has an outbound)
+        isNoopDeposit(tx)
+        ? ["deposit", "noop"]
+        : ["+", "ADD", "A"].includes(action)
+          ? ["liquidity", "add"]
+          : ["-", "WD", "WITHDRAW"].includes(action)
+            ? ["liquidity", "withdraw"]
             : ["deposit"];
   const outbounds = tx.events
     .filter((event) => event.type === "outbound" && event.attributes.coin)
@@ -233,4 +255,8 @@ export function atBlockTime(tx: ViewblockTx, time: number): void {
   for (const outbound of tx.outbounds ?? []) {
     outbound.timestamp = time;
   }
+}
+
+function reason(error: any): string {
+  return String(error?.response?.status ?? error?.code ?? error?.message ?? error);
 }
