@@ -1,0 +1,34 @@
+wallet: thor1sfr4x5pfdvj8tvgm8wzgvkv4gahgfls5fjdtda
+timestamp: 2022-07-09T16:28:06.032Z
+type: failed-out
+baseCurrency: RUNE
+baseAmount: "20.94278128"
+feeCurrency: RUNE
+feeAmount: "0.02"
+from: thor1sfr4x5pfdvj8tvgm8wzgvkv4gahgfls5fjdtda
+to: thorchain
+blockchain: THORChain
+description: "refund (D7A7BD2817AB126BE784C6EB1528FF0D6A26EE781253CB1F95E1F4D272FF5A44): pending add withdrawn (FE4FF220C14FC7574204789BA4D5407CAB584F8A5B471BDDA0F3F7CC1B0D0096)"
+id: 2022-07-09T16:28:06.032Z.out.4d982bd5bc47
+---
+wallet: thor1sfr4x5pfdvj8tvgm8wzgvkv4gahgfls5fjdtda
+timestamp: 2022-07-09T16:28:06.032Z
+type: fee
+baseCurrency: RUNE
+baseAmount: "0.02"
+from: thor1sfr4x5pfdvj8tvgm8wzgvkv4gahgfls5fjdtda
+to: thorchain
+blockchain: THORChain
+description: "refund (D7A7BD2817AB126BE784C6EB1528FF0D6A26EE781253CB1F95E1F4D272FF5A44): kept by thorchain, 20.94278128 RUNE sent, 20.92278128 RUNE returned"
+id: 2022-07-09T16:28:06.032Z.unreturned.31d00477dbd2
+---
+wallet: thor1sfr4x5pfdvj8tvgm8wzgvkv4gahgfls5fjdtda
+timestamp: 2022-07-09T16:36:03.263Z
+type: fee
+baseCurrency: RUNE
+baseAmount: "0.02"
+from: thor1sfr4x5pfdvj8tvgm8wzgvkv4gahgfls5fjdtda
+to: thorchain
+blockchain: THORChain
+description: "refund (D7A7BD2817AB126BE784C6EB1528FF0D6A26EE781253CB1F95E1F4D272FF5A44): fee of the withdrawal request FE4FF220C14FC7574204789BA4D5407CAB584F8A5B471BDDA0F3F7CC1B0D0096"
+id: 2022-07-09T16:28:06.032Z.request.81997f502479

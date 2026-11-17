@@ -1,0 +1,56 @@
+{
+  "description": "A THORChain v1 tx Midgard does not list: liquidity withdraw, memo -:BTC.BTC:10000",
+  "source": "thornode-v1",
+  "wallet": "thor1sfr4x5pfdvj8tvgm8wzgvkv4gahgfls5fjdtda",
+  "data": {
+    "hash": "FE4FF220C14FC7574204789BA4D5407CAB584F8A5B471BDDA0F3F7CC1B0D0096",
+    "timestamp": 1657384563263,
+    "height": 6358348,
+    "blockIndex": 0,
+    "code": 0,
+    "status": "success",
+    "types": [
+      "liquidity",
+      "withdraw"
+    ],
+    "memo": "-:BTC.BTC:10000",
+    "signer": "thor1sfr4x5pfdvj8tvgm8wzgvkv4gahgfls5fjdtda",
+    "input": {
+      "chain": "THOR",
+      "asset": "THOR.RUNE",
+      "amount": "0"
+    },
+    "msgs": [],
+    "outbounds": [
+      {
+        "chain": "THOR",
+        "from": "thor1g98cy3n9mmjrpn0sxmn63lztelera37n8n67c0",
+        "to": "thor1sfr4x5pfdvj8tvgm8wzgvkv4gahgfls5fjdtda",
+        "amount": "2092278128",
+        "asset": "THOR.RUNE",
+        "timestamp": 1657384563263
+      }
+    ]
+  },
+  "pendingAdd": {
+    "hash": "D7A7BD2817AB126BE784C6EB1528FF0D6A26EE781253CB1F95E1F4D272FF5A44",
+    "timestamp": 1657384086032,
+    "height": 6358268,
+    "blockIndex": 0,
+    "code": 0,
+    "status": "success",
+    "types": [
+      "liquidity",
+      "add"
+    ],
+    "memo": "+:BTC.BTC:bc1qpqh6h69xkk2g383px9vdt8nwh7el3rt9mg7unc",
+    "signer": "thor1sfr4x5pfdvj8tvgm8wzgvkv4gahgfls5fjdtda",
+    "input": {
+      "chain": "THOR",
+      "asset": "THOR.RUNE",
+      "amount": "2094278128"
+    },
+    "msgs": [],
+    "outbounds": []
+  }
+}

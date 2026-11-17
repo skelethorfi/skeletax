@@ -1,0 +1,51 @@
+id: thornode-v1/FE4FF220C14FC7574204789BA4D5407CAB584F8A5B471BDDA0F3F7CC1B0D0096
+protocol: thorchain
+kind: refund
+status: success
+time: 2022-07-09T16:28:06.032Z
+memo: +:BTC.BTC:bc1qpqh6h69xkk2g383px9vdt8nwh7el3rt9mg7unc
+legs:
+  - direction: out
+    wallet: thor1sfr4x5pfdvj8tvgm8wzgvkv4gahgfls5fjdtda
+    asset:
+      notation: THOR.RUNE
+      kind: native
+    role: principal
+    basis: observed
+    txid: D7A7BD2817AB126BE784C6EB1528FF0D6A26EE781253CB1F95E1F4D272FF5A44
+    amount: "20.94278128"
+    decimals: 8
+  - direction: out
+    wallet: thor1sfr4x5pfdvj8tvgm8wzgvkv4gahgfls5fjdtda
+    asset:
+      notation: THOR.RUNE
+      kind: native
+    role: gas
+    basis: default
+    txid: D7A7BD2817AB126BE784C6EB1528FF0D6A26EE781253CB1F95E1F4D272FF5A44
+    amount: "0.02"
+    decimals: 8
+  - direction: in
+    wallet: thor1sfr4x5pfdvj8tvgm8wzgvkv4gahgfls5fjdtda
+    asset:
+      notation: THOR.RUNE
+      kind: native
+    role: returned
+    basis: observed
+    amount: "20.92278128"
+    decimals: 8
+  - direction: out
+    wallet: thor1sfr4x5pfdvj8tvgm8wzgvkv4gahgfls5fjdtda
+    asset:
+      notation: THOR.RUNE
+      kind: native
+    role: gas
+    basis: default
+    txid: FE4FF220C14FC7574204789BA4D5407CAB584F8A5B471BDDA0F3F7CC1B0D0096
+    amount: "0.02"
+    decimals: 8
+prices: []
+details:
+  reason: pending add withdrawn (FE4FF220C14FC7574204789BA4D5407CAB584F8A5B471BDDA0F3F7CC1B0D0096)
+  returnTime: 2022-07-09T16:36:03.263Z
+  requestTime: 2022-07-09T16:36:03.263Z
