@@ -3,7 +3,8 @@ import fs from "fs-extra";
 import os from "os";
 import path from "path";
 import { http } from "../src/sources/http.ts";
-import { RecordStore } from "../src/sources/store/RecordStore.ts";
+import { RecordStore, StoreMissError } from "../src/sources/store/RecordStore.ts";
+import { SnapshotManifest } from "../src/sources/store/SnapshotManifest.ts";
 import assert from "node:assert/strict";
 import { atBlockTime, isNoopDeposit, ThornodeV1, toV1Tx, toViewblockTx } from "../src/sources/thorchain/ThornodeV1.ts";
 import { type RawBundle, selectSends } from "../src/sources/RawBundle.ts";
@@ -367,7 +368,7 @@ describe("an add or a withdrawal that did nothing", () => {
 });
 
 describe("a v1 add before the cutoff", () => {
-  test("pays back a v1 withdrawal after it; a deposit that did nothing before it gives nothing", () => {
+  test("is not read: a v1 withdrawal after it finds no add (Viewblock gives it in a run that reads it); a deposit that did nothing before it gives nothing", () => {
     const of = (data: ViewblockTx): RawBundle => ({
       source: "thornode-v1",
       protocol: "thorchain",
@@ -406,7 +407,7 @@ describe("a v1 add before the cutoff", () => {
         (b.data as ViewblockTx).hash,
         b.pendingAdd?.hash,
       ]),
-      [["W1", "A1"]],
+      [["W1", undefined]],
     );
   });
 });
@@ -452,5 +453,35 @@ describe("ThornodeV1.getSends", () => {
     const v1 = new ThornodeV1(store());
     assert.deepEqual(await v1.getSends(SIGNER), []);
     assert.match(v1.warnings()[0], /could not list the txs thor1-v1-signer signed \(400\).*are missing/);
+  });
+});
+
+describe("ThornodeV1.getBlockTime", () => {
+  afterEach(() => mock.restoreAll());
+
+  test("a block time that cannot be fetched is a warning; a replay of the run skips it too", async () => {
+    mock.method(http, "get", async (url: string) => {
+      if (url.endsWith("/2")) {
+        throw Object.assign(new Error("Bad Request"), { response: { status: 400 } });
+      }
+      return { data: { block: { header: { time: "2023-09-01T10:00:00.123456789Z" } } } };
+    });
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-v1-"));
+    const manifest = new SnapshotManifest();
+    const v1 = new ThornodeV1(new RecordStore(dir, { manifest }));
+    assert.equal((await v1.getBlockTime(1))?.time, "2023-09-01T10:00:00.123456789Z");
+    assert.equal(await v1.getBlockTime(2), undefined);
+    assert.match(v1.warnings().join("\n"), /could not fetch the time of 1 blocks.*2 \(400\)/);
+    manifest.write(path.join(dir, "run"));
+
+    const replay = new ThornodeV1(new RecordStore(dir, { replay: SnapshotManifest.load(path.join(dir, "run")) }));
+    assert.equal((await replay.getBlockTime(1))?.time, "2023-09-01T10:00:00.123456789Z");
+    assert.equal(await replay.getBlockTime(2), undefined);
+    assert.match(replay.warnings().join("\n"), /2 \(skipped by the replayed run\)/);
+  });
+
+  test("offline, a block time not stored is an error", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-v1-"));
+    await assert.rejects(new ThornodeV1(new RecordStore(dir, { offline: true })).getBlockTime(3), StoreMissError);
   });
 });

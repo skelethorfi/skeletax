@@ -335,7 +335,7 @@ wallet, so it is not in that list.
 
 **Which txs.** Only a withdrawal (`types` `liquidity`, `withdraw`) that
 Midgard does not list, signed by the wallet: Viewblock's dated before
-2022-04-01, or a v1 tx from then on. It is paired with the latest add before it (Viewblock's before 2022-04-01, v1's from then on) to the same
+2022-04-01, or a v1 tx from then on. It is paired with the latest add before it that Midgard does not list (Viewblock's dated before 2022-04-01, or v1's from then on) to the same
 pool (a token's contract may be shortened to its end, but a pool named
 without one is another pool), which
 Midgard does not list either, whose memo names the wallet (or is sent from
@@ -361,10 +361,13 @@ the protocol.
 | THORChain side (an add of RUNE)  | `FailedOut` of the RUNE added, fee 0.02 RUNE; `Fee` of sent − returned; `Fee` 0.02 RUNE (the request)                                                                    |
 
 **Limitation: some pairs are not exported.** A RUNE pair whose withdrawal is
-from 2022-04-01 to the fork is exported from the v1 archive (its add may be
-earlier on v1, from March 2022). Not exported: an L1 pair in that
-period (its withdrawal gives a warning: no add found), and any pair after the
-fork, as the current chain lists no tx by signer. What is missing:
+from 2022-04-01 to the fork is exported from the v1 archive, with its add from
+v1 or, before 2022-04-01, from Viewblock (a run that exports a period before
+then). Not exported: an L1 pair in that period (its withdrawal gives a warning:
+no add found); a RUNE add before 2022-04-01 withdrawn after it, in a run that
+starts after 2022-04-01 (it reads no Viewblock, and v1 is read from the cutoff
+on; the archive starts in late March 2022, so only such adds of its first days);
+and any pair after the fork, as the current chain lists no tx by signer. What is missing:
 
 - THORChain side: the fees only, 0.06 RUNE per pair at the default native
   fees (the add's, the request's, and what the protocol kept). Apart from

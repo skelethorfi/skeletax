@@ -160,7 +160,13 @@ async function fetchV1Input(txid: string): Promise<GoldenCaseInput> {
   }
 
   for (const each of [bundle.data as ViewblockTx, ...(bundle.pendingAdd ? [bundle.pendingAdd] : [])]) {
-    atBlockTime(each, Date.parse((await v1.getBlockTime(each.height)).time));
+    const block = await v1.getBlockTime(each.height);
+
+    if (!block) {
+      throw new Error(v1.warnings().join("\n"));
+    }
+
+    atBlockTime(each, Date.parse(block.time));
   }
 
   const data = bundle.data as ViewblockTx;

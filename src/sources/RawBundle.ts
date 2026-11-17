@@ -175,10 +175,7 @@ export function selectSends(bundles: RawBundle[]): {
         bundle.data as ViewblockTx,
         wallet,
         bundle.wallet,
-        // A v1 add before the cutoff pays back a v1 withdrawal after it, in a run that does not read Viewblock
-        (tx) =>
-          (unlisted(tx) || (v1Txs.has(tx) && !listed.has(tx.hash.toUpperCase()))) &&
-          !used.has(`${bundle.wallet}:${tx.hash}`),
+        (tx) => unlisted(tx) && !used.has(`${bundle.wallet}:${tx.hash}`),
       );
       if (add) {
         paired.set(bundle, add);

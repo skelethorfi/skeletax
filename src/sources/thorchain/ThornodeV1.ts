@@ -1,5 +1,6 @@
 import { http } from "../http.ts";
-import { RecordStore } from "../store/RecordStore.ts";
+import { RecordStore, StoreMissError } from "../store/RecordStore.ts";
+import { InputError } from "../../utils/InputError.ts";
 import { V1_BLOCK_TIME_RULES, V1_SENDS_LIST } from "../store/Sources.ts";
 import { API_URLS } from "../../config/apiUrls.ts";
 import { THORNODE_V1_LAST_HEIGHT } from "./ThornodeService.ts";
@@ -86,13 +87,25 @@ export function toV1Tx(response: any): V1Tx {
 export class ThornodeV1 {
   private store: RecordStore;
   private listWarnings: string[] = [];
+  // Blocks whose time could not be fetched
+  private blockWarnings: string[] = [];
   constructor(store: RecordStore) {
     this.store = store;
   }
 
-  // What the run should say about the archive: lists that could not be fetched or came back short
+  // What the run should say about the archive: lists that could not be fetched or came back short, and blocks
+  // whose time could not be fetched (their txs' rows keep the listed second)
   warnings(): string[] {
-    return [...this.listWarnings];
+    return [
+      ...this.listWarnings,
+      ...(this.blockWarnings.length
+        ? [
+            `THORChain v1: could not fetch the time of ${this.blockWarnings.length} blocks; their txs' rows are at the ` +
+              `second the archive listed, so a row entered by hand at the block's time is not overtaken ` +
+              `(docs/specs/sends.md, Txs Midgard omits): ${this.blockWarnings.join(", ")}`,
+          ]
+        : []),
+    ];
   }
 
   // Every successful native tx the address signed on the v1 chain, through the store (fetched once)
@@ -120,19 +133,38 @@ export class ThornodeV1 {
     });
   }
 
-  // A block's time, through the store
-  async getBlockTime(height: number, date?: Date): Promise<V1BlockTime> {
-    return this.store.record(
-      "thornode-v1-block",
-      String(height),
-      async () => {
-        const url = `${API_URLS.thornodeArchive}/cosmos/base/tendermint/v1beta1/blocks/${height}`;
-        const header = (await http.get(url)).data.block.header;
-        return { data: { height, time: header.time }, url };
-      },
-      V1_BLOCK_TIME_RULES,
-      date,
-    );
+  // A block's time, through the store; undefined when it cannot be fetched (a warning, and the replay of this run
+  // skips it too), as for Viewblock's inbounds. Not stored when offline or replayed, or not matching the replayed run,
+  // is an error
+  async getBlockTime(height: number, date?: Date): Promise<V1BlockTime | undefined> {
+    const key = String(height);
+
+    if (this.store.skippedInReplay("thornode-v1-block", key)) {
+      this.blockWarnings.push(`${key} (skipped by the replayed run)`);
+      return undefined;
+    }
+
+    try {
+      return await this.store.record(
+        "thornode-v1-block",
+        key,
+        async () => {
+          const url = `${API_URLS.thornodeArchive}/cosmos/base/tendermint/v1beta1/blocks/${height}`;
+          const header = (await http.get(url)).data.block.header;
+          return { data: { height, time: header.time }, url };
+        },
+        V1_BLOCK_TIME_RULES,
+        date,
+      );
+    } catch (error) {
+      if (error instanceof StoreMissError || error instanceof InputError) {
+        throw error;
+      }
+
+      this.store.recordSkipped("thornode-v1-block", key);
+      this.blockWarnings.push(`${key} (${reason(error)})`);
+      return undefined;
+    }
   }
 
   // One tx by hash, unstored (the fixture tool: the tx may be anyone's)
