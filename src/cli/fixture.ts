@@ -4,7 +4,7 @@ import path from "path";
 import { type Action, Configuration, DefaultApi } from "@xchainjs/xchain-midgard";
 import { THORNODE_V1_LAST_HEIGHT, ThornodeService } from "../sources/thorchain/ThornodeService.ts";
 import { atBlockTime, ThornodeV1 } from "../sources/thorchain/ThornodeV1.ts";
-import { selectSends } from "../sources/RawBundle.ts";
+import { selectSends, VIEWBLOCK_SENDS_BEFORE } from "../sources/RawBundle.ts";
 import type { ViewblockTx } from "../sources/viewblock/index.ts";
 import { RecordStore } from "../sources/store/RecordStore.ts";
 import { MayanodeService } from "../sources/maya/MayanodeService.ts";
@@ -156,7 +156,11 @@ async function fetchV1Input(txid: string): Promise<GoldenCaseInput> {
   }
 
   if (!bundle) {
-    throw new Error(`the THORChain v1 tx ${mask(txid)} gives no rows (docs/specs/sends.md, Txs Midgard omits)`);
+    throw new Error(
+      tx.timestamp < VIEWBLOCK_SENDS_BEFORE
+        ? `the THORChain v1 tx ${mask(txid)} is before ${VIEWBLOCK_SENDS_BEFORE}, which runs read from Viewblock (docs/specs/sends.md)`
+        : `the THORChain v1 tx ${mask(txid)} gives no rows (docs/specs/sends.md, Txs Midgard omits)`,
+    );
   }
 
   for (const each of [bundle.data as ViewblockTx, ...(bundle.pendingAdd ? [bundle.pendingAdd] : [])]) {

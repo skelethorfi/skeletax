@@ -76,7 +76,10 @@ E.g. an `UNBOND` sent when the bond could not be unbonded, or a withdrawal
 sent again after the position was out, did nothing. The amounts are observed
 (the archive's events); the time is the block's, to the millisecond (a tx's
 listed time is to the second, so the run reads the block header of each tx
-that gives a row in its periods: `thornode-v1-block`).
+whose rows are dated in its periods, a pending add by its own time:
+`thornode-v1-block`). The 0.02 RUNE of a deposit that did nothing is checked
+against its transfer; a pending pair's native fees (the add's and the
+request's) are the default, as for Viewblock's.
 
 The archive is best-effort, as Viewblock is: nothing it does ends a run, and
 each case is a warning in the run summary.

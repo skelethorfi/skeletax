@@ -124,7 +124,9 @@ export const VIEWBLOCK_SENDS_BEFORE = "2022-04-01";
 // - its outbound: RUNE a Maya vault pays out on THORChain, named by the action's outbound txid, or by a
 //   'REFUND:<txid>' / 'OUT:<txid>' memo naming the action's inbound txid. Maya's Midgard can leave a refund it
 //   paid this way pending with no outbound; the send is then the refund's outbound, so the refund is paid.
-// Of Viewblock's txs, only sends from before VIEWBLOCK_SENDS_BEFORE that Midgard does not list are kept.
+// Of Viewblock's txs, only sends from before VIEWBLOCK_SENDS_BEFORE that Midgard does not list are kept; of THORChain
+// v1's, the txs Midgard does not list from then on (docs/specs/sends.md, Txs Midgard omits).
+// dropped.viewblock: the Viewblock and v1 txs not kept.
 export function selectSends(bundles: RawBundle[]): {
   bundles: RawBundle[];
   dropped: { inbound: number; outbound: number; viewblock: number };
