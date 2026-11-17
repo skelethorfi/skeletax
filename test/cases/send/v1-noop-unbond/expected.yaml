@@ -1,0 +1,10 @@
+wallet: thor1lnre6rd4m2fnrpemsmffksvw7wm65gwfcvfa35
+timestamp: 2023-09-26T14:53:39.365Z
+type: fee
+baseCurrency: RUNE
+baseAmount: "0.02"
+from: thor1lnre6rd4m2fnrpemsmffksvw7wm65gwfcvfa35
+to: thorchain
+blockchain: THORChain
+description: "Fee: unbond that did nothing (UNBOND:thor1agftrgu74z84hef6dt6ykhe7cmjf3f8dcpkfun:3800000000000); 8688A0D9A07EA362528DEE9441E9511439267C7CD6E75DC196448E3A2D0BF4FA"
+id: 2023-09-26T14:53:39.365Z.gas.90a40e173a95

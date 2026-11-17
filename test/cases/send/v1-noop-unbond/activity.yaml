@@ -1,0 +1,22 @@
+id: thornode-v1/8688A0D9A07EA362528DEE9441E9511439267C7CD6E75DC196448E3A2D0BF4FA
+protocol: thorchain
+kind: deposit.noop
+status: success
+time: 2023-09-26T14:53:39.365Z
+memo: UNBOND:thor1agftrgu74z84hef6dt6ykhe7cmjf3f8dcpkfun:3800000000000
+legs:
+  - direction: out
+    wallet: thor1lnre6rd4m2fnrpemsmffksvw7wm65gwfcvfa35
+    asset:
+      notation: THOR.RUNE
+      kind: native
+    role: gas
+    basis: default
+    txid: 8688A0D9A07EA362528DEE9441E9511439267C7CD6E75DC196448E3A2D0BF4FA
+    amount: "0.02"
+    decimals: 8
+prices: []
+details:
+  from: thor1lnre6rd4m2fnrpemsmffksvw7wm65gwfcvfa35
+  to: thorchain
+  action: unbond
