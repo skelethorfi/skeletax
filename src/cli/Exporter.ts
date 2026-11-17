@@ -22,8 +22,10 @@ import {
   MidgardSource,
   type Source,
   TcySource,
+  ThornodeV1Source,
   ViewblockSource,
 } from "../sources/Source.ts";
+import { atBlockTime, ThornodeV1, THORNODE_V1_UNTIL } from "../sources/thorchain/ThornodeV1.ts";
 import { mapConcurrent } from "../utils/Concurrency.ts";
 import { MayaDistributionService } from "../sources/maya/MayaDistributionService.ts";
 import { ageInDays, inboundSends, type NotFinal, type PendingAge, pendingAge } from "../sources/Pending.ts";
@@ -39,6 +41,7 @@ import {
   getBundleSourceName,
   type RawBundle,
   selectSends,
+  v1TxsToTime,
   VIEWBLOCK_SENDS_BEFORE,
 } from "../sources/RawBundle.ts";
 import { type BundleResult, collectRows, runBundle } from "../pipeline/run.ts";
@@ -95,6 +98,7 @@ export class Exporter {
   evmReceipts: EvmReceipts;
   tcyDistribution: TcyDistributionService;
   tcyClaims: TcyClaimService;
+  thornodeV1: ThornodeV1;
   // What the run printed that is worth keeping, written to its folder as summary.md
   report = new RunSummary();
   // Warnings for the end of the run, set by getRows
@@ -153,6 +157,7 @@ export class Exporter {
     this.evmReceipts = new EvmReceipts(store);
     this.tcyDistribution = new TcyDistributionService(store);
     this.tcyClaims = new TcyClaimService(store);
+    this.thornodeV1 = new ThornodeV1(store);
     this.thorchain = withAssetNames(THORCHAIN, this.config.assets);
     this.otherMidgards = (this.config.protocols ?? ["thorchain"])
       .map((id) => withAssetNames(getProtocol(id), this.config.assets))
@@ -169,11 +174,15 @@ export class Exporter {
   }
 
   // Each source's bundles for the wallet, in this order: Viewblock (only when the run exports a period
-  // before Midgard's send history is complete, docs/specs/sends.md), THORChain Midgard, other protocols'
+  // before Midgard's send history is complete, docs/specs/sends.md), THORChain v1's native txs (only when the run
+  // exports a period from then to the v1 chain's end, docs/specs/sends.md, Txs Midgard omits), THORChain Midgard, other protocols'
   // Midgards (e.g. Maya), TCY distributions, CACAO payouts to MAYA holders
   sources(): Source[] {
     return [
       ...(this.config.fromDate < VIEWBLOCK_SENDS_BEFORE ? [new ViewblockSource(this.viewblock)] : []),
+      ...(this.config.toDate >= VIEWBLOCK_SENDS_BEFORE && this.config.fromDate < THORNODE_V1_UNTIL
+        ? [new ThornodeV1Source(this.thornodeV1)]
+        : []),
       new MidgardSource(
         this.thorchain,
         this.midgard,
@@ -230,7 +239,26 @@ export class Exporter {
       bundles.push(...walletBundles);
     }
 
+    await this.withV1BlockTimes(bundles);
     return bundles;
+  }
+
+  // The v1 txs that give rows, and the pending adds paired with them, at their block's time to the millisecond (the
+  // archive lists a tx's time to the second; docs/specs/sends.md, Txs Midgard omits)
+  private async withV1BlockTimes(bundles: RawBundle[]) {
+    const day = 24 * 60 * 60 * 1000;
+    const txs = v1TxsToTime(
+      bundles,
+      new Date(this.config.fromDate).getTime() - day,
+      new Date(this.config.toDate).getTime() + 2 * day,
+    );
+    await mapConcurrent([...txs], BUNDLE_CONCURRENCY, async (tx) => {
+      const block = await this.thornodeV1.getBlockTime(tx.height, new Date(tx.timestamp));
+
+      if (block) {
+        atBlockTime(tx, Date.parse(block.time));
+      }
+    });
   }
 
   // Lists the skipped wallets in the run's folder for summ-sync; nothing is written when every wallet was fetched
@@ -355,6 +383,7 @@ export class Exporter {
     this.endWarnings.push(...distributors.warnings);
     // Viewblock is best-effort: what it could not give is said here, not fatal (docs/specs/sends.md)
     this.endWarnings.push(...this.viewblock.warnings());
+    this.endWarnings.push(...this.thornodeV1.warnings());
 
     return rows;
   }
@@ -521,7 +550,7 @@ export class Exporter {
   // Midgard actions and CACAO payouts to MAYA holders are mapped with their protocol's asset-name settings; Viewblock sends
   // and TCY distributions with THORChain's defaults
   private protocolFor(bundle: RawBundle): Protocol {
-    if (bundle.source === "viewblock" || bundle.source === "tcy") {
+    if (bundle.source === "viewblock" || bundle.source === "thornode-v1" || bundle.source === "tcy") {
       return THORCHAIN;
     }
 

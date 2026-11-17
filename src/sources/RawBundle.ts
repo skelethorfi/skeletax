@@ -17,7 +17,7 @@ import { type ProtocolId, THORCHAIN } from "../domain/Protocol.ts";
 import { isDonateAdd, mayaDistributionList, midgardActionKey, tcyList, VIEWBLOCK_LIST } from "./store/Sources.ts";
 import { getPayoutDate, type MayaDistributionPayout } from "./maya/MayaDistributionService.ts";
 
-export type BundleSource = "midgard" | "viewblock" | "tcy" | "maya-distribution";
+export type BundleSource = "midgard" | "viewblock" | "thornode-v1" | "tcy" | "maya-distribution";
 
 // Everything one action needs to be mapped: the listed item plus the related txs fetched for it.
 // The exporter and the fixture tool build bundles the same way (Source.ts); a golden case's
@@ -65,6 +65,7 @@ export function getBundleDate(bundle: RawBundle): Date {
     case "midgard":
       return getActionDate(bundle.data as Action);
     case "viewblock":
+    case "thornode-v1":
       return new Date((bundle.data as ViewblockTx).timestamp);
     case "tcy":
       return getDistributionDate(bundle.data as TcyDistributionItem);
@@ -86,6 +87,8 @@ export function getBundleKey(bundle: RawBundle): string {
       return `${getBundleSourceName(bundle)}/${midgardActionKey(bundle.data as Action)}`;
     case "viewblock":
       return `viewblock/${VIEWBLOCK_LIST.keyOf(bundle.data as ViewblockTx)}`;
+    case "thornode-v1":
+      return `thornode-v1/${(bundle.data as ViewblockTx).hash}`;
     case "tcy":
       return `tcy/${tcyList(bundle.wallet).keyOf(bundle.data as TcyDistributionItem)}`;
     case "maya-distribution":
@@ -121,7 +124,9 @@ export const VIEWBLOCK_SENDS_BEFORE = "2022-04-01";
 // - its outbound: RUNE a Maya vault pays out on THORChain, named by the action's outbound txid, or by a
 //   'REFUND:<txid>' / 'OUT:<txid>' memo naming the action's inbound txid. Maya's Midgard can leave a refund it
 //   paid this way pending with no outbound; the send is then the refund's outbound, so the refund is paid.
-// Of Viewblock's txs, only sends from before VIEWBLOCK_SENDS_BEFORE that Midgard does not list are kept.
+// Of Viewblock's txs, only sends from before VIEWBLOCK_SENDS_BEFORE that Midgard does not list are kept; of THORChain
+// v1's, the txs Midgard does not list from then on (docs/specs/sends.md, Txs Midgard omits).
+// dropped.viewblock: the Viewblock and v1 txs not kept.
 export function selectSends(bundles: RawBundle[]): {
   bundles: RawBundle[];
   dropped: { inbound: number; outbound: number; viewblock: number };
@@ -148,9 +153,13 @@ export function selectSends(bundles: RawBundle[]): {
   const payoutFor = (bundle: RawBundle) => (midgardSend(bundle) ? outboundMemoTxid(bundle.data as Action) : undefined);
   const isOutbound = (bundle: RawBundle) =>
     midgardSend(bundle) && (actionOutbounds.has(sendTxid(bundle)) || actionInbounds.has(payoutFor(bundle) ?? ""));
-  const unlisted = (tx: ViewblockTx) => tx.timestamp < cutoff && !listed.has(tx.hash.toUpperCase());
+  // Viewblock's txs before the cutoff; THORChain v1's from it on (docs/specs/sends.md, Txs Midgard omits)
+  // (by the tx itself, not its hash: both list a tx of a period that spans the cutoff)
+  const v1Txs = new Set(bundles.filter((bundle) => bundle.source === "thornode-v1").map((bundle) => bundle.data));
+  const unlisted = (tx: ViewblockTx) =>
+    !listed.has(tx.hash.toUpperCase()) && (v1Txs.has(tx) ? tx.timestamp >= cutoff : tx.timestamp < cutoff);
   // A withdrawal of a pending add is kept with that add (docs/specs/fees.md, Pending adds that are withdrawn)
-  const viewblockTxs = bundles.filter((bundle) => bundle.source === "viewblock");
+  const viewblockTxs = bundles.filter((bundle) => bundle.source === "viewblock" || bundle.source === "thornode-v1");
   // Each add pays back one withdrawal: the earliest withdrawals pair first
   const paired = new Map<RawBundle, ViewblockTx>();
   const used = new Set<string>();
@@ -191,7 +200,13 @@ export function selectSends(bundles: RawBundle[]): {
       return bundle;
     }
 
-    return isViewblockWithdraw(tx) && tx.signer === bundle.wallet ? withPendingAdd(bundle) : undefined;
+    if (isViewblockWithdraw(tx) && tx.signer === bundle.wallet) {
+      return withPendingAdd(bundle);
+    }
+
+    // A v1 deposit Midgard does not list that is no pending add: one that did nothing gives a fee row, any other a
+    // warning (docs/specs/sends.md, Txs Midgard omits)
+    return bundle.source === "thornode-v1" && tx.signer === bundle.wallet && !isViewblockAdd(tx) ? bundle : undefined;
   };
 
   // A pending refund's outbound found by its memo: the refund was paid
@@ -220,7 +235,7 @@ export function selectSends(bundles: RawBundle[]): {
   };
 
   const kept = bundles.flatMap((bundle) => {
-    if (bundle.source === "viewblock") {
+    if (bundle.source === "viewblock" || bundle.source === "thornode-v1") {
       const gap = viewblockGap(bundle);
       return gap ? [gap] : [];
     }
@@ -238,8 +253,8 @@ export function selectSends(bundles: RawBundle[]): {
       inbound: bundles.filter(isInbound).length,
       outbound: bundles.filter((bundle) => !isInbound(bundle) && isOutbound(bundle)).length,
       viewblock:
-        bundles.filter((bundle) => bundle.source === "viewblock").length -
-        kept.filter((bundle) => bundle.source === "viewblock").length,
+        bundles.filter((bundle) => bundle.source === "viewblock" || bundle.source === "thornode-v1").length -
+        kept.filter((bundle) => bundle.source === "viewblock" || bundle.source === "thornode-v1").length,
     },
   };
 }
@@ -358,4 +373,22 @@ export function pendingAddOf(
       );
     })
     .sort((a, b) => b.timestamp - a.timestamp)[0];
+}
+
+// The THORChain v1 txs whose rows the run dates in its periods [from, to) (ms), to be moved to their block's time
+// (docs/specs/sends.md, Txs Midgard omits): a deposit that did nothing, a withdrawal of a pending add and that add,
+// each by its own time (an add's rows are at the add's). The other kept v1 txs only warn
+export function v1TxsToTime(bundles: RawBundle[], from: number, to: number): ViewblockTx[] {
+  const v1Txs = new Set(bundles.filter((bundle) => bundle.source === "thornode-v1").map((bundle) => bundle.data));
+
+  if (v1Txs.size === 0) {
+    return [];
+  }
+
+  const txs = selectSends(dedupeBundles(bundles).bundles)
+    .bundles.filter((bundle) => bundle.source === "thornode-v1")
+    .filter((bundle) => bundle.pendingAdd || (bundle.data as ViewblockTx).types.includes("noop"))
+    .flatMap((bundle) => [bundle.data as ViewblockTx, ...(bundle.pendingAdd ? [bundle.pendingAdd] : [])])
+    .filter((tx) => v1Txs.has(tx) && tx.timestamp >= from && tx.timestamp < to);
+  return [...new Set(txs)];
 }

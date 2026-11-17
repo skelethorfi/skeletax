@@ -25,7 +25,8 @@ export interface Protocol {
   prefixTradeAssets?: boolean;
   midgardUrl: string;
   nodeUrl?: string;
-  // Fallback inbound gas (base units of the native asset) when THORNode data is missing
+  // Fallback inbound gas (base units of the native asset) when THORNode data is missing. THORChain's is also the
+  // exact fee a v1 deposit that did nothing paid (isNoopDeposit, docs/specs/sends.md)
   defaultGas?: string;
   // From this block a tx whose message fails still pays the native fee, taken before the message runs; before it,
   // and where unset, a failed tx paid nothing (docs/specs/sends.md)

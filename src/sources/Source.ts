@@ -12,7 +12,8 @@ import { getActionDate, memoDestination, needsRunePrice } from "./thorchain/Midg
 import { Viewblock, type ViewblockInbound } from "./viewblock/index.ts";
 import { EvmReceipts, isEvmChain, type EvmReceipt } from "./evm/EvmReceipts.ts";
 import { failedTxPaidFee, type Protocol, THORCHAIN } from "../domain/Protocol.ts";
-import { getBundleKey, type RawBundle } from "./RawBundle.ts";
+import { getBundleKey, type RawBundle, VIEWBLOCK_SENDS_BEFORE } from "./RawBundle.ts";
+import { type ThornodeV1, toViewblockTx } from "./thorchain/ThornodeV1.ts";
 import type { NotFinal } from "./Pending.ts";
 import { mapConcurrent } from "../utils/Concurrency.ts";
 import { Progress } from "../utils/Progress.ts";
@@ -403,6 +404,37 @@ export class ViewblockSource implements Source {
       thornodeTxs: [],
       cosmosTxs: [],
     }));
+  }
+}
+
+// THORChain v1's native txs a THORChain wallet signed from the cutoff on, for the deposits Midgard does not list
+// (docs/specs/sends.md, Txs Midgard omits); selectSends keeps those
+export class ThornodeV1Source implements Source {
+  readonly name = "thornode-v1";
+  private v1: ThornodeV1;
+  constructor(v1: ThornodeV1) {
+    this.v1 = v1;
+  }
+
+  async bundlesFor(wallet: string): Promise<RawBundle[]> {
+    if (!wallet.toLowerCase().startsWith("thor1")) {
+      return [];
+    }
+
+    const txs = await this.v1.getSends(wallet);
+    return (
+      txs
+        // Successful txs from the cutoff on (Viewblock's before it; Midgard lists failed ones)
+        .filter((tx) => tx.code === 0 && tx.timestamp >= VIEWBLOCK_SENDS_BEFORE)
+        .map((tx) => ({
+          source: "thornode-v1",
+          protocol: THORCHAIN.id,
+          wallet,
+          data: toViewblockTx(tx),
+          thornodeTxs: [],
+          cosmosTxs: [],
+        }))
+    );
   }
 }
 

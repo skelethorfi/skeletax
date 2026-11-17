@@ -138,8 +138,9 @@ describe("offline export of the golden cases", () => {
     const manifest = fs.readJsonSync(path.join(run, MANIFEST_FILE));
     const thorWallets = wallets.filter((w) => w.address.startsWith("thor1")).length;
 
-    // Midgard for every wallet; Viewblock (the period starts before 2022-04) and TCY for THORChain wallets
-    assert.equal(manifest.lists.length, wallets.length + 2 * thorWallets);
+    // Midgard for every wallet; Viewblock (the period starts before 2022-04), THORChain v1's txs (it covers 2022-04 to
+    // the v1 chain's end) and TCY for THORChain wallets
+    assert.equal(manifest.lists.length, wallets.length + 3 * thorWallets);
     assert.ok(manifest.records.length > cases.length);
 
     // The store holds what the sources read, and the offline run read it all
