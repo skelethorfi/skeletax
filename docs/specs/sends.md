@@ -65,21 +65,23 @@ dropped too, so nothing gives a second row. A deposit that did nothing is one
 even when its memo asks for an add or a withdrawal (one sent again after the
 position was out). Of the rest:
 
-| Tx                                                                                                                      | Gives                                                                                                        |
-| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| A `MsgDeposit` that did nothing: no THORChain event, and its only transfer is the native fee (0.02 RUNE) to the Reserve | one `Fee` row of 0.02 RUNE on the signer, to the protocol: `Fee: <action> that did nothing (<memo>); <txid>` |
-| A withdrawal (`-:`, `WD`, `WITHDRAW`) that pays back a pending add                                                      | the refund rows of `fees.md`, Pending adds that are withdrawn                                                |
-| An add (`+:`, `ADD`, `A`) alone                                                                                         | nothing: it is given with the withdrawal that pays it back                                                   |
-| Any other tx, a withdrawal with no pending add                                                                          | a warning to check it and enter it by hand, and no row                                                       |
+| Tx                                                                                                                               | Gives                                                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| A `MsgDeposit` that did nothing: no THORChain event, and its only transfers are the native fee (0.02 RUNE in all) to the Reserve | one `Fee` row of 0.02 RUNE on the signer, to the protocol: `Fee: <action> that did nothing (<memo>); <txid>` |
+| A withdrawal (`-:`, `WD`, `WITHDRAW`) that pays back a pending add                                                               | the refund rows of `fees.md`, Pending adds that are withdrawn                                                |
+| An add (`+:`, `ADD`, `A`) alone                                                                                                  | nothing: it is given with the withdrawal that pays it back                                                   |
+| Any other tx, a withdrawal with no pending add                                                                                   | a warning to check it and enter it by hand, and no row                                                       |
 
 E.g. an `UNBOND` sent when the bond could not be unbonded, or a withdrawal
 sent again after the position was out, did nothing. The amounts are observed
 (the archive's events); the time is the block's, to the millisecond (a tx's
 listed time is to the second, so the run reads the block header of each tx
-whose rows are dated in its periods, a pending add by its own time:
-`thornode-v1-block`). The 0.02 RUNE of a deposit that did nothing is checked
-against its transfer; a pending pair's native fees (the add's and the
-request's) are the default, as for Viewblock's.
+whose rows are dated in its periods, a pending add by its own time, with a
+day's margin before and two after, as for prices: `thornode-v1-block`). The
+0.02 RUNE of a deposit that did nothing is the default native fee, which the
+check above requires its transfers to the Reserve to add up to; a pending
+pair's native fees (the add's and the request's) are the default, as for
+Viewblock's RUNE adds.
 
 The archive is best-effort, as Viewblock is: nothing it does ends a run, and
 each case is a warning in the run summary.
