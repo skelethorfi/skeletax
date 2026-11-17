@@ -3,6 +3,7 @@ import { RecordStore, StoreMissError } from "../store/RecordStore.ts";
 import { InputError } from "../../utils/InputError.ts";
 import { V1_BLOCK_TIME_RULES, V1_SENDS_LIST } from "../store/Sources.ts";
 import { API_URLS } from "../../config/apiUrls.ts";
+import { THORCHAIN } from "../../domain/Protocol.ts";
 import { THORNODE_V1_LAST_HEIGHT } from "./ThornodeService.ts";
 import type { ViewblockTx } from "../viewblock/ViewblockTx.ts";
 
@@ -223,8 +224,8 @@ export class ThornodeV1 {
 
 // THORChain's Reserve module, which a native tx's fee is paid to
 const RESERVE = "thor1dheycdevq39qlkxs2a6wuuzyn4aqxhve4qxtxt";
-// THORChain's native fee on the v1 chain, in base units (0.02 RUNE)
-const V1_NATIVE_FEE = 2000000n;
+// THORChain's native fee on the v1 chain, in base units (0.02 RUNE): the default the fee row is given
+const V1_NATIVE_FEE = BigInt(THORCHAIN.defaultGas ?? "2000000");
 // The events of moving coins, which every tx has for its fee; any other event is THORChain's (an add, a withdrawal,
 // an outbound, a bond) and means the tx did something
 const COIN_EVENTS = new Set(["coin_spent", "coin_received", "transfer", "message"]);
