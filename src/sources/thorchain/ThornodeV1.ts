@@ -87,8 +87,9 @@ export function toV1Tx(response: any): V1Tx {
 export class ThornodeV1 {
   private store: RecordStore;
   private listWarnings: string[] = [];
-  // Blocks whose time could not be fetched
+  // Blocks whose time could not be fetched: each is skipped for the rest of the run
   private blockWarnings: string[] = [];
+  private skippedBlocks = new Set<string>();
   constructor(store: RecordStore) {
     this.store = store;
   }
@@ -102,7 +103,7 @@ export class ThornodeV1 {
         ? [
             `THORChain v1: could not fetch the time of ${this.blockWarnings.length} blocks; their txs' rows are at the ` +
               `second the archive listed, so a row entered by hand at the block's time is not overtaken ` +
-              `(docs/specs/sends.md, Txs Midgard omits): ${this.blockWarnings.join(", ")}`,
+              `(docs/specs/sends.md, Txs Midgard omits): ${[...this.blockWarnings].sort().join(", ")}`,
           ]
         : []),
     ];
@@ -139,8 +140,12 @@ export class ThornodeV1 {
   async getBlockTime(height: number, date?: Date): Promise<V1BlockTime | undefined> {
     const key = String(height);
 
+    if (this.skippedBlocks.has(key)) {
+      return undefined;
+    }
+
     if (this.store.skippedInReplay("thornode-v1-block", key)) {
-      this.blockWarnings.push(`${key} (skipped by the replayed run)`);
+      this.skip(key, "skipped by the replayed run");
       return undefined;
     }
 
@@ -155,16 +160,27 @@ export class ThornodeV1 {
         },
         V1_BLOCK_TIME_RULES,
         date,
+        // A refetch that fails uses the stored copy
+        { onFetchError: () => {} },
       );
     } catch (error) {
       if (error instanceof StoreMissError || error instanceof InputError) {
         throw error;
       }
 
-      this.store.recordSkipped("thornode-v1-block", key);
-      this.blockWarnings.push(`${key} (${reason(error)})`);
+      // A second caller that waited on the same failed fetch (txs of one block)
+      if (!this.skippedBlocks.has(key)) {
+        this.store.recordSkipped("thornode-v1-block", key);
+        this.skip(key, reason(error));
+      }
+
       return undefined;
     }
+  }
+
+  private skip(key: string, why: string) {
+    this.skippedBlocks.add(key);
+    this.blockWarnings.push(`${key} (${why})`);
   }
 
   // One tx by hash, unstored (the fixture tool: the tx may be anyone's)

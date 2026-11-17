@@ -364,10 +364,9 @@ the protocol.
 from 2022-04-01 to the fork is exported from the v1 archive, with its add from
 v1 or, before 2022-04-01, from Viewblock (a run that exports a period before
 then). Not exported: an L1 pair in that period (its withdrawal gives a warning:
-no add found); a RUNE add before 2022-04-01 withdrawn after it, in a run that
-starts after 2022-04-01 (it reads no Viewblock, and v1 is read from the cutoff
-on; the archive starts in late March 2022, so only such adds of its first days);
-and any pair after the fork, as the current chain lists no tx by signer. What is missing:
+no add found); a RUNE add before 2022-04-01 withdrawn after it, in a run
+that starts after 2022-04-01 (it reads no Viewblock, and v1 is read from the
+cutoff on: a run must start before 2022-04-01 to pair such an add); and any pair after the fork, as the current chain lists no tx by signer. What is missing:
 
 - THORChain side: the fees only, 0.06 RUNE per pair at the default native
   fees (the add's, the request's, and what the protocol kept). Apart from

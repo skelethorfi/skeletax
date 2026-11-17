@@ -255,10 +255,18 @@ export class Exporter {
     const kept = selectSends(dedupeBundles(bundles).bundles).bundles.filter(
       (bundle) => bundle.source === "thornode-v1",
     );
-    // A deposit that did nothing, and a withdrawal with its pending add; the other kept txs only warn
+    // A deposit that did nothing, and a withdrawal with its pending add, dated in the run's periods (a day's margin
+    // either side, as for prices); the other kept txs only warn
+    const day = 24 * 60 * 60 * 1000;
+    const from = new Date(this.config.fromDate).getTime() - day;
+    const to = new Date(this.config.toDate).getTime() + 2 * day;
     const txs = new Set<ViewblockTx>(
       kept
         .filter((bundle) => bundle.pendingAdd || (bundle.data as ViewblockTx).types.includes("noop"))
+        .filter((bundle) => {
+          const time = (bundle.data as ViewblockTx).timestamp;
+          return time >= from && time < to;
+        })
         .flatMap((bundle) => [bundle.data as ViewblockTx, ...(bundle.pendingAdd ? [bundle.pendingAdd] : [])])
         .filter((tx) => v1Txs.has(tx)),
     );

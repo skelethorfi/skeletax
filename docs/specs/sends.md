@@ -76,18 +76,18 @@ E.g. an `UNBOND` sent when the bond could not be unbonded, or a withdrawal
 sent again after the position was out, did nothing. The amounts are observed
 (the archive's events); the time is the block's, to the millisecond (a tx's
 listed time is to the second, so the run reads the block header of each tx
-that gives a row: `thornode-v1-block`).
+that gives a row in its periods: `thornode-v1-block`).
 
 The archive is best-effort, as Viewblock is: nothing it does ends a run, and
 each case is a warning in the run summary.
 
-| Case                                  | The run                                                                                                                                                                                                                           |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A wallet's complete list is stored    | uses it and does not fetch it again (v1 does not change); `--refetch-all` fetches it again                                                                                                                                        |
-| The listing ends short of its `total` | keeps what was listed, marked short, and fetches it again on the next default run                                                                                                                                                 |
-| A list cannot be fetched              | uses the list stored by an earlier run; with none, the wallet's deposits that did nothing and withdrawn pending adds are missing                                                                                                  |
-| A block time cannot be fetched        | that tx's rows keep the listed time, to the second, so a row entered by hand at the block's time is not overtaken (summ-sync holds it as overlap); a replay of the run skips it too. Offline, a block time not stored is an error |
-| `--offline` with no list stored       | the wallet is not fetched, as for every source (`run-summary.md`, Not fetched): a store made before this source needs one online run                                                                                              |
+| Case                                  | The run                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A wallet's complete list is stored    | uses it and does not fetch it again (v1 does not change); `--refetch-all` fetches it again                                                                                                                                                                                                                                     |
+| The listing ends short of its `total` | keeps what was listed, marked short, and fetches it again on the next default run                                                                                                                                                                                                                                              |
+| A list cannot be fetched              | uses the list stored by an earlier run; with none, the wallet's deposits that did nothing and withdrawn pending adds are missing                                                                                                                                                                                               |
+| A block time cannot be fetched        | that tx's rows keep the listed time, to the second, so a row entered by hand at the block's time is not overtaken (summ-sync holds it as overlap), and the block is not asked for again in the run; a stored copy is used when a refetch fails; a replay of the run skips it too. Offline, a block time not stored is an error |
+| `--offline` with no list stored       | the wallet is not fetched, as for every source (`run-summary.md`, Not fetched): a store made before this source needs one online run                                                                                                                                                                                           |
 
 Maya sends (Maya's Midgard `send`, e.g. of `CACAO` or the MAYA token) are
 mapped the same way, from Maya's Midgard, with Maya's native fee (below).

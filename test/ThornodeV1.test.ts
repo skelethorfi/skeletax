@@ -484,4 +484,28 @@ describe("ThornodeV1.getBlockTime", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-v1-"));
     await assert.rejects(new ThornodeV1(new RecordStore(dir, { offline: true })).getBlockTime(3), StoreMissError);
   });
+
+  test("a block that failed is skipped for the rest of the run, and warned about once", async () => {
+    const get = mock.method(http, "get", async () => {
+      throw Object.assign(new Error("Bad Request"), { response: { status: 400 } });
+    });
+    const v1 = new ThornodeV1(new RecordStore(fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-v1-"))));
+    assert.deepEqual(await Promise.all([v1.getBlockTime(8), v1.getBlockTime(8)]), [undefined, undefined]);
+    assert.equal(await v1.getBlockTime(8), undefined);
+    assert.equal(get.mock.callCount(), 1);
+    assert.match(v1.warnings().join("\n"), /time of 1 blocks.*: 8 \(400\)$/);
+  });
+
+  test("a refetch that fails uses the stored block time", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-v1-"));
+    mock.method(http, "get", async () => ({ data: { block: { header: { time: "2023-09-01T10:00:00.5Z" } } } }));
+    await new ThornodeV1(new RecordStore(dir)).getBlockTime(9);
+    mock.restoreAll();
+    mock.method(http, "get", async () => {
+      throw Object.assign(new Error("Bad Request"), { response: { status: 400 } });
+    });
+    const v1 = new ThornodeV1(new RecordStore(dir, { fetch: "all" }));
+    assert.equal((await v1.getBlockTime(9))?.time, "2023-09-01T10:00:00.5Z");
+    assert.deepEqual(v1.warnings(), []);
+  });
 });
