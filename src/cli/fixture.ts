@@ -150,6 +150,11 @@ async function fetchV1Input(txid: string): Promise<GoldenCaseInput> {
   const bundles = await new ThornodeV1Source(v1).bundlesFor(tx.signer);
   const bundle = selectSends(bundles).bundles.find((b) => (b.data as ViewblockTx).hash === tx.hash);
 
+  // A case must not be made from a list the archive could not give whole
+  if (v1.warnings().length) {
+    throw new Error(v1.warnings().join("\n"));
+  }
+
   if (!bundle) {
     throw new Error(`the THORChain v1 tx ${mask(txid)} gives no rows (docs/specs/sends.md, Txs Midgard omits)`);
   }

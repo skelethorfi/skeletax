@@ -39,7 +39,7 @@ nothing Viewblock does ends a run; each case is a warning in the run summary
 | A 429                                                         | is not retried; Viewblock is asked nothing more in the run (lists and inbound gas, `fees.md`), and the summary says until when it is locked out                                           |
 | A list cannot be fetched (429, or an error after the retries) | uses the list stored by an earlier run; with none, the wallet's Viewblock sends and withdrawn pending adds are missing, and the summary says so                                           |
 | An inbound's gas cannot be fetched (`fees.md`)                | uses the copy stored by an earlier run; with none, that inbound's fee is blank, and the summary says so                                                                                   |
-| `--offline` with no list stored                               | an error, as for every source                                                                                                                                                             |
+| `--offline` with no list stored                               | the wallet is not fetched, as for every source (`run-summary.md`, Not fetched)                                                                                                            |
 
 The listing is paged until a page comes back empty or adds no new tx, or the
 `total` is reached: the `pages` it reports has been seen to stop short of its
@@ -81,13 +81,13 @@ that gives a row: `thornode-v1-block`).
 The archive is best-effort, as Viewblock is: nothing it does ends a run, and
 each case is a warning in the run summary.
 
-| Case                                  | The run                                                                                                                                           |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A wallet's complete list is stored    | uses it and does not fetch it again (v1 does not change); `--refetch-all` fetches it again                                                        |
-| The listing ends short of its `total` | keeps what was listed, marked short, and fetches it again on the next default run                                                                 |
-| A list cannot be fetched              | uses the list stored by an earlier run; with none, the wallet's deposits that did nothing and withdrawn pending adds are missing                  |
-| A block time cannot be read           | that tx's rows keep the listed time, to the second, so a row entered by hand at the block's time is not overtaken (summ-sync holds it as overlap) |
-| `--offline` with no list stored       | the wallet is not fetched, as for every source (`run-summary.md`, Not fetched): a store made before this source needs one online run              |
+| Case                                  | The run                                                                                                                                                                                                     |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A wallet's complete list is stored    | uses it and does not fetch it again (v1 does not change); `--refetch-all` fetches it again                                                                                                                  |
+| The listing ends short of its `total` | keeps what was listed, marked short, and fetches it again on the next default run                                                                                                                           |
+| A list cannot be fetched              | uses the list stored by an earlier run; with none, the wallet's deposits that did nothing and withdrawn pending adds are missing                                                                            |
+| A block time cannot be fetched        | that tx's rows keep the listed time, to the second, so a row entered by hand at the block's time is not overtaken (summ-sync holds it as overlap); offline or replayed, a block time not stored is an error |
+| `--offline` with no list stored       | the wallet is not fetched, as for every source (`run-summary.md`, Not fetched): a store made before this source needs one online run                                                                        |
 
 Maya sends (Maya's Midgard `send`, e.g. of `CACAO` or the MAYA token) are
 mapped the same way, from Maya's Midgard, with Maya's native fee (below).

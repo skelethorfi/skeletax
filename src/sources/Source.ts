@@ -12,7 +12,7 @@ import { getActionDate, memoDestination, needsRunePrice } from "./thorchain/Midg
 import { Viewblock, type ViewblockInbound } from "./viewblock/index.ts";
 import { EvmReceipts, isEvmChain, type EvmReceipt } from "./evm/EvmReceipts.ts";
 import { failedTxPaidFee, type Protocol, THORCHAIN } from "../domain/Protocol.ts";
-import { getBundleKey, type RawBundle, VIEWBLOCK_SENDS_BEFORE } from "./RawBundle.ts";
+import { getBundleKey, type RawBundle } from "./RawBundle.ts";
 import { type ThornodeV1, toViewblockTx } from "./thorchain/ThornodeV1.ts";
 import type { NotFinal } from "./Pending.ts";
 import { mapConcurrent } from "../utils/Concurrency.ts";
@@ -407,7 +407,7 @@ export class ViewblockSource implements Source {
   }
 }
 
-// THORChain v1's native txs a THORChain wallet signed from the cutoff on, for the deposits Midgard does not list
+// THORChain v1's native txs a THORChain wallet signed, for the deposits Midgard does not list
 // (docs/specs/sends.md, Txs Midgard omits); selectSends keeps those
 export class ThornodeV1Source implements Source {
   readonly name = "thornode-v1";
@@ -424,8 +424,9 @@ export class ThornodeV1Source implements Source {
     const txs = await this.v1.getSends(wallet);
     return (
       txs
-        // Successful txs from the cutoff on (Viewblock's before it; Midgard lists failed txs)
-        .filter((tx) => tx.code === 0 && tx.timestamp >= VIEWBLOCK_SENDS_BEFORE)
+        // Successful txs (Midgard lists failed ones). selectSends keeps those from the cutoff on, and pairs an earlier
+        // add with a later withdrawal
+        .filter((tx) => tx.code === 0)
         .map((tx) => ({
           source: "thornode-v1",
           protocol: THORCHAIN.id,

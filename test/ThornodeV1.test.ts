@@ -1,6 +1,11 @@
-import { describe, test } from "node:test";
+import { afterEach, describe, mock, test } from "node:test";
+import fs from "fs-extra";
+import os from "os";
+import path from "path";
+import { http } from "../src/sources/http.ts";
+import { RecordStore } from "../src/sources/store/RecordStore.ts";
 import assert from "node:assert/strict";
-import { atBlockTime, isNoopDeposit, toV1Tx, toViewblockTx } from "../src/sources/thorchain/ThornodeV1.ts";
+import { atBlockTime, isNoopDeposit, ThornodeV1, toV1Tx, toViewblockTx } from "../src/sources/thorchain/ThornodeV1.ts";
 import { type RawBundle, selectSends } from "../src/sources/RawBundle.ts";
 import { runBundle } from "../src/pipeline/run.ts";
 import { THORCHAIN } from "../src/domain/Protocol.ts";
@@ -358,5 +363,94 @@ describe("an add or a withdrawal that did nothing", () => {
         memo,
       );
     }
+  });
+});
+
+describe("a v1 add before the cutoff", () => {
+  test("pays back a v1 withdrawal after it; a deposit that did nothing before it gives nothing", () => {
+    const of = (data: ViewblockTx): RawBundle => ({
+      source: "thornode-v1",
+      protocol: "thorchain",
+      wallet: SIGNER,
+      data,
+      thornodeTxs: [],
+      cosmosTxs: [],
+    });
+    const add = {
+      ...toViewblockTx(
+        toV1Tx(
+          deposit(
+            "A1",
+            "+:BTC.BTC:bc1-pair",
+            [...feeEvents(), pending],
+            [{ asset: "THOR.RUNE", amount: "5000000000" }],
+          ),
+        ),
+      ),
+      timestamp: Date.parse("2022-03-28T10:00:00Z"),
+    };
+    const outbound = {
+      type: "outbound",
+      attributes: attributes({ chain: "THOR", to: SIGNER, coin: "4998000000 THOR.RUNE" }),
+    };
+    const withdraw = {
+      ...toViewblockTx(toV1Tx(deposit("W1", "-:BTC.BTC:10000", [...feeEvents(), outbound]))),
+      timestamp: Date.parse("2022-04-05T10:00:00Z"),
+    };
+    const noop = {
+      ...toViewblockTx(toV1Tx(deposit("N0", "UNBOND:thor1-node:100", feeEvents()))),
+      timestamp: Date.parse("2022-03-30T10:00:00Z"),
+    };
+    assert.deepEqual(
+      selectSends([of(add), of(noop), of(withdraw)]).bundles.map((b) => [
+        (b.data as ViewblockTx).hash,
+        b.pendingAdd?.hash,
+      ]),
+      [["W1", "A1"]],
+    );
+  });
+});
+
+describe("ThornodeV1.getSends", () => {
+  afterEach(() => mock.restoreAll());
+  const store = () => new RecordStore(fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-v1-")));
+  const listed = (hash: string) => ({ ...deposit(hash, "UNBOND:thor1-node:100", feeEvents()), tx: undefined });
+  const page = (hashes: string[], total: number) => ({
+    data: {
+      tx_responses: hashes.map(listed),
+      txs: hashes.map((hash) => deposit(hash, "UNBOND:thor1-node:100", feeEvents()).tx),
+      pagination: { total: String(total) },
+    },
+  });
+
+  test("pages 100 at a time until the total", async () => {
+    const first = Array.from({ length: 100 }, (_, i) => `H${i}`);
+    const get = mock.method(http, "get", async (_url: string, config: any) =>
+      config.params["pagination.offset"] === 0 ? page(first, 101) : page(["H100"], 101),
+    );
+    const v1 = new ThornodeV1(store());
+    assert.equal((await v1.getSends(SIGNER)).length, 101);
+    assert.equal(get.mock.callCount(), 2);
+    assert.deepEqual(v1.warnings(), []);
+  });
+
+  test("keeps a list short of its total, with a warning, and fetches it again next run", async () => {
+    mock.method(http, "get", async () => page(["H1", "H2"], 5));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tc-ct-v1-"));
+    const v1 = new ThornodeV1(new RecordStore(dir));
+    assert.equal((await v1.getSends(SIGNER)).length, 2);
+    assert.match(v1.warnings()[0], /is short \(2 of 5 txs\)/);
+    const again = mock.method(http, "get", async () => page(["H1", "H2", "H3", "H4", "H5"], 5));
+    assert.equal((await new ThornodeV1(new RecordStore(dir)).getSends(SIGNER)).length, 5);
+    assert.equal(again.mock.callCount(), 1);
+  });
+
+  test("a list that cannot be fetched is a warning, not an error", async () => {
+    mock.method(http, "get", async () => {
+      throw Object.assign(new Error("Bad Gateway"), { response: { status: 400 } });
+    });
+    const v1 = new ThornodeV1(store());
+    assert.deepEqual(await v1.getSends(SIGNER), []);
+    assert.match(v1.warnings()[0], /could not list the txs thor1-v1-signer signed \(400\).*are missing/);
   });
 });

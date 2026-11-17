@@ -360,8 +360,9 @@ the protocol.
 | L1 side (an add of a BEP2 token) | `FailedOut` of the amount added with its L1 gas; `Fee` of sent − returned; `FailedIn` of the payout with its txid; `Fee` 0.02 RUNE on the THORChain wallet (the request) |
 | THORChain side (an add of RUNE)  | `FailedOut` of the RUNE added, fee 0.02 RUNE; `Fee` of sent − returned; `Fee` 0.02 RUNE (the request)                                                                    |
 
-**Limitation: some pairs are not exported.** A RUNE pair from 2022-04-01
-to the fork is exported from the v1 archive. Not exported: an L1 pair in that
+**Limitation: some pairs are not exported.** A RUNE pair whose withdrawal is
+from 2022-04-01 to the fork is exported from the v1 archive (its add may be
+earlier on v1, from March 2022). Not exported: an L1 pair in that
 period (its withdrawal gives a warning: no add found), and any pair after the
 fork, as the current chain lists no tx by signer. What is missing:
 

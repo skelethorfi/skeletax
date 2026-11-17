@@ -246,7 +246,7 @@ export class Exporter {
   }
 
   // The v1 txs that give rows, and the pending adds paired with them, at their block's time to the millisecond (the
-  // archive lists a tx's time to the second; docs/specs/sends.md, Txs Midgard omits). Only those blocks are fetched
+  // archive lists a tx's time to the second; docs/specs/sends.md, Txs Midgard omits)
   private async withV1BlockTimes(bundles: RawBundle[]) {
     const v1Txs = new Set(bundles.filter((bundle) => bundle.source === "thornode-v1").map((bundle) => bundle.data));
 
@@ -257,8 +257,10 @@ export class Exporter {
     const kept = selectSends(dedupeBundles(bundles).bundles).bundles.filter(
       (bundle) => bundle.source === "thornode-v1",
     );
+    // A deposit that did nothing, and a withdrawal with its pending add; the other kept txs only warn
     const txs = new Set<ViewblockTx>(
       kept
+        .filter((bundle) => bundle.pendingAdd || (bundle.data as ViewblockTx).types.includes("noop"))
         .flatMap((bundle) => [bundle.data as ViewblockTx, ...(bundle.pendingAdd ? [bundle.pendingAdd] : [])])
         .filter((tx) => v1Txs.has(tx)),
     );
@@ -268,6 +270,11 @@ export class Exporter {
         const block = await this.thornodeV1.getBlockTime(tx.height, new Date(tx.timestamp));
         atBlockTime(tx, Date.parse(block.time));
       } catch (error) {
+        // Offline or replayed, a block time not stored is an error, as for every record (docs/specs/snapshots.md)
+        if (error instanceof StoreMissError) {
+          throw error;
+        }
+
         failed.push(`${tx.hash} (${error instanceof Error ? error.message : String(error)})`);
       }
     });
