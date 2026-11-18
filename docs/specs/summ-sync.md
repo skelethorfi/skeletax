@@ -115,6 +115,7 @@ in this repo. It is meant to be kept in git (prune relies on it).
 
     snapshots/<time>.json       one finished pull: counts, one entry per listed action
     snapshots/<time>.details.jsonl  each action detail that pull read
+    snapshots/<time>.changes.md     what changed in Summ since the previous pull (Changes on pull)
     actions/<action id>.json    details read before pulls kept their own, and actions older applies saved
     plans/<time>/               plan.json, plan.md, upload/, pre/ (apply's pre-images)
     figures/<time>.json, figures/compare-<a>-<b>.md  After-check; prune leaves them
@@ -181,7 +182,7 @@ before writing it catches that for the plan's own legs.
 lines (`saved`) still name it.
 
 **Prune** removes snapshot files older than `--older-than` days (default
-30, by the time in their name; never the latest), with their details files, and store files that no
+30, by the time in their name; never the latest), with their details and changes files, and store files that no
 remaining snapshot lists, but only files git tracks with no uncommitted
 changes (git keeps them); otherwise it removes nothing and lists the files.
 It keeps what a rollback needs: a delete's `actionIds` and any `saved` file in
@@ -1163,6 +1164,33 @@ pairs with. A new row beside an old `manual-csv` leg of that ID, not ignored, is
 
 Limits: no values for actions with no detail, so a change there that keeps its category rests on `figures`. It checks against
 the plan: a wrong plan verifies. A pull is not a point-in-time copy. A write in Summ's app reads as outside the plan.
+
+## Changes on pull
+
+What changed in Summ since we last looked, run or not: Summ re-runs its imports, re-matches and makes up legs on its own,
+and a plan only sees that when it is next made. Each `pull`, once its snapshot is written, compares it with the latest
+earlier snapshot of the same range and managed sources and chains, and writes `snapshots/<time>.changes.md`, with one line
+of counts in the pull's output. It moves no tax outcome, calls nothing more, gates nothing, and a failure to compare is a
+warning: the snapshot stands. Another run is compared too: it only adds the details of its categorised rows' txs, and a leg
+that enters or leaves the details so is listed as not read.
+
+It is Verify's comparison with an empty plan. summ-sync's own writes between the two pulls (the apply log lines from the
+first pull's start to the second's finish) explain their changes, which are left out, and the report gives their count.
+What is left is Summ's, or a write in Summ's own app, which the log does not hold:
+
+- a field changed (Verify's fields), with the action's newest history line;
+- a leg gone; a leg Summ added: a re-import, or a leg its matcher made up (`soft-transfer`, and others);
+- a pairing: a leg's other legs, or its action's category, changed;
+- Summ's `assumed-fee` legs: issued again under new ids with the same values (a count), or gone or new;
+- our uploads (`manual-csv` legs), listed apart;
+- legs not read by one of the pulls, and listed actions with no detail, as in Verify.
+
+A first pull of its scope has nothing to compare with: it lists the actions that share a tx hash with another listed action
+whose legs were created more than a day apart, where a later import may have added a tx again. Plan decides each (Copies a
+later import made).
+
+Limits: those of Verify. It compares with the previous pull, not with a run, so it says what moved, not whether it is right:
+`plan` says that.
 
 ## After-check
 

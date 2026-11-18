@@ -74,6 +74,9 @@ the cost bases of later disposals, in later years and the current one.
   id: minutes for a year, half an hour for everything. A stopped pull goes on
   from where it stopped when run again. Its snapshot is written only once
   Summ's list has stopped changing.
+- `pull` also writes `<state dir>/snapshots/<time>.changes.md`: what changed in Summ since the previous pull of the same
+  range (legs Summ added, removed or changed, re-pairings, its own fee legs), leaving out summ-sync's own writes and
+  listing our uploads apart. A first pull lists the actions that share a tx hash across imports. Spec: Changes on pull.
 - `verify` compares an applied plan's snapshot with the latest, or a named one. Each entry landed, or why not; then any field, leg or
   pairing that moved outside the plan. It calls nothing, writes `verify-<snapshot>.md` in the plan's folder and holds nothing back. Spec: Verify.
 - `figures` writes `<state dir>/figures/<time>.json`: Summ's capital gains rows and yearly totals, only when its

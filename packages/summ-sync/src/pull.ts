@@ -12,6 +12,7 @@ import { join, resolve } from "node:path";
 import { nextDay, startOfDay } from "./dates.ts";
 import { isWriteLine, readLogLines } from "./journal.ts";
 import { McpClient } from "./mcp.ts";
+import { writeChanges } from "./changes.ts";
 import { chainTxid, CORRECTED_IDS, MISIDENTIFIED_IDS, matchesOwnLegs } from "./plan.ts";
 import { isLegAbsent, type ListedAction, parseActions, parseDetail, parsePage, parsePageHeader } from "./parse.ts";
 import { readLeftLegs } from "./state.ts";
@@ -410,6 +411,12 @@ export async function pull(
       })),
     });
     console.log(`Snapshot written to ${file}`);
+    // What changed in Summ since the last pull of this scope (spec: Changes on pull); the snapshot stands either way
+    try {
+      console.log(writeChanges(stateDir, file, actionsSharingTxAcrossImports([...actions, ...late])));
+    } catch (e) {
+      console.warn(`WARN: could not compare with the previous snapshot: ${(e as Error).message}`);
+    }
     return file;
   }
   throw new Error(

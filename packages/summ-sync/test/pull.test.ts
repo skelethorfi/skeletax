@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { changesFile } from "../src/changes.ts";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -107,6 +108,8 @@ test("every pull reads every detail, so an edit that keeps its action id is seen
     assert.equal(readSnapshot(file).legs[0].price, 2);
     const snapshot = readSnapshotFile(file);
     assert.deepEqual([snapshot.version, snapshot.total, snapshot.details, snapshot.rounds], [2, 2, 2, 2]);
+    // The second pull says what moved in Summ since the first (spec: Changes on pull)
+    assert.match(readFileSync(changesFile(file), "utf8"), /## Fields changed\n\n- price: 1 to 2, on /);
   }));
 
 test("takenAt is when the pull started, so a write during it counts as after it", () =>
