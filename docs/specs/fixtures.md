@@ -102,6 +102,15 @@ anonymise`. It replaces every address, txid, signature and other base64
    ranks keep: every golden case and the owner's private fixtures give the
    same rows once anonymised.
 
+   A TCY claim's data (`tcyClaim`) lists every claim-list entry, savers
+   position, loan and synth of the claiming address; against the public claim
+   list, that set of assets and the order of their amounts can find the
+   address. Before ranking, it is trimmed to the entries of the amount the
+   action paid and their savers position, loan or synth. The native fee goes
+   to the entry whose asset sorts first, so when the paid entry isn't that one,
+   placeholder entries (`A.ANON-1`, …, each with an amount of its own) that sort
+   first take the other entries' place, and the claim keeps its rows.
+
    It then refuses to write the case if any token (4+ letters or digits) of
    the original survives that is not already in the public repo (`src/`,
    `docs/`, `test/`). That catches what the rules miss.
