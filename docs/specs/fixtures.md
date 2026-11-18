@@ -113,7 +113,9 @@ anonymise`. It replaces every address, txid, signature and other base64
 
    It then refuses to write the case if any token (4+ letters or digits) of
    the original survives that is not already in the public repo (`src/`,
-   `docs/`, `test/`). That catches what the rules miss.
+   `docs/`, `test/`). That catches what the rules miss. It also refuses when
+   the anonymised case maps to other row types (type and currencies) than the
+   original.
 
    It also writes `TO-REVIEW.md` next to the case, with a checklist. A fresh
    reviewer checks the case and deletes the file. Until then, the owner's

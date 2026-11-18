@@ -388,24 +388,24 @@ export function trimTcyClaim<T>(input: T): T {
     return input;
   }
 
-  // The TCY the action paid (none when the data is not a claim's: then no entry is kept)
-  const amount: string =
-    bundle.data?.type === "tcy_claim"
-      ? (bundle.data.out?.[0]?.coins?.find((coin: any) => coin.asset === "THOR.TCY")?.amount ?? "")
-      : "";
+  // The TCY the action paid, as the mapper reads it: its output's coin (none when the data is not a claim's: then no
+  // entry is kept)
+  const amount: string = bundle.data?.type === "tcy_claim" ? (bundle.data.out?.[0]?.coins?.[0]?.amount ?? "") : "";
   const claims = (data.claims ?? []).filter((claim) => amount !== "" && claim.amount === amount);
   const assets = new Set(claims.map((claim) => claim.asset.toUpperCase()));
   const paid = (asset: string) => assets.has(asset.toUpperCase());
   const paidSynth = (synth: string) => [...assets].some((asset) => asset.replace(".", "/") === synth.toUpperCase());
 
   if (!isFirstEntry(data, amount)) {
-    // Each placeholder sorts before the kept entries and has an amount of its own; two when none was kept
+    // Each placeholder sorts before the kept entries and has an amount of its own; two when none of them pays
     const other = (BigInt(amount || "0") + 1n).toString();
     claims.unshift(
-      ...(claims.length > 0 ? [other] : [other, (BigInt(other) + 1n).toString()]).map((value, i) => ({
-        asset: `${PLACEHOLDER_ASSET}-${i + 1}`,
-        amount: value,
-      })),
+      ...(claims.some((claim) => BigInt(claim.amount) > 0n) ? [other] : [other, (BigInt(other) + 1n).toString()]).map(
+        (value, i) => ({
+          asset: `${PLACEHOLDER_ASSET}-${i + 1}`,
+          amount: value,
+        }),
+      ),
     );
   }
 

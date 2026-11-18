@@ -383,9 +383,16 @@ describe("Anonymiser: TCY claim data (docs/specs/fixtures.md)", () => {
     ...(claim.synths ?? []).map((synth: any) => synth.asset.replace("/", ".")),
   ];
 
-  test("an anonymised claim maps to the same row types as the original", () => {
+  test("a trimmed claim maps to the same activities, rows and issues as the original", () => {
     assert.ok(claimCases.length >= 4);
 
+    for (const dir of claimCases) {
+      const input = readCaseInput(dir);
+      assert.deepEqual(runCaseLayers(trimTcyClaim(input)), runCaseLayers(input), dir);
+    }
+  });
+
+  test("an anonymised claim maps to the same row types as the original", () => {
     for (const dir of claimCases) {
       const input = readCaseInput(dir);
       assert.deepEqual(rowTypes(new Anonymiser().anonymise(input)), rowTypes(input), dir);
@@ -402,6 +409,11 @@ describe("Anonymiser: TCY claim data (docs/specs/fixtures.md)", () => {
       const kept = assetsOf(new Anonymiser().anonymise(input).tcyClaim);
       assert.deepEqual(
         kept.filter((asset: string) => !paid.includes(asset) && !asset.startsWith("A.ANON-")),
+        [],
+        dir,
+      );
+      assert.deepEqual(
+        paid.filter((asset: string) => !kept.includes(asset)),
         [],
         dir,
       );
