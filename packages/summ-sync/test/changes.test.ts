@@ -89,9 +89,18 @@ test("summ-sync's own writes between the pulls explain their changes, counted on
     change("price", false),
     { ...edit, result: "ok" },
     { ...edit, call: "bulk_edit_transactions", operation: "delete", legIds: ["b"], result: "ok" },
+    // A call that failed logs its error once; apply's stop line is no write
+    { ...edit, entry: "edit-1", error: "refused" },
+    { ...edit, call: "apply-stop", reason: "error", error: "refused" },
   ] as LogLine[]);
   assert.equal(changeCount({ before: "x", sharedTx: [], ...c }), 0);
-  assert.equal(c.writes, 2);
+  assert.equal(c.writes, 3);
+});
+
+test("an upload leg already there before is not new, and marks nothing", () => {
+  const upload = leg("u", { importType: "manual-csv", actionId: "action-u" });
+  const c = compare([leg("a"), upload], [leg("a", { actionId: "action-u" }), upload]);
+  assert.deepEqual([c.uploaded, c.besideUpload], [[], []]);
 });
 
 test("a pairing with a new leg of our uploads is marked: an upload, not in the log, paired it", () => {
