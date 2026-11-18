@@ -47,11 +47,13 @@ export function previousSnapshot(stateDir: string, name: string): string | null 
 
 export interface Changes {
   before: string | null;
-  /** summ-sync's writes between the pulls (their result lines), which explain the fields and legs they name. */
+  /** summ-sync's write calls between the pulls (their result or error lines), which explain the fields and legs they name. */
   writes: number;
   verification: Verification | null;
   /** New legs of our uploads, apart from the legs Summ added. */
   uploaded: Leg[];
+  /** Legs whose pairing changed with a new leg of our uploads in their action: an upload, not in the log, paired them. */
+  besideUpload: string[];
   /** A first pull: the actions sharing a tx hash with legs created over a day apart (a later import may have added a tx again). */
   sharedTx: string[];
 }
@@ -69,13 +71,17 @@ export function compareSnapshots(
   const v = verifyPlan({ plan: EMPTY_PLAN, planName: "", before, beforeFile, after, afterFile, lines });
   const uploaded = v.added.filter((l) => l.importType === UPLOADED);
   const verification = { ...v, added: v.added.filter((l) => l.importType !== UPLOADED) };
-  return { writes: lines.filter((l) => isWriteLine(l) && !l.intent).length, verification, uploaded };
+  // One call's lines: intents, a line per change, and its result (or its error); the result or error counts it
+  const writes = lines.filter((l) => isWriteLine(l) && ("result" in l || "error" in l)).length;
+  const uploadActions = new Set(uploaded.map((l) => l.actionId));
+  const besideUpload = verification.pairing.filter((p) => uploadActions.has(p.leg.actionId)).map((p) => p.leg.legId);
+  return { writes, verification, uploaded, besideUpload };
 }
 
 /** Compares the snapshot with the previous one of its scope; with none, lists the actions sharing a tx hash. */
 export function snapshotChanges(stateDir: string, name: string, sharedTx: string[]): Changes {
   const before = previousSnapshot(stateDir, name);
-  if (!before) return { before, writes: 0, verification: null, uploaded: [], sharedTx };
+  if (!before) return { before, writes: 0, verification: null, uploaded: [], besideUpload: [], sharedTx };
   const file = (n: string) => join(stateDir, "snapshots", `${n}.json`);
   const [beforeFile, afterFile] = [readSnapshotFile(file(before)), readSnapshotFile(file(name))];
   const lines = readLogLines<LogLine>(stateDir).filter(
@@ -140,7 +146,7 @@ export function changesMarkdown(c: Changes, name: string): string {
     "Pairing changed: a leg's other legs, or its action's category",
     v.pairing.map(
       (p) =>
-        `- ${legLine(p.leg)}: action ${p.categoryBefore} to ${p.categoryAfter}, other legs ${p.matesBefore} to ${p.matesAfter}${p.beside ? " (beside a leg summ-sync wrote)" : p.parted ? " (a leg summ-sync wrote left it)" : ""}`,
+        `- ${legLine(p.leg)}: action ${p.categoryBefore} to ${p.categoryAfter}, other legs ${p.matesBefore} to ${p.matesAfter}${p.beside ? " (beside a leg summ-sync wrote)" : p.parted ? " (a leg summ-sync wrote left it)" : c.besideUpload.includes(p.leg.legId) ? " (beside a new leg of our uploads)" : ""}`,
     ),
   );
   section("Summ's own fee legs", [
@@ -170,7 +176,8 @@ export function writeChanges(stateDir: string, snapshotFile: string, sharedTx: s
   const out = changesFile(snapshotFile);
   writeFileSync(out, changesMarkdown(changes, name));
   const n = changeCount(changes);
+  const notRead = (changes.verification?.notRead.length ?? 0) + (changes.verification?.newlyRead.length ?? 0);
   return changes.before
-    ? `Changes in Summ since ${changes.before}: ${n}; new legs of our uploads: ${changes.uploaded.length}; ${out}`
+    ? `Changes in Summ since ${changes.before}: ${n}; new legs of our uploads: ${changes.uploaded.length}; legs not read by one of the pulls: ${notRead}; ${out}`
     : `First pull of this scope: ${n} actions share a tx hash with legs created over a day apart; ${out}`;
 }

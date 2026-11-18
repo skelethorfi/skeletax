@@ -78,14 +78,31 @@ test("reports what Summ changed: a field, a leg gone, a leg it added; our upload
   assert.equal(changeCount({ before: "x", sharedTx: [], ...c }), 3);
 });
 
-test("summ-sync's own writes between the pulls explain their changes", () => {
-  const edit = { time: "2024-06-01T01:00:00.000Z", plan: "p", call: "edit_transaction", run: "r" };
-  const c = compare([leg("a"), leg("b")], [leg("a", { price: 3 })], [
-    { ...edit, legId: "a", field: "price" },
-    { ...edit, call: "bulk_edit_transactions", operation: "delete", legIds: ["b"] },
+test("summ-sync's own writes between the pulls explain their changes, counted once per call", () => {
+  const edit = { time: "2024-06-01T01:00:00.000Z", plan: "p", call: "edit_transaction", run: "r", entry: "edit-0" };
+  const change = (field: string, intent: boolean) => ({ ...edit, legId: "a", field, ...(intent ? { intent } : {}) });
+  // As apply logs them: an intent line per change, a line per change after the call, then the call's result
+  const c = compare([leg("a"), leg("b")], [leg("a", { price: 3, description: "e" })], [
+    change("price", true),
+    change("description", true),
+    change("description", false),
+    change("price", false),
+    { ...edit, result: "ok" },
+    { ...edit, call: "bulk_edit_transactions", operation: "delete", legIds: ["b"], result: "ok" },
   ] as LogLine[]);
   assert.equal(changeCount({ before: "x", sharedTx: [], ...c }), 0);
   assert.equal(c.writes, 2);
+});
+
+test("a pairing with a new leg of our uploads is marked: an upload, not in the log, paired it", () => {
+  const c = compare(
+    [leg("a")],
+    [leg("a"), leg("6700000000000000000000bb", { importType: "manual-csv", actionId: "action-a" })],
+  );
+  assert.match(
+    changesMarkdown({ before: "x", sharedTx: [], ...c }, "y"),
+    /leg a, ID row-a\): .*\(beside a new leg of our uploads\)/,
+  );
 });
 
 test("what Summ did in answer to a delete still shows, marked", () => {
@@ -140,8 +157,20 @@ test("compares with the latest earlier snapshot of the same run, range and manag
   assert.equal(previousSnapshot(dir, "2024-06-04T00-00-00"), "2024-06-01T00-00-00");
   assert.equal(previousSnapshot(dir, "2024-06-03T00-00-00"), null);
   const line = writeChanges(dir, join(dir, "snapshots", "2024-06-04T00-00-00.json"), []);
-  assert.match(line, /^Changes in Summ since 2024-06-01T00-00-00: 0; new legs of our uploads: 0; /);
+  assert.match(
+    line,
+    /^Changes in Summ since 2024-06-01T00-00-00: 0; new legs of our uploads: 0; legs not read by one of the pulls: 0; /,
+  );
   assert.match(readFileSync(join(dir, "snapshots", "2024-06-04T00-00-00.changes.md"), "utf8"), /^# Changes in Summ/);
+});
+
+test("pulls with no run dir are compared with each other", () => {
+  const dir = stateDir({
+    "2024-06-01T00-00-00": { takenAt: "2024-06-01T00:00:00.000Z", run: null },
+    "2024-06-02T00-00-00": { takenAt: "2024-06-02T00:00:00.000Z" },
+    "2024-06-03T00-00-00": { takenAt: "2024-06-03T00:00:00.000Z", run: null },
+  });
+  assert.equal(previousSnapshot(dir, "2024-06-03T00-00-00"), "2024-06-01T00-00-00");
 });
 
 test("a pull that began before the other finished is not compared with it (a resumed pull)", () => {

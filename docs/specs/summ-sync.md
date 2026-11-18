@@ -1177,7 +1177,7 @@ to follow Summ over time.
 
 It is Verify's comparison with an empty plan. summ-sync's own writes between the two pulls (the apply log lines from the
 first pull's start to the second's finish) explain the fields and legs they name, which are left out; the report gives
-their count (result lines). What Summ did in answer is still listed: a leg beside a written one re-paired or re-typed,
+their count (one per call: its result or error line). What Summ did in answer is still listed: a leg beside a written one re-paired or re-typed,
 the `assumed-fee` legs of a deleted action. A pairing beside a written leg, or one a written leg left, is marked so. What is
 left is Summ's, or a write in Summ's own app, which the log does not hold:
 
@@ -1185,7 +1185,8 @@ left is Summ's, or a write in Summ's own app, which the log does not hold:
 - a leg gone; a leg Summ added: a re-import, or a leg its matcher made up;
 - a pairing: a leg's other legs, or its action's category, changed;
 - Summ's `assumed-fee` legs: issued again under new ids with the same values (a count), or gone or new;
-- new legs of our uploads (`manual-csv`), listed and counted apart; a change to an uploaded leg is listed as any other;
+- new legs of our uploads (`manual-csv`), listed and counted apart; an upload is not in the log, so a pairing with a new
+  upload leg in its action is marked as beside one; a change to an uploaded leg is listed as any other;
 - legs not read by one of the pulls, and listed actions with no detail, as in Verify.
 
 A first pull of its scope has nothing to compare with: it lists the actions that share a tx hash with another listed
