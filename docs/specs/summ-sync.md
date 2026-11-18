@@ -1177,8 +1177,8 @@ same run, or none, to follow Summ over time.
 
 It is Verify's comparison with an empty plan. summ-sync's own writes between the two pulls (the apply log lines from the
 first pull's start to the second's finish) explain the fields and legs they name, which are left out; the report gives
-their count (one per call: its result or error line; a call apply was killed in before either is not counted, though
-what its intent lines name is left out). What Summ did in answer is still listed: a leg beside a written
+their count (one per call: its result or error line; a call whose apply was killed before either was logged is not
+counted, though what its intent lines name is left out). What Summ did in answer is still listed: a leg beside a written
 one re-paired or re-typed, the `assumed-fee` legs of a deleted action. A pairing beside a written leg, or one a written
 leg left, is marked so. What is left is Summ's, or a write in Summ's own app, which the log does not hold:
 

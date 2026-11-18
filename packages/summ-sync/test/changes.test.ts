@@ -100,6 +100,7 @@ test("summ-sync's own writes between the pulls explain their changes, counted on
 test("an upload leg already there before is not new, and marks nothing", () => {
   const upload = leg("u", { importType: "manual-csv", actionId: "action-u" });
   const c = compare([leg("a"), upload], [leg("a", { actionId: "action-u" }), upload]);
+  assert.ok(c.verification!.pairing.length > 0);
   assert.deepEqual([c.uploaded, c.besideUpload], [[], []]);
 });
 
