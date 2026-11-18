@@ -6,11 +6,15 @@
 // depend on (equal amounts stay equal, a larger amount stays larger) and nothing else: no size, no
 // ratio such as a swap's exchange rate. The output must still be reviewed by hand before it is committed.
 
+import { isFirstEntry } from "../interpret/midgard/tcy.ts";
+import type { TcyClaimData } from "../sources/tcy/TcyClaimService.ts";
+
 // Rank 1 is 10 (in base units at 8 decimals), rank 2 is 20, …
 const RANK_STEP = 1_000_000_000n;
 
-// Every date and height becomes this moment, as in the hand-made cases. No mapper reads either except to
-// write it out, and a fixed value carries nothing about the original transaction.
+// Every date and height becomes this moment, as in the hand-made cases. A fixed value carries nothing about the
+// original transaction. The mappers mostly only write it out; rules that compare a height with a protocol cutoff
+// (a failed tx's fee, an affiliate cut) see the fixed one (docs/specs/fixtures.md).
 export const FIXED_TIME = new Date("2020-12-31T13:00:00Z");
 export const FIXED_HEIGHT = "10000000";
 // A USD price is only copied into the reference price column, or multiplied with amounts for a position's value
@@ -85,7 +89,9 @@ export class Anonymiser {
   private ranks = new Map<string, string>();
 
   // Two passes: the first collects every amount, the second replaces each by its rank
-  anonymise<T>(data: T): T {
+  anonymise<T>(input: T): T {
+    // Trimmed before the passes, so a placeholder's amount is ranked with the rest
+    const data = trimTcyClaim(input);
     this.collecting = true;
     this.walk(data, undefined);
     this.collecting = false;
@@ -365,6 +371,54 @@ export class Anonymiser {
 
     return this.addresses.get(key)!;
   }
+}
+
+// A placeholder claim-list entry: it sorts before every real asset (a chain's name is letters, and '.' comes first)
+const PLACEHOLDER_ASSET = "A.ANON";
+
+// A TCY claim's data holds every claim-list entry, savers position, loan and synth of the claiming address: against
+// the public claim list, that set of assets and the order of their amounts can find the address. Only the entries
+// the action paid (those of its amount) are kept, with their savers position, loan or synth. Which entry pays the
+// native fee depends on the others (isFirstEntry): when it isn't one the action paid, placeholder entries take the
+// others' place.
+export function trimTcyClaim<T>(input: T): T {
+  const bundle = input as any;
+  const data: TcyClaimData | undefined = bundle?.tcyClaim;
+
+  if (!data || typeof data !== "object") {
+    return input;
+  }
+
+  // The TCY the action paid, as the mapper reads it: its output's coin (none when the data is not a claim's: then no
+  // entry is kept)
+  const amount: string = bundle.data?.type === "tcy_claim" ? (bundle.data.out?.[0]?.coins?.[0]?.amount ?? "") : "";
+  const claims = (data.claims ?? []).filter((claim) => amount !== "" && claim.amount === amount);
+  const assets = new Set(claims.map((claim) => claim.asset.toUpperCase()));
+  const paid = (asset: string) => assets.has(asset.toUpperCase());
+  const paidSynth = (synth: string) => [...assets].some((asset) => asset.replace(".", "/") === synth.toUpperCase());
+
+  if (!isFirstEntry(data, amount)) {
+    // Each placeholder sorts before the kept entries and has an amount of its own; two when none of them pays
+    const other = (BigInt(amount || "0") + 1n).toString();
+    claims.unshift(
+      ...(claims.some((claim) => BigInt(claim.amount) > 0n) ? [other] : [other, (BigInt(other) + 1n).toString()]).map(
+        (value, i) => ({
+          asset: `${PLACEHOLDER_ASSET}-${i + 1}`,
+          amount: value,
+        }),
+      ),
+    );
+  }
+
+  return {
+    ...bundle,
+    tcyClaim: {
+      claims,
+      savers: (data.savers ?? []).filter((saver) => paid(saver.asset)),
+      loans: (data.loans ?? []).filter((loan) => paid(loan.collateralAsset)),
+      ...(data.synths ? { synths: data.synths.filter((synth) => paidSynth(synth.asset)) } : {}),
+    },
+  };
 }
 
 // Every token (a run of letters and digits, at least 4 long) in a value's strings and numbers

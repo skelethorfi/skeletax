@@ -10,6 +10,7 @@ import type { Protocol } from "../../domain/Protocol.ts";
 import { getBundleKey, getBundleSourceName, type RawBundle } from "../../sources/RawBundle.ts";
 import { midgardActionBaseKey } from "../../sources/store/Sources.ts";
 import { nativeGas } from "./bond.ts";
+import type { TcyClaimData } from "../../sources/tcy/TcyClaimService.ts";
 
 // TCY amounts are reported with 8 decimals
 const DECIMALS = 8;
@@ -42,7 +43,7 @@ export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Interp
   const txid = output.txID ?? "";
   const tcy = oneCoin(output, "TCY claim");
   const issues: Issue[] = [];
-  const first = isFirstEntry(bundle, tcy.amount);
+  const first = isFirstEntry(bundle.tcyClaim, tcy.amount);
   const kind = claimKind(bundle, tcy.amount, issues);
   const received =
     kind.for === "other" && kind.times ? { ...tcy, amount: String(BigInt(tcy.amount) * BigInt(kind.times)) } : tcy;
@@ -88,8 +89,8 @@ export function interpretTcyClaim(bundle: RawBundle, protocol: Protocol): Interp
 // A claim tx pays every entry of the address at once, one action each, but the wallet paid the native fee once: on the
 // entry whose asset sorts first (an entry of amount 0 pays nothing and has no action). Without the claim list's
 // entries, or with one, every action is the first, as before; with several, an action that matches none is not.
-function isFirstEntry(bundle: RawBundle, amount: string): boolean {
-  const claims = (bundle.tcyClaim?.claims ?? []).filter((claim) => BigInt(claim.amount) > 0n);
+export function isFirstEntry(data: TcyClaimData | undefined, amount: string): boolean {
+  const claims = (data?.claims ?? []).filter((claim) => BigInt(claim.amount) > 0n);
 
   if (claims.length < 2) {
     return true;

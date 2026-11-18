@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import fs from "fs-extra";
 import os from "os";
 import path from "path";
-import { Anonymiser, findSurvivors } from "../src/fixtures/Anonymise.ts";
+import { Anonymiser, findSurvivors, trimTcyClaim } from "../src/fixtures/Anonymise.ts";
 import { PrivateData } from "../src/fixtures/PrivateData.ts";
 import { describeShape, getActionIds, getActionShape, sameShape } from "../src/fixtures/Shape.ts";
-import { findCaseDirs, readCaseInput, runCase } from "../src/fixtures/GoldenCase.ts";
+import { findCaseDirs, readCaseInput, runCase, runCaseLayers } from "../src/fixtures/GoldenCase.ts";
 
 const TXID = "1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF";
 const THOR = "thor1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq";
@@ -367,5 +367,113 @@ describe("Anonymiser", () => {
       const input = readCaseInput(dir);
       assert.doesNotThrow(() => runCase(new Anonymiser().anonymise(input)));
     }
+  });
+});
+
+describe("Anonymiser: TCY claim data (docs/specs/fixtures.md)", () => {
+  const claimCases = findCaseDirs(path.join(import.meta.dirname, "cases", "tcy")).filter((dir) =>
+    /claim-/.test(path.basename(dir)),
+  );
+  const rowTypes = (input: any) =>
+    (runCaseLayers(input).rows as Record<string, string>[]).map((row) => `${row.type} ${row.baseCurrency}`);
+  const assetsOf = (claim: any) => [
+    ...claim.claims.map((entry: any) => entry.asset),
+    ...claim.savers.map((saver: any) => saver.asset),
+    ...claim.loans.map((loan: any) => loan.collateralAsset),
+    ...(claim.synths ?? []).map((synth: any) => synth.asset.replace("/", ".")),
+  ];
+
+  test("a trimmed claim maps to the same activities, rows and issues as the original", () => {
+    assert.ok(claimCases.length >= 4);
+
+    for (const dir of claimCases) {
+      const input = readCaseInput(dir);
+      assert.deepEqual(runCaseLayers(trimTcyClaim(input)), runCaseLayers(input), dir);
+    }
+  });
+
+  test("an anonymised claim maps to the same row types as the original", () => {
+    for (const dir of claimCases) {
+      const input = readCaseInput(dir);
+      assert.deepEqual(rowTypes(new Anonymiser().anonymise(input)), rowTypes(input), dir);
+    }
+  });
+
+  test("keeps only the assets of the entry the action paid, and placeholders", () => {
+    for (const dir of claimCases) {
+      const input: any = readCaseInput(dir);
+      const amount = input.data.out[0].coins[0].amount;
+      const paid = input.tcyClaim.claims
+        .filter((entry: any) => entry.amount === amount)
+        .map((entry: any) => entry.asset);
+      const kept = assetsOf(new Anonymiser().anonymise(input).tcyClaim);
+      assert.deepEqual(
+        kept.filter((asset: string) => !paid.includes(asset) && !asset.startsWith("A.ANON-")),
+        [],
+        dir,
+      );
+      assert.deepEqual(
+        paid.filter((asset: string) => !kept.includes(asset)),
+        [],
+        dir,
+      );
+    }
+  });
+
+  test("a claim whose entry is not the first by asset gains no fee: placeholders sort first", () => {
+    const input: any = readCaseInput(path.join(import.meta.dirname, "cases", "tcy", "claim-several-eth"));
+    const claims = trimTcyClaim(input).tcyClaim.claims;
+    assert.deepEqual(
+      claims.map((entry: any) => entry.asset),
+      ["A.ANON-1", "ETH.ETH"],
+    );
+    assert.notEqual(claims[0].amount, claims[1].amount);
+    assert.ok(!rowTypes(trimTcyClaim(input)).some((type) => type.startsWith("fee ")));
+  });
+
+  test("keeps every entry of the paid amount, and two placeholders when none has it", () => {
+    const input: any = readCaseInput(path.join(import.meta.dirname, "cases", "tcy", "claim-several-dai"));
+    const amount = input.data.out[0].coins[0].amount;
+    const twice = {
+      ...input.tcyClaim,
+      claims: [...input.tcyClaim.claims, { asset: "ETH.WBTC-0XAA", amount }],
+      // Positions in assets the action didn't pay go
+      savers: [{ asset: "ETH.ETH", units: "100" }],
+      loans: [{ collateralAsset: "ETH.ETH", collateralDeposited: "100", collateralWithdrawn: "0" }],
+    };
+    const trimmedTwice = trimTcyClaim({ ...input, tcyClaim: twice });
+    assert.deepEqual(
+      trimmedTwice.tcyClaim.claims.map((entry: any) => entry.asset),
+      ["ETH.DAI-0X6B175474E89094C44DA98B954EEDEAC495271D0F", "ETH.WBTC-0XAA"],
+    );
+    assert.deepEqual([trimmedTwice.tcyClaim.savers, trimmedTwice.tcyClaim.loans], [[], []]);
+    assert.deepEqual(runCaseLayers(trimmedTwice), runCaseLayers({ ...input, tcyClaim: twice }));
+
+    const none = { ...input.tcyClaim, claims: input.tcyClaim.claims.filter((entry: any) => entry.amount !== amount) };
+    const trimmed = trimTcyClaim({ ...input, tcyClaim: none }).tcyClaim;
+    assert.deepEqual(
+      trimmed.claims.map((entry: any) => entry.asset),
+      ["A.ANON-1", "A.ANON-2"],
+    );
+    assert.deepEqual([trimmed.savers, trimmed.loans, trimmed.synths], [[], [], []]);
+    assert.deepEqual(rowTypes(trimTcyClaim({ ...input, tcyClaim: none })), rowTypes({ ...input, tcyClaim: none }));
+  });
+
+  test("keeps a savers position and a loan in the paid asset", () => {
+    const input: any = readCaseInput(path.join(import.meta.dirname, "cases", "tcy", "claim-savers"));
+    const asset = input.tcyClaim.claims[0].asset;
+    const loan = { collateralAsset: asset.toLowerCase(), collateralDeposited: "100", collateralWithdrawn: "0" };
+    const withLoan = { ...input, tcyClaim: { ...input.tcyClaim, loans: [loan] } };
+    const trimmed = trimTcyClaim(withLoan);
+    assert.deepEqual(trimmed.tcyClaim.savers, input.tcyClaim.savers);
+    assert.deepEqual(trimmed.tcyClaim.loans, [loan]);
+    assert.deepEqual(runCaseLayers(trimmed), runCaseLayers(withLoan));
+  });
+
+  test("placeholder assets survive anonymising as they are", () => {
+    const input: any = readCaseInput(path.join(import.meta.dirname, "cases", "tcy", "claim-several-eth"));
+    const claims = new Anonymiser().anonymise(input).tcyClaim.claims;
+    assert.equal(claims[0].asset, "A.ANON-1");
+    assert.notEqual(claims[0].amount, claims[1].amount);
   });
 });

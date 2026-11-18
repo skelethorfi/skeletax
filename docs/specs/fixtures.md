@@ -98,9 +98,23 @@ anonymise`. It replaces every address, txid, signature and other base64
    its rank among the case's amounts (the smallest becomes 10, the next 20,
    …). An EVM receipt's fee (gas used × price, plus any L1 fee) is ranked
    as one amount and written back as 1 gas at that price. Each original value can identify a transaction on-chain on its own,
-   but the mappers depend on amounts only through equality and order, which
-   ranks keep: every golden case and the owner's private fixtures give the
-   same rows once anonymised.
+   but the mappers mostly depend on amounts only through equality and order,
+   which ranks keep. Some rules don't: those that compare a height with a
+   protocol cutoff (a failed THORChain tx's fee, whether an affiliate cut was
+   taken from a deposit) see the fixed height, and those that do arithmetic on
+   amounts (a deposit less an affiliate cut in basis points, a Maya liquidity
+   auction's deposits against its side) get results that ranks don't keep.
+   Such a case can map to other rows or warnings once anonymised: compare them
+   with the original's before saving.
+
+   A TCY claim's data (`tcyClaim`) lists every claim-list entry, savers
+   position, loan and synth of the claiming address; against the public claim
+   list, that set of assets and the order of their amounts can find the
+   address. Before ranking, it is trimmed to the entries of the amount the
+   action paid and their savers position, loan or synth. The native fee goes
+   to the entry whose asset sorts first, so when the paid entry isn't that one,
+   placeholder entries (`A.ANON-1`, …, each with an amount of its own) that sort
+   first take the other entries' place, and the claim keeps its rows.
 
    It then refuses to write the case if any token (4+ letters or digits) of
    the original survives that is not already in the public repo (`src/`,
