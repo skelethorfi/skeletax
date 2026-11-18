@@ -433,11 +433,20 @@ describe("Anonymiser: TCY claim data (docs/specs/fixtures.md)", () => {
   test("keeps every entry of the paid amount, and two placeholders when none has it", () => {
     const input: any = readCaseInput(path.join(import.meta.dirname, "cases", "tcy", "claim-several-dai"));
     const amount = input.data.out[0].coins[0].amount;
-    const twice = { ...input.tcyClaim, claims: [...input.tcyClaim.claims, { asset: "ETH.WBTC-0XAA", amount }] };
+    const twice = {
+      ...input.tcyClaim,
+      claims: [...input.tcyClaim.claims, { asset: "ETH.WBTC-0XAA", amount }],
+      // Positions in assets the action didn't pay go
+      savers: [{ asset: "ETH.ETH", units: "100" }],
+      loans: [{ collateralAsset: "ETH.ETH", collateralDeposited: "100", collateralWithdrawn: "0" }],
+    };
+    const trimmedTwice = trimTcyClaim({ ...input, tcyClaim: twice });
     assert.deepEqual(
-      trimTcyClaim({ ...input, tcyClaim: twice }).tcyClaim.claims.map((entry: any) => entry.asset),
+      trimmedTwice.tcyClaim.claims.map((entry: any) => entry.asset),
       ["ETH.DAI-0X6B175474E89094C44DA98B954EEDEAC495271D0F", "ETH.WBTC-0XAA"],
     );
+    assert.deepEqual([trimmedTwice.tcyClaim.savers, trimmedTwice.tcyClaim.loans], [[], []]);
+    assert.deepEqual(runCaseLayers(trimmedTwice), runCaseLayers({ ...input, tcyClaim: twice }));
 
     const none = { ...input.tcyClaim, claims: input.tcyClaim.claims.filter((entry: any) => entry.amount !== amount) };
     const trimmed = trimTcyClaim({ ...input, tcyClaim: none }).tcyClaim;

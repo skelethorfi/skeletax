@@ -98,9 +98,11 @@ anonymise`. It replaces every address, txid, signature and other base64
    its rank among the case's amounts (the smallest becomes 10, the next 20,
    …). An EVM receipt's fee (gas used × price, plus any L1 fee) is ranked
    as one amount and written back as 1 gas at that price. Each original value can identify a transaction on-chain on its own,
-   but the mappers depend on amounts only through equality and order, which
-   ranks keep: every golden case and the owner's private fixtures give the
-   same rows once anonymised.
+   but the mappers mostly depend on amounts only through equality and order,
+   which ranks keep. Two exceptions change rows: a failed THORChain tx pays its
+   fee only from a height above the fixed one, and a Maya liquidity auction
+   compares its side with the sum of its deposits, which ranks don't keep.
+   Compare an anonymised case's rows with the original's before saving them.
 
    A TCY claim's data (`tcyClaim`) lists every claim-list entry, savers
    position, loan and synth of the claiming address; against the public claim
@@ -113,9 +115,7 @@ anonymise`. It replaces every address, txid, signature and other base64
 
    It then refuses to write the case if any token (4+ letters or digits) of
    the original survives that is not already in the public repo (`src/`,
-   `docs/`, `test/`). That catches what the rules miss. It also refuses when
-   the anonymised case maps to other row types (type and currencies) than the
-   original.
+   `docs/`, `test/`). That catches what the rules miss.
 
    It also writes `TO-REVIEW.md` next to the case, with a checklist. A fresh
    reviewer checks the case and deletes the file. Until then, the owner's

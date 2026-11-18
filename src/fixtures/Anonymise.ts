@@ -12,8 +12,9 @@ import type { TcyClaimData } from "../sources/tcy/TcyClaimService.ts";
 // Rank 1 is 10 (in base units at 8 decimals), rank 2 is 20, …
 const RANK_STEP = 1_000_000_000n;
 
-// Every date and height becomes this moment, as in the hand-made cases. No mapper reads either except to
-// write it out, and a fixed value carries nothing about the original transaction.
+// Every date and height becomes this moment, as in the hand-made cases. A fixed value carries nothing about the
+// original transaction; the mappers mostly only write it out, but a failed THORChain tx pays its fee only from a
+// later height (docs/specs/fixtures.md).
 export const FIXED_TIME = new Date("2020-12-31T13:00:00Z");
 export const FIXED_HEIGHT = "10000000";
 // A USD price is only copied into the reference price column, or multiplied with amounts for a position's value

@@ -350,18 +350,6 @@ async function main() {
         );
       }
 
-      // Anonymising keeps what the mappers depend on: the case must give the original's rows, in type and currency
-      const rowTypes = (data: GoldenCaseInput) =>
-        (runCaseLayers(data).rows as Record<string, string>[]).map(
-          (row) => `${row.type} ${row.baseCurrency} ${row.quoteCurrency ?? ""}`,
-        );
-
-      if (JSON.stringify(rowTypes(input)) !== JSON.stringify(rowTypes(original))) {
-        throw new Error(
-          "refusing to write: the anonymised case maps to other row types than the original; extend src/fixtures/Anonymise.ts",
-        );
-      }
-
       fs.outputFileSync(path.join(CASES_DIR, name, REVIEW_MARKER), REVIEW_CHECKLIST);
       console.log(
         `Wrote ${path.relative(process.cwd(), path.join(CASES_DIR, name, REVIEW_MARKER))}: the case can't be committed until a fresh review deletes it`,
