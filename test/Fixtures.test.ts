@@ -428,6 +428,7 @@ describe("Anonymiser: TCY claim data (docs/specs/fixtures.md)", () => {
       ["A.ANON-1", "ETH.ETH"],
     );
     assert.notEqual(claims[0].amount, claims[1].amount);
+    assert.ok(!rowTypes(trimTcyClaim(input)).some((type) => type.startsWith("fee ")));
   });
 
   test("keeps every entry of the paid amount, and two placeholders when none has it", () => {

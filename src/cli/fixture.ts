@@ -63,7 +63,7 @@ new agent, or the owner) checks it, reporting only counts, field names and shape
 3. Nothing else narrows the search on-chain: asset pair, an aggregator's delivered token, action or
    contract type, memo layout, output count, anything unusual.
 4. The case maps to the same row types as the original, or differs only where docs/specs/fixtures.md says
-   anonymising changes rows (rules that read a height or a sum of amounts).
+   anonymising changes rows (rules that read a height or do arithmetic on amounts).
 5. No test value written alongside it comes from the private transaction.
 
 Delete this file once the review finds nothing (or after fixing what it found).

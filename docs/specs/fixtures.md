@@ -100,11 +100,12 @@ anonymise`. It replaces every address, txid, signature and other base64
    as one amount and written back as 1 gas at that price. Each original value can identify a transaction on-chain on its own,
    but the mappers mostly depend on amounts only through equality and order,
    which ranks keep. Some rules don't: those that compare a height with a
-   protocol cutoff (a failed THORChain tx's fee, an affiliate cut's estimate)
-   see the fixed height, and those that add or subtract amounts (an affiliate
-   cut taken from a deposit, a Maya liquidity auction's deposits against its
-   side) get sums that ranks don't keep. Such a case can map to other rows or
-   warnings once anonymised: compare them with the original's before saving.
+   protocol cutoff (a failed THORChain tx's fee, whether an affiliate cut was
+   taken from a deposit) see the fixed height, and those that do arithmetic on
+   amounts (a deposit less an affiliate cut in basis points, a Maya liquidity
+   auction's deposits against its side) get results that ranks don't keep.
+   Such a case can map to other rows or warnings once anonymised: compare them
+   with the original's before saving.
 
    A TCY claim's data (`tcyClaim`) lists every claim-list entry, savers
    position, loan and synth of the claiming address; against the public claim
