@@ -1169,25 +1169,28 @@ the plan: a wrong plan verifies. A pull is not a point-in-time copy. A write in 
 
 What changed in Summ since we last looked, run or not: Summ re-runs its imports, re-matches and makes up legs on its own,
 and a plan only sees that when it is next made. Each `pull`, once its snapshot is written, compares it with the latest
-earlier snapshot of the same range and managed sources and chains, and writes `snapshots/<time>.changes.md`, with one line
-of counts in the pull's output. It moves no tax outcome, calls nothing more, gates nothing, and a failure to compare is a
-warning: the snapshot stands. Another run is compared too: it only adds the details of its categorised rows' txs, and a leg
-that enters or leaves the details so is listed as not read.
+earlier snapshot of the same run, range and managed sources and chains (in any order) that began before it, and writes
+`snapshots/<time>.changes.md`, with one line of counts in the pull's output. It moves no tax outcome, calls nothing more,
+gates nothing, and a failure to compare is a warning: the snapshot stands. Two pulls of another run read other actions'
+details, whose legs would read as gone or added, so a pull with a new run is a first pull; pull with the same run, or none,
+to follow Summ over time.
 
 It is Verify's comparison with an empty plan. summ-sync's own writes between the two pulls (the apply log lines from the
-first pull's start to the second's finish) explain their changes, which are left out, and the report gives their count.
-What is left is Summ's, or a write in Summ's own app, which the log does not hold:
+first pull's start to the second's finish) explain the fields and legs they name, which are left out; the report gives
+their count (result lines). What Summ did in answer is still listed: a leg beside a written one re-paired or re-typed,
+the `assumed-fee` legs of a deleted action. A pairing beside a written leg, or one a written leg left, is marked so. What is
+left is Summ's, or a write in Summ's own app, which the log does not hold:
 
 - a field changed (Verify's fields), with the action's newest history line;
-- a leg gone; a leg Summ added: a re-import, or a leg its matcher made up (`soft-transfer`, and others);
+- a leg gone; a leg Summ added: a re-import, or a leg its matcher made up;
 - a pairing: a leg's other legs, or its action's category, changed;
 - Summ's `assumed-fee` legs: issued again under new ids with the same values (a count), or gone or new;
-- our uploads (`manual-csv` legs), listed apart;
+- new legs of our uploads (`manual-csv`), listed and counted apart; a change to an uploaded leg is listed as any other;
 - legs not read by one of the pulls, and listed actions with no detail, as in Verify.
 
-A first pull of its scope has nothing to compare with: it lists the actions that share a tx hash with another listed action
-whose legs were created more than a day apart, where a later import may have added a tx again. Plan decides each (Copies a
-later import made).
+A first pull of its scope has nothing to compare with: it lists the actions that share a tx hash with another listed
+action whose legs were created more than a day apart, where a later import may have added a tx again. Plan decides each
+(Copies a later import made).
 
 Limits: those of Verify. It compares with the previous pull, not with a run, so it says what moved, not whether it is right:
 `plan` says that.

@@ -75,7 +75,7 @@ test("reports what Summ changed: a field, a leg gone, a leg it added; our upload
     c.uploaded.map((l) => l.legId),
     ["6700000000000000000000bb"],
   );
-  assert.equal(changeCount({ before: "x", heldTwice: [], ...c }), 3);
+  assert.equal(changeCount({ before: "x", sharedTx: [], ...c }), 3);
 });
 
 test("summ-sync's own writes between the pulls explain their changes", () => {
@@ -84,8 +84,20 @@ test("summ-sync's own writes between the pulls explain their changes", () => {
     { ...edit, legId: "a", field: "price" },
     { ...edit, call: "bulk_edit_transactions", operation: "delete", legIds: ["b"] },
   ] as LogLine[]);
-  assert.equal(changeCount({ before: "x", heldTwice: [], ...c }), 0);
+  assert.equal(changeCount({ before: "x", sharedTx: [], ...c }), 0);
   assert.equal(c.writes, 2);
+});
+
+test("what Summ did in answer to a delete still shows, marked", () => {
+  const del = { time: "2024-06-01T01:00:00.000Z", plan: "p", run: "r" };
+  const c = compare([leg("a"), leg("b", { actionId: "action-a" })], [leg("b", { actionId: "action-a" })], [
+    { ...del, call: "bulk_edit_transactions", operation: "delete", legIds: ["a"] },
+  ] as LogLine[]);
+  assert.deepEqual(c.verification!.gone, []);
+  assert.match(
+    changesMarkdown({ before: "x", sharedTx: [], ...c }, "y"),
+    /leg b, ID row-b\): .*\(a leg summ-sync wrote left it\)/,
+  );
 });
 
 test("a pairing change shows: a leg's other legs or its action's category", () => {
@@ -97,7 +109,7 @@ test("a pairing change shows: a leg's other legs or its action's category", () =
       ["b", 0, 1],
     ],
   );
-  assert.match(changesMarkdown({ before: "x", heldTwice: [], ...c }, "y"), /## Pairing changed[^#]*leg a, ID row-a/);
+  assert.match(changesMarkdown({ before: "x", sharedTx: [], ...c }, "y"), /## Pairing changed[^#]*leg a, ID row-a/);
 });
 
 // ---- On files: which earlier snapshot, and a first pull
@@ -113,24 +125,40 @@ function stateDir(snapshots: Record<string, object>) {
   return dir;
 }
 
-test("compares with the latest earlier snapshot of the same range and managed sources and chains, any run", () => {
+test("compares with the latest earlier snapshot of the same run, range and managed sources and chains", () => {
   const dir = stateDir({
-    "2024-06-01T00-00-00": { takenAt: "2024-06-01T00:00:00.000Z" },
+    "2024-06-01T00-00-00": { takenAt: "2024-06-01T00:00:00.000Z", managedChains: ["MAYA", "THOR"] },
     "2024-06-02T00-00-00": { takenAt: "2024-06-02T00:00:00.000Z", range: { from: "2024-01-01", to: "2024-06-30" } },
+    // Another run reads other actions' details: not compared
     "2024-06-03T00-00-00": { takenAt: "2024-06-03T00:00:00.000Z", run: "/other-run" },
-    "2024-06-04T00-00-00": { takenAt: "2024-06-04T00:00:00.000Z", finishedAt: "2024-06-04T00:10:00.000Z" },
+    "2024-06-04T00-00-00": {
+      takenAt: "2024-06-04T00:00:00.000Z",
+      finishedAt: "2024-06-04T00:10:00.000Z",
+      managedChains: ["THOR", "MAYA"],
+    },
   });
-  assert.equal(previousSnapshot(dir, "2024-06-04T00-00-00"), "2024-06-03T00-00-00");
-  assert.equal(previousSnapshot(dir, "2024-06-02T00-00-00"), null);
+  assert.equal(previousSnapshot(dir, "2024-06-04T00-00-00"), "2024-06-01T00-00-00");
+  assert.equal(previousSnapshot(dir, "2024-06-03T00-00-00"), null);
   const line = writeChanges(dir, join(dir, "snapshots", "2024-06-04T00-00-00.json"), []);
-  assert.match(line, /^Changes since 2024-06-03T00-00-00: 0 \(nothing moved/);
+  assert.match(line, /^Changes in Summ since 2024-06-01T00-00-00: 0; new legs of our uploads: 0; /);
   assert.match(readFileSync(join(dir, "snapshots", "2024-06-04T00-00-00.changes.md"), "utf8"), /^# Changes in Summ/);
+});
+
+test("a pull that began before the other finished is not compared with it (a resumed pull)", () => {
+  const dir = stateDir({
+    "2024-06-02T00-00-00": { takenAt: "2024-06-01T12:00:00.000Z" },
+    "2024-06-03T00-00-00": { takenAt: "2024-06-01T00:00:00.000Z" },
+  });
+  assert.equal(previousSnapshot(dir, "2024-06-03T00-00-00"), null);
 });
 
 test("a first pull lists the actions that share a tx hash across imports", () => {
   const dir = stateDir({ "2024-06-01T00-00-00": { takenAt: "2024-06-01T00:00:00.000Z" } });
   const snapshot = join(dir, "snapshots", "2024-06-01T00-00-00.json");
-  assert.match(writeChanges(dir, snapshot, ["x1", "x2"]), /^First pull of this scope: 2 actions share a tx hash/);
+  assert.match(
+    writeChanges(dir, snapshot, ["x1", "x2"]),
+    /^First pull of this scope: 2 actions share a tx hash with legs created over a day apart/,
+  );
   const text = readFileSync(join(dir, "snapshots", "2024-06-01T00-00-00.changes.md"), "utf8");
   assert.match(text, /- action x1\n- action x2/);
   assert.ok(existsSync(snapshot));
