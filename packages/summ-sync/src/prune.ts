@@ -76,6 +76,7 @@ export function prune(stateDir: string, days = 30, now = Date.now()): PruneResul
     ...old.flatMap((n) => [
       `snapshots/${n}.json`,
       ...(existsSync(join(stateDir, "snapshots", `${n}.details.jsonl`)) ? [`snapshots/${n}.details.jsonl`] : []),
+      ...(existsSync(join(stateDir, "snapshots", `${n}.changes.md`)) ? [`snapshots/${n}.changes.md`] : []),
     ]),
     ...(existsSync(actionsDir) ? readdirSync(actionsDir) : [])
       .filter((f) => f.endsWith(".json") && !listed.has(f.replace(/\.json$/, "")))

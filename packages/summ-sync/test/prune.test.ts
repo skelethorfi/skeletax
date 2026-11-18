@@ -117,10 +117,16 @@ test("prune keeps the snapshot of a plan with pre-images, its details file, what
 
 test("a plan with only lines from before pre-images keeps no snapshot; a plan folder is never pruned", () => {
   const state = repo({ [S1]: ["a"], [S3]: ["b"] });
+  writeFileSync(join(state, "snapshots", `${S1}.changes.md`), "# Changes\n");
   const pre = planWithPre(state, { plan: "p", call: "edit_transaction" });
   git(state, "add", ".");
   git(state, "commit", "-q", "-m", "state");
-  assert.deepEqual(prune(state, 14, NOW).removed, [`snapshots/${S1}.json`, "actions/a.json"]);
+  // A snapshot's changes report goes with it
+  assert.deepEqual(prune(state, 14, NOW).removed, [
+    `snapshots/${S1}.json`,
+    `snapshots/${S1}.changes.md`,
+    "actions/a.json",
+  ]);
   assert.ok(existsSync(pre));
 });
 

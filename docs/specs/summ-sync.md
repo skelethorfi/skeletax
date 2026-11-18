@@ -115,6 +115,7 @@ in this repo. It is meant to be kept in git (prune relies on it).
 
     snapshots/<time>.json       one finished pull: counts, one entry per listed action
     snapshots/<time>.details.jsonl  each action detail that pull read
+    snapshots/<time>.changes.md     what changed in Summ since the previous pull (Changes on pull)
     actions/<action id>.json    details read before pulls kept their own, and actions older applies saved
     plans/<time>/               plan.json, plan.md, upload/, pre/ (apply's pre-images)
     figures/<time>.json, figures/compare-<a>-<b>.md  After-check; prune leaves them
@@ -181,7 +182,7 @@ before writing it catches that for the plan's own legs.
 lines (`saved`) still name it.
 
 **Prune** removes snapshot files older than `--older-than` days (default
-30, by the time in their name; never the latest), with their details files, and store files that no
+30, by the time in their name; never the latest), with their details and changes files, and store files that no
 remaining snapshot lists, but only files git tracks with no uncommitted
 changes (git keeps them); otherwise it removes nothing and lists the files.
 It keeps what a rollback needs: a delete's `actionIds` and any `saved` file in
@@ -1163,6 +1164,38 @@ pairs with. A new row beside an old `manual-csv` leg of that ID, not ignored, is
 
 Limits: no values for actions with no detail, so a change there that keeps its category rests on `figures`. It checks against
 the plan: a wrong plan verifies. A pull is not a point-in-time copy. A write in Summ's app reads as outside the plan.
+
+## Changes on pull
+
+What changed in Summ since we last looked, run or not: Summ re-runs its imports, re-matches and makes up legs on its
+own, and a plan only sees that when it is next made. Each `pull`, once its snapshot is written, compares it with the
+latest earlier snapshot of the same run, range and managed sources and chains (in any order) that began before it, and
+writes `snapshots/<time>.changes.md`, with one line of counts in the pull's output. It moves no tax outcome, calls
+nothing more, gates nothing, and a failure to compare is a warning: the snapshot stands. Two pulls of another run read
+other actions' details, whose legs would read as gone or added, so a pull with a new run is a first pull; pull with the
+same run, or none, to follow Summ over time.
+
+It is Verify's comparison with an empty plan. summ-sync's own writes between the two pulls (the apply log lines from the
+first pull's start to the second's finish) explain the fields and legs they name, which are left out; the report gives
+their count (one per call: its result or error line; a call whose apply was killed before either was logged is not
+counted, though what its intent lines name is left out). What Summ did in answer is still listed: a leg beside a written
+one re-paired or re-typed, the `assumed-fee` legs of a deleted action. A pairing beside a written leg, or one a written
+leg left, is marked so. What is left is Summ's, or a write in Summ's own app, which the log does not hold:
+
+- a field changed (Verify's fields), with the action's newest history line;
+- a leg gone; a leg Summ added: a re-import, or a leg its matcher made up;
+- a pairing: a leg's other legs, or its action's category, changed;
+- Summ's `assumed-fee` legs: issued again under new ids with the same values (a count), or gone or new;
+- new legs of our uploads (`manual-csv`), listed and counted apart; an upload is not in the log, so a pairing with a new
+  upload leg in its action is marked as beside one; a change to an uploaded leg is listed as any other;
+- legs not read by one of the pulls, and listed actions with no detail, as in Verify.
+
+A first pull of its scope has nothing to compare with: it lists the actions that share a tx hash with another listed
+action whose legs were created more than a day apart, where a later import may have added a tx again. Plan decides each
+(Copies a later import made).
+
+Limits: those of Verify. It compares with the previous pull, not with a run, so it says what moved, not whether it is
+right: `plan` says that.
 
 ## After-check
 
