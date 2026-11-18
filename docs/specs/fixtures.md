@@ -99,10 +99,12 @@ anonymise`. It replaces every address, txid, signature and other base64
    …). An EVM receipt's fee (gas used × price, plus any L1 fee) is ranked
    as one amount and written back as 1 gas at that price. Each original value can identify a transaction on-chain on its own,
    but the mappers mostly depend on amounts only through equality and order,
-   which ranks keep. Two exceptions change rows: a failed THORChain tx pays its
-   fee only from a height above the fixed one, and a Maya liquidity auction
-   compares its side with the sum of its deposits, which ranks don't keep.
-   Compare an anonymised case's rows with the original's before saving them.
+   which ranks keep. Some rules don't: those that compare a height with a
+   protocol cutoff (a failed THORChain tx's fee, an affiliate cut's estimate)
+   see the fixed height, and those that add or subtract amounts (an affiliate
+   cut taken from a deposit, a Maya liquidity auction's deposits against its
+   side) get sums that ranks don't keep. Such a case can map to other rows or
+   warnings once anonymised: compare them with the original's before saving.
 
    A TCY claim's data (`tcyClaim`) lists every claim-list entry, savers
    position, loan and synth of the claiming address; against the public claim

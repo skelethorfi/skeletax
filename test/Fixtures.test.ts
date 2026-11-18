@@ -420,7 +420,7 @@ describe("Anonymiser: TCY claim data (docs/specs/fixtures.md)", () => {
     }
   });
 
-  test("a claim whose entry is not the first by asset keeps its fee through placeholders", () => {
+  test("a claim whose entry is not the first by asset gains no fee: placeholders sort first", () => {
     const input: any = readCaseInput(path.join(import.meta.dirname, "cases", "tcy", "claim-several-eth"));
     const claims = trimTcyClaim(input).tcyClaim.claims;
     assert.deepEqual(
@@ -456,6 +456,17 @@ describe("Anonymiser: TCY claim data (docs/specs/fixtures.md)", () => {
     );
     assert.deepEqual([trimmed.savers, trimmed.loans, trimmed.synths], [[], [], []]);
     assert.deepEqual(rowTypes(trimTcyClaim({ ...input, tcyClaim: none })), rowTypes({ ...input, tcyClaim: none }));
+  });
+
+  test("keeps a savers position and a loan in the paid asset", () => {
+    const input: any = readCaseInput(path.join(import.meta.dirname, "cases", "tcy", "claim-savers"));
+    const asset = input.tcyClaim.claims[0].asset;
+    const loan = { collateralAsset: asset.toLowerCase(), collateralDeposited: "100", collateralWithdrawn: "0" };
+    const withLoan = { ...input, tcyClaim: { ...input.tcyClaim, loans: [loan] } };
+    const trimmed = trimTcyClaim(withLoan);
+    assert.deepEqual(trimmed.tcyClaim.savers, input.tcyClaim.savers);
+    assert.deepEqual(trimmed.tcyClaim.loans, [loan]);
+    assert.deepEqual(runCaseLayers(trimmed), runCaseLayers(withLoan));
   });
 
   test("placeholder assets survive anonymising as they are", () => {
